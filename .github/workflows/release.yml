@@ -20,6 +20,8 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    env:
+      DESLICER_GIT_SHA: ${{ github.sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -90,7 +92,7 @@ jobs:
           install -d "dist/${TARGET}"
           cp "${BIN}" "dist/${TARGET}/${{ env.BINARY_NAME }}"
           tar -C "dist/${TARGET}" -czf "${ARTIFACT}" "${{ env.BINARY_NAME }}"
-          sha256sum "${ARTIFACT}" | awk '{print $1}' > "${ARTIFACT}.sha256"
+          sha256sum "${ARTIFACT}" > "${ARTIFACT}.sha256"
           echo "artifact=${ARTIFACT}" >> "$GITHUB_ENV"
 
       - name: Package archive (Windows)
@@ -104,7 +106,7 @@ jobs:
           Copy-Item $bin "dist/$target/${{ env.BINARY_NAME }}.exe"
           Compress-Archive -Path "dist/$target/${{ env.BINARY_NAME }}.exe" -DestinationPath $artifact -Force
           $hash = (Get-FileHash $artifact -Algorithm SHA256).Hash.ToLower()
-          Set-Content -NoNewline -Path "$artifact.sha256" -Value $hash
+          Set-Content -NoNewline -Path "$artifact.sha256" -Value "$hash  $artifact"
           "artifact=$artifact" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload build artifact
