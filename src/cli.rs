@@ -3,7 +3,17 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crate::ci::CiPlatform;
 
 #[derive(Parser)]
-#[command(name = "deslicer", version, about)]
+#[command(
+    name = "deslicer",
+    version,
+    long_version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        " (",
+        env!("DESLICER_GIT_SHA"),
+        ")"
+    ),
+    about
+)]
 pub struct Cli {
     #[arg(
         long,
