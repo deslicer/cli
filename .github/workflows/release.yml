@@ -216,10 +216,14 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    # Reusable workflow pinned to slsa-github-generator v2.1.0.
-    # v2.1.0 migrated to actions/artifact v4; v2.0.0 fails to attach the
-    # provenance after the artifact-v3 backend shutdown (empty UNTRUSTED_PATH).
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # SECURITY EXCEPTION to the "pin every third-party action to a full commit
+    # SHA" rule: the slsa-github-generator reusable workflow MUST be referenced
+    # by a semver tag. At runtime it downloads its builder binary from the
+    # release that matches its own ref; a 40-char SHA cannot be mapped to a
+    # release, so the download is skipped and the binary is missing (exit 127).
+    # The generator self-verifies the downloaded builder against the release,
+    # which is the project's sanctioned integrity mechanism for this pin.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: ${{ needs.hashes.outputs.hashes }}
       upload-assets: true
