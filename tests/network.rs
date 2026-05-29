@@ -1,3 +1,7 @@
+// ENV_LOCK only serializes env access across single-threaded tests;
+// holding it across the await is safe (no cross-task contention).
+#![allow(clippy::await_holding_lock)]
+
 use deslicer_cli::ci::CiPlatform;
 use deslicer_cli::errors::CliError;
 use deslicer_cli::observer_client::{Client, ReconcileMode};
@@ -34,19 +38,10 @@ async fn resolve_happy_path() {
         .mount(&server)
         .await;
 
-    let ctx = test_ctx(
-        url::Url::parse(&server.uri()).unwrap(),
-        None,
-    );
-    let backend = resolver::resolve(
-        &ctx,
-        "test-jwt",
-        CiPlatform::Github,
-        Some("staging"),
-        None,
-    )
-    .await
-    .unwrap();
+    let ctx = test_ctx(url::Url::parse(&server.uri()).unwrap(), None);
+    let backend = resolver::resolve(&ctx, "test-jwt", CiPlatform::Github, Some("staging"), None)
+        .await
+        .unwrap();
 
     assert_eq!(
         backend.observer_api_url.as_str(),
@@ -60,17 +55,14 @@ async fn resolve_happy_path() {
 async fn resolve_short_circuit_without_http() {
     let server = MockServer::start().await;
     let override_url = url::Url::parse("https://observer.override.test/").unwrap();
-    let ctx = test_ctx(url::Url::parse(&server.uri()).unwrap(), Some(override_url.clone()));
+    let ctx = test_ctx(
+        url::Url::parse(&server.uri()).unwrap(),
+        Some(override_url.clone()),
+    );
 
-    let backend = resolver::resolve(
-        &ctx,
-        "ignored",
-        CiPlatform::Github,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let backend = resolver::resolve(&ctx, "ignored", CiPlatform::Github, None, None)
+        .await
+        .unwrap();
 
     assert_eq!(backend.observer_api_url, override_url);
     assert_eq!(backend.resolution_path, "observer_url_override");

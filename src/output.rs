@@ -38,8 +38,7 @@ fn append_kv_file(path: &str, pairs: &[(&str, String)]) -> io::Result<()> {
 
 fn write_stdout_json(pairs: &[(&str, String)]) -> io::Result<()> {
     let map: BTreeMap<&str, &str> = pairs.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let json = serde_json::to_string(&map)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let json = serde_json::to_string(&map).map_err(|e| io::Error::other(e.to_string()))?;
     println!("{json}");
     Ok(())
 }

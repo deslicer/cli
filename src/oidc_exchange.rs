@@ -93,7 +93,7 @@ fn error_message(body: &str, status: reqwest::StatusCode) -> String {
         }
     }
     if body.trim().is_empty() {
-        format!("HTTP {}", status)
+        format!("HTTP {status}")
     } else {
         body.trim().to_string()
     }

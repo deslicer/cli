@@ -1,3 +1,7 @@
+// ENV_LOCK only serializes env access across single-threaded tests;
+// holding it across the await is safe (no cross-task contention).
+#![allow(clippy::await_holding_lock)]
+
 use deslicer_cli::errors::CliError;
 use deslicer_cli::tool_download::download_and_verify;
 use std::sync::Mutex;
@@ -7,8 +11,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 const FAKE_BINARY: &[u8] = b"fake-binary";
-const FAKE_SHA256: &str =
-    "d551e7e4f06f7d6bc7f9ad6828eb6e00e780dbe60a8adda40186c432495d0b24";
+const FAKE_SHA256: &str = "d551e7e4f06f7d6bc7f9ad6828eb6e00e780dbe60a8adda40186c432495d0b24";
 
 #[tokio::test]
 async fn download_verify_and_cache_write() {

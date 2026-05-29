@@ -5,7 +5,12 @@ use crate::ci::CiPlatform;
 #[derive(Parser)]
 #[command(name = "deslicer", version, about)]
 pub struct Cli {
-    #[arg(long, env = "DESLICER_API_URL", default_value = "https://api.deslicer.ai", global = true)]
+    #[arg(
+        long,
+        env = "DESLICER_API_URL",
+        default_value = "https://api.deslicer.ai",
+        global = true
+    )]
     pub deslicer_api_url: url::Url,
 
     #[arg(long, env = "OBSERVER_API_URL", global = true)]

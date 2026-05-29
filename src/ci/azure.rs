@@ -47,6 +47,9 @@ impl OidcTokenProvider for AzureProvider {
 }
 
 #[cfg(test)]
+// ENV_LOCK only serializes env access across single-threaded #[tokio::test] cases;
+// holding it across the await is safe (no cross-task contention).
+#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
@@ -62,10 +65,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(header(
-                "Authorization",
-                "Bearer dummy-access-token",
-            ))
+            .and(header("Authorization", "Bearer dummy-access-token"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "oidcToken": "azure-jwt-token"
             })))

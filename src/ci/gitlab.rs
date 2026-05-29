@@ -12,6 +12,9 @@ impl OidcTokenProvider for GitlabProvider {
 }
 
 #[cfg(test)]
+// ENV_LOCK only serializes env access across single-threaded #[tokio::test] cases;
+// holding it across the await is safe (no cross-task contention).
+#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use std::sync::Mutex;

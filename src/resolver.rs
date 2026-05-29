@@ -1,4 +1,4 @@
-use crate::ci::{AUDIENCE, CiPlatform};
+use crate::ci::{CiPlatform, AUDIENCE};
 use crate::errors::CliError;
 use crate::Ctx;
 use serde::Serialize;
@@ -138,7 +138,7 @@ fn error_message(body: &str, status: reqwest::StatusCode) -> String {
         }
     }
     if body.trim().is_empty() {
-        format!("HTTP {}", status)
+        format!("HTTP {status}")
     } else {
         body.trim().to_string()
     }

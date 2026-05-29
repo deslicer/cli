@@ -1,5 +1,8 @@
+use base64::Engine;
 use clap::Args as ClapArgs;
+use serde_json::{json, Value};
 
+use crate::ci::{self, CiPlatform, OidcError};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
@@ -9,7 +12,105 @@ pub struct Args {
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
-    let _ = (ctx, args);
-    eprintln!("not implemented");
-    1
+    let platform = ci::detect_platform(ctx.ci_override);
+    let audience = ci::AUDIENCE;
+
+    let token_result = ci::provider_for(platform).fetch_token(audience).await;
+
+    let (jwt_header, jwt_claims) = match &token_result {
+        Ok(jwt) => decode_jwt_parts(jwt),
+        Err(OidcError::MissingEnv(msg)) if platform == CiPlatform::Local => {
+            eprintln!("{msg}");
+            (Value::Null, Value::Null)
+        }
+        Err(err) => {
+            eprintln!("failed to fetch OIDC token: {err}");
+            (Value::Null, Value::Null)
+        }
+    };
+
+    let resolved_backend = match &token_result {
+        Ok(jwt) => {
+            match crate::resolver::resolve(&ctx, jwt, platform, args.environment.as_deref(), None)
+                .await
+            {
+                Ok(backend) => json!({
+                    "observer_api_url": backend.observer_api_url.as_str(),
+                    "resolution_path": backend.resolution_path,
+                    "audience": backend.audience,
+                }),
+                Err(err) => json!(err.to_string()),
+            }
+        }
+        Err(_) => Value::Null,
+    };
+
+    let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() {
+        json!("not configured")
+    } else {
+        Value::Null
+    };
+
+    let output = json!({
+        "platform": platform.header_value(),
+        "audience": audience,
+        "jwt_header": jwt_header,
+        "jwt_claims": jwt_claims,
+        "resolved_backend": resolved_backend,
+        "audit": audit,
+    });
+
+    let text = match serde_json::to_string_pretty(&output) {
+        Ok(s) => s,
+        Err(_) => output.to_string(),
+    };
+    println!("{text}");
+    0
+}
+
+fn decode_jwt_parts(jwt: &str) -> (Value, Value) {
+    let mut parts = jwt.split('.');
+    let header = parts
+        .next()
+        .and_then(decode_jwt_segment)
+        .unwrap_or(Value::Null);
+    let mut claims = parts
+        .next()
+        .and_then(decode_jwt_segment)
+        .unwrap_or(Value::Null);
+    if !claims.is_null() {
+        redact_sensitive_claims(&mut claims);
+    }
+    (header, claims)
+}
+
+fn decode_jwt_segment(segment: &str) -> Option<Value> {
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(segment)
+        .ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn redact_sensitive_claims(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for (key, val) in map.iter_mut() {
+                let key_lower = key.to_ascii_lowercase();
+                if key_lower.contains("token")
+                    || key_lower.contains("secret")
+                    || key_lower.contains("key")
+                {
+                    *val = Value::String("REDACTED".to_string());
+                } else {
+                    redact_sensitive_claims(val);
+                }
+            }
+        }
+        Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                redact_sensitive_claims(item);
+            }
+        }
+        _ => {}
+    }
 }

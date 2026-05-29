@@ -33,10 +33,7 @@ impl OidcTokenProvider for GithubProvider {
         let request_token = required_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN")?;
         let request_url = required_env("ACTIONS_ID_TOKEN_REQUEST_URL")?;
 
-        let url = format!(
-            "{request_url}&audience={}",
-            percent_encode_query(audience)
-        );
+        let url = format!("{request_url}&audience={}", percent_encode_query(audience));
 
         let client = reqwest::Client::new();
         let response = client
@@ -63,6 +60,9 @@ impl OidcTokenProvider for GithubProvider {
 }
 
 #[cfg(test)]
+// ENV_LOCK only serializes env access across single-threaded #[tokio::test] cases;
+// holding it across the await is safe (no cross-task contention).
+#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
@@ -79,10 +79,7 @@ mod tests {
         let audience = "https://api.deslicer.ai";
 
         Mock::given(method("GET"))
-            .and(header(
-                "Authorization",
-                "Bearer dummy-request-token",
-            ))
+            .and(header("Authorization", "Bearer dummy-request-token"))
             .and(query_param("audience", audience))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "value": "github-jwt-token"
@@ -96,10 +93,7 @@ mod tests {
         );
         std::env::set_var("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "dummy-request-token");
 
-        let token = GithubProvider
-            .fetch_token(audience)
-            .await
-            .unwrap();
+        let token = GithubProvider.fetch_token(audience).await.unwrap();
 
         assert_eq!(token, "github-jwt-token");
 

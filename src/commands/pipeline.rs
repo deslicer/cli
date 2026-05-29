@@ -20,18 +20,11 @@ pub async fn authenticate(
         .await
         .map_err(map_oidc_error)?;
     let backend = crate::resolver::resolve(ctx, &jwt, platform, environment, plan_id).await?;
-    let token = crate::oidc_exchange::exchange(
-        &backend.observer_api_url,
-        &jwt,
-        platform,
-        environment,
-    )
-    .await?;
+    let token =
+        crate::oidc_exchange::exchange(&backend.observer_api_url, &jwt, platform, environment)
+            .await?;
     let client = Client::new(backend.observer_api_url.clone(), token);
-    Ok((
-        AuthenticatedSession { platform, backend },
-        client,
-    ))
+    Ok((AuthenticatedSession { platform, backend }, client))
 }
 
 pub fn map_oidc_error(err: OidcError) -> CliError {

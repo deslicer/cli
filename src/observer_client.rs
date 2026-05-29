@@ -76,8 +76,7 @@ impl Client {
     pub async fn list_plans(&self, environment: Option<&str>) -> Result<Vec<ChangePlan>, CliError> {
         let mut path = "api/v1/plans".to_string();
         if let Some(env) = environment {
-            let encoded =
-                url::form_urlencoded::byte_serialize(env.as_bytes()).collect::<String>();
+            let encoded = url::form_urlencoded::byte_serialize(env.as_bytes()).collect::<String>();
             path.push_str(&format!("?environment={encoded}"));
         }
         self.get_plans(&path).await
@@ -253,7 +252,7 @@ fn error_message(body: &str, status: reqwest::StatusCode) -> String {
         }
     }
     if body.trim().is_empty() {
-        format!("HTTP {}", status)
+        format!("HTTP {status}")
     } else {
         body.trim().to_string()
     }
