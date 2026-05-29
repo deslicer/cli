@@ -19,6 +19,8 @@ permissions:
 jobs:
   publish:
     name: cargo publish
+    # Skip prereleases (e.g. v0.1.0-rc.1) — crates.io publishes are permanent.
+    if: ${{ github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
