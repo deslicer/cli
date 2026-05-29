@@ -1,0 +1,137 @@
+# Bump deslicer/homebrew-tap after a GitHub Release is published.
+# Opens a PR updating Formula/deslicer.rb with the new version and checksums.
+
+name: Homebrew Tap
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag (e.g. v1.2.3). Defaults to the latest published release.
+        required: false
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  TAP_REPO: deslicer/homebrew-tap
+  FORMULA_PATH: Formula/deslicer.rb
+
+jobs:
+  bump-formula:
+    name: Open Homebrew tap PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          mkdir -p assets
+          gh release download "${TAG}" \
+            --repo "${{ github.repository }}" \
+            --pattern 'deslicer-x86_64-apple-darwin.tar.gz' \
+            --pattern 'deslicer-aarch64-apple-darwin.tar.gz' \
+            --pattern 'deslicer-x86_64-unknown-linux-musl.tar.gz' \
+            --pattern 'deslicer-aarch64-unknown-linux-musl.tar.gz' \
+            --dir assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute checksums
+        id: sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd assets
+          for f in deslicer-*.tar.gz; do
+            key=$(echo "$f" | sed 's/deslicer-//;s/.tar.gz//;s/-/_/g')
+            sha=$(sha256sum "$f" | awk '{print $1}')
+            echo "${key}_sha256=${sha}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: ${{ env.TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula/deslicer.rb
+        shell: bash
+        working-directory: homebrew-tap
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          FORMULA="${{ env.FORMULA_PATH }}"
+          cat > "${FORMULA}" <<EOF
+          class Deslicer < Formula
+            desc "Vendor-neutral CI client for Deslicer Automation Platform"
+            homepage "https://github.com/deslicer/cli"
+            version "${VERSION}"
+            license "Apache-2.0"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/deslicer/cli/releases/download/v${VERSION}/deslicer-aarch64-apple-darwin.tar.gz"
+                sha256 "${{ steps.sha.outputs.aarch64_apple_darwin_sha256 }}"
+              else
+                url "https://github.com/deslicer/cli/releases/download/v${VERSION}/deslicer-x86_64-apple-darwin.tar.gz"
+                sha256 "${{ steps.sha.outputs.x86_64_apple_darwin_sha256 }}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/deslicer/cli/releases/download/v${VERSION}/deslicer-aarch64-unknown-linux-musl.tar.gz"
+                sha256 "${{ steps.sha.outputs.aarch64_unknown_linux_musl_sha256 }}"
+              else
+                url "https://github.com/deslicer/cli/releases/download/v${VERSION}/deslicer-x86_64-unknown-linux-musl.tar.gz"
+                sha256 "${{ steps.sha.outputs.x86_64_unknown_linux_musl_sha256 }}"
+              end
+            end
+
+            def install
+              bin.install "deslicer"
+            end
+
+            test do
+              assert_match "${VERSION}", shell_output("#{bin}/deslicer --version")
+            end
+          end
+          EOF
+
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@4320041ed380b20e97d388d56a7fb4f9b8c20e79 # v7.0.0
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+          branch: bump-deslicer-${{ steps.version.outputs.version }}
+          title: "deslicer ${{ steps.version.outputs.version }}"
+          commit-message: "deslicer ${{ steps.version.outputs.version }}"
+          body: |
+            Automated formula bump for [deslicer-cli](https://github.com/deslicer/cli) release `${{ steps.version.outputs.tag }}`.
+
+            Checksums verified against GitHub Release assets.
+          labels: dependencies
