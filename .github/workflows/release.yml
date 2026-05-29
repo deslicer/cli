@@ -15,6 +15,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: deslicer
+  # Opt JS actions into the Node 24 runtime (silences Node 20 deprecation annotations
+  # for third-party actions we cannot pin ourselves, e.g. slsa-github-generator).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -48,7 +51,7 @@ jobs:
             cross: false
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -151,7 +154,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v6
         with:
           fetch-depth: 0
 
@@ -180,7 +183,7 @@ jobs:
           done
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v2.0.4
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
@@ -214,6 +217,8 @@ jobs:
     # Depends on hashes for the subjects and publish so the release exists
     # before the .intoto.jsonl attestation is attached to it.
     needs: [hashes, publish]
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       actions: read
       id-token: write
