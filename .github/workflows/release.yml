@@ -183,6 +183,9 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generate_release_notes: true
+          # Hyphenated semver tags (e.g. v0.1.0-rc.1) are prereleases: this
+          # keeps them out of "latest" and lets crates/homebrew skip them.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: false
           files: |
             release-assets/deslicer-*.tar.gz
@@ -194,6 +197,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Move floating v1 tag
+        # Never point the floating v1 tag at a prerelease (rc/beta) build.
+        if: ${{ !contains(github.ref_name, '-') }}
         shell: bash
         run: |
           set -euo pipefail

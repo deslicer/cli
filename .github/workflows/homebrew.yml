@@ -23,6 +23,8 @@ env:
 jobs:
   bump-formula:
     name: Open Homebrew tap PR
+    # Manual dispatch always runs; release-triggered runs skip prereleases.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve release version
