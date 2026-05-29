@@ -2,7 +2,7 @@
 name = "deslicer-cli"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.86"
+rust-version = "1.88"
 authors = ["Deslicer <engineering@deslicer.ai>"]
 license = "Apache-2.0"
 repository = "https://github.com/deslicer/cli"
