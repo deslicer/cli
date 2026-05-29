@@ -115,6 +115,30 @@ jobs:
             deslicer-${{ matrix.target }}.*
           if-no-files-found: error
 
+  hashes:
+    name: Compute artifact hashes for provenance
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Compute base64 subjects
+        id: hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          # Provenance subjects are the distributable archives only
+          # (exclude .sha256 / .sig / .cert sidecars).
+          sha256sum deslicer-*.tar.gz deslicer-*.zip > SHA256SUMS
+          echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Sign, provenance, and release
     needs: build
@@ -180,7 +204,9 @@ jobs:
 
   provenance:
     name: SLSA provenance
-    needs: build
+    # Depends on hashes for the subjects and publish so the release exists
+    # before the .intoto.jsonl attestation is attached to it.
+    needs: [hashes, publish]
     permissions:
       actions: read
       id-token: write
@@ -188,5 +214,5 @@ jobs:
     # Reusable workflow pinned to slsa-github-generator v2.0.0.
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@5a775b367a56d5bd118a224a811bba288150a563 # v2.0.0
     with:
-      base64-subjects: ""
+      base64-subjects: ${{ needs.hashes.outputs.hashes }}
       upload-assets: true
