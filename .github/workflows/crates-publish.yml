@@ -3,8 +3,8 @@
 # Prerequisites (one-time, on crates.io):
 #   1. Add deslicer-cli as a crate you maintain.
 #   2. Configure Trusted Publishing for github.com/deslicer/cli (this workflow file).
-#   3. No CARGO_REGISTRY_TOKEN secret is required — Cargo exchanges the GitHub OIDC
-#      token for a short-lived crates.io publish token automatically.
+#   3. No CARGO_REGISTRY_TOKEN secret is required — rust-lang/crates-io-auth-action
+#      exchanges the GitHub OIDC token for a short-lived crates.io publish token.
 
 name: Crates.io Publish
 
@@ -39,5 +39,11 @@ jobs:
             exit 1
           fi
 
-      - name: Publish to crates.io (Trusted Publishing / OIDC)
+      - name: Authenticate to crates.io (Trusted Publishing / OIDC)
+        id: auth
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+
+      - name: Publish to crates.io
         run: cargo publish -p deslicer-cli --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
