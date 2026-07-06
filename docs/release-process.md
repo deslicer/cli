@@ -114,3 +114,25 @@ After a release:
 ## CI-only validation
 
 Every push/PR to `main` runs `.github/workflows/ci.yml` (fmt, clippy, tests). Dependency policy scanning (`cargo deny`, `cargo audit`) runs non-blocking until `deny.toml` lands.
+
+## Edge builds on merge to main
+
+Every merge to `main` also runs `.github/workflows/build-main.yml`, which compiles the same five release targets and uploads the raw binaries as workflow artifacts (14-day retention). This catches cross-compile breakage between releases and gives maintainers pre-release binaries to smoke-test:
+
+```bash
+gh run list --workflow build-main.yml --limit 1
+gh run download <run-id> --name deslicer-edge-aarch64-apple-darwin
+```
+
+Edge artifacts are unsigned and never published to a Release — distribution stays tag-gated through `release.yml`.
+
+## How users update
+
+| Install channel | Update command |
+|-----------------|----------------|
+| curl script / manual download | `deslicer update` (self-update; verifies the `.sha256` sidecar) |
+| Homebrew | `brew upgrade deslicer` |
+| cargo | `cargo install deslicer-cli --force` |
+| Windows | Download the new `.zip` from GitHub Releases |
+
+`deslicer update` resolves the latest **stable** tag via the GitHub API (prereleases are excluded), so publishing an `-rc` tag is safe: self-updaters and Homebrew both skip it.

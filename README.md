@@ -20,13 +20,15 @@ brew install deslicer/tap/deslicer
 cargo install deslicer-cli
 ```
 
-**curl** (placeholder — see [docs/installation.md](docs/installation.md) for the install script URL once published)
+**curl**
 
 ```bash
-curl -fsSL https://get.deslicer.ai/cli/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/deslicer/cli/main/scripts/install.sh | bash
 ```
 
 **CI runners** — install the binary in your pipeline (GitHub Actions, GitLab CI, Azure DevOps, Bitbucket Pipelines). See [docs/installation.md](docs/installation.md) for per-platform OIDC setup.
+
+**Updating** — `deslicer update` self-updates from GitHub Releases (Linux/macOS); Homebrew users run `brew upgrade deslicer`. See [docs/installation.md](docs/installation.md#updating).
 
 ## Quick start
 
@@ -57,6 +59,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **change** | `deslicer change deploy` | Execute an approved plan |
 | **change** | `deslicer change verify` | Verify deployment outcome |
 | **change** | `deslicer change status` | Poll plan/execution status |
+| | `deslicer update` | Self-update the binary from GitHub Releases (`--check` to preview) |
 
 ### Global flags and environment
 

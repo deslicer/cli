@@ -1,0 +1,104 @@
+# Edge builds for deslicer-cli.
+# Runs on every merge to main: builds the same five release targets as
+# release.yml (catching cross-compile breakage before tag time) and uploads
+# the binaries as short-lived workflow artifacts for pre-release testing.
+# No signing, no GitHub Release — distribution stays tag-gated.
+
+name: Build (main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-main-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: deslicer
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    env:
+      DESLICER_GIT_SHA: ${{ github.sha }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: false
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cross: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: edge-${{ matrix.target }}
+
+      - name: Install Linux musl dependencies
+        if: matrix.os == 'ubuntu-latest' && !matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install cross (aarch64 Linux musl)
+        if: matrix.cross
+        run: cargo install cross --locked --version 0.2.5
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target "${{ matrix.target }}"
+          else
+            cargo build --release --target "${{ matrix.target }}"
+          fi
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="${{ matrix.target }}"
+          EXT=""
+          case "${TARGET}" in
+            *windows*) EXT=".exe" ;;
+          esac
+          install -d "edge/${TARGET}"
+          cp "target/${TARGET}/release/${{ env.BINARY_NAME }}${EXT}" \
+            "edge/${TARGET}/${{ env.BINARY_NAME }}${EXT}"
+
+      - name: Upload edge artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: deslicer-edge-${{ matrix.target }}
+          path: edge/${{ matrix.target }}/
+          retention-days: 14
+          if-no-files-found: error

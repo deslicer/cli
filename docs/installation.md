@@ -27,13 +27,33 @@ deslicer --version
 
 ## curl install
 
-Once release artifacts are published, the install script will be hosted at:
-
 ```bash
-curl -fsSL https://get.deslicer.ai/cli/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/deslicer/cli/main/scripts/install.sh | bash
 ```
 
-The script downloads the matching release archive for your OS/arch from [GitHub Releases](https://github.com/deslicer/cli/releases) and installs `deslicer` to `/usr/local/bin` (override with `DESLICER_INSTALL_DIR`).
+The script detects your OS/arch, downloads the matching release archive from [GitHub Releases](https://github.com/deslicer/cli/releases), verifies the SHA-256 checksum, and installs `deslicer` to `/usr/local/bin`. Overrides:
+
+| Variable | Effect |
+|----------|--------|
+| `DESLICER_INSTALL_DIR` | Install destination (default `/usr/local/bin`) |
+| `DESLICER_VERSION` | Pin a specific tag, e.g. `v1.0.0` (default: latest stable) |
+
+Re-running the script updates an existing installation in place. It will be mirrored at `https://get.deslicer.ai/cli/install.sh` once that host is live.
+
+## Updating
+
+Pick the channel you installed with:
+
+```bash
+deslicer update            # self-update from GitHub Releases (Linux/macOS)
+deslicer update --check    # report whether a newer release exists
+brew upgrade deslicer      # Homebrew installs
+cargo install deslicer-cli # crates.io installs (add --force to reinstall)
+```
+
+`deslicer update` downloads the release archive for your platform, verifies the SHA-256 sidecar, and atomically replaces the running binary. It never installs prereleases unless you pass `--version vX.Y.Z-rc.N` explicitly. On Windows, download the new `.zip` from the releases page instead — in-place replacement of a running `.exe` is blocked by the OS.
+
+If the binary lives in a root-owned directory (e.g. `/usr/local/bin`), re-run the install script with `sudo` instead of `deslicer update`.
 
 ## Docker
 
