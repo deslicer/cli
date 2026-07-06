@@ -58,6 +58,7 @@ Run it **before** `deslicer auth login` when debugging token or binding failures
 | **9** | Rate limited | deslicer-ai or Observer returned 429 | Retry with backoff; reduce concurrent jobs |
 | **10** | Backend unavailable | resolve-backend or Observer unreachable | Check `DESLICER_API_URL`; verify Observer health; use `OBSERVER_API_URL` air-gap override if approved |
 | **11** | Plan not found | Plan ID does not exist or wrong tenant | Verify plan ID and environment; confirm auth succeeded first |
+| **12** | Human approval required | Plan approval needs a verified human identity | Approve in the Deslicer portal, or gate the CI job with a GitHub Environment that requires reviewers |
 
 ---
 

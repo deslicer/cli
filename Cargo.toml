@@ -37,6 +37,10 @@ url = "2"
 uuid = { version = "1", features = ["serde"] }
 base64 = "0.22"
 sha2 = "0.10"
+hex = "0.4"
+# Bundle source packaging (GitHub-App-free plan flow, REQ-SIGN-008)
+tar = "0.4"
+flate2 = "1"
 
 [dev-dependencies]
 wiremock = "0.6"

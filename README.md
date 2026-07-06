@@ -28,13 +28,29 @@ curl -fsSL https://get.deslicer.ai/cli/install.sh | bash
 
 **CI runners** — install the binary in your pipeline (GitHub Actions, GitLab CI, Azure DevOps, Bitbucket Pipelines). See [docs/installation.md](docs/installation.md) for per-platform OIDC setup.
 
+## Quick start
+
+New to the CLI? Follow the [Quickstart](docs/quickstart.md). The fastest way to a first plan — no GitHub App or OIDC setup required — is the bundle flow:
+
+```bash
+export OBSERVER_API_URL="https://observer.example.com:8088"
+export DESLICER_API_TOKEN="<api-key-with-tools-scope>"
+
+deslicer change plan \
+  --source-dir ./my-splunk-config \
+  --target-group <host-group-uuid> \
+  --name "my-first-plan"
+```
+
+See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits, and security model.
+
 ## Commands
 
 | Group | Command | Description |
 |-------|---------|-------------|
 | **auth** | `deslicer auth login` | Exchange CI OIDC for a session; resolve Observer backend |
 | **auth** | `deslicer auth status` | Print OIDC/platform binding diagnostics |
-| **change** | `deslicer change plan` | Create or refresh a change plan |
+| **change** | `deslicer change plan` | Create or refresh a change plan (add `--source-dir` for the GitHub-App-free bundle flow) |
 | **change** | `deslicer change show` | Show plan details |
 | **change** | `deslicer change approve` | Approve a pending plan |
 | **change** | `deslicer change reject` | Reject a pending plan |
@@ -48,6 +64,7 @@ curl -fsSL https://get.deslicer.ai/cli/install.sh | bash
 |------------|---------|---------|
 | `--deslicer-api-url` / `DESLICER_API_URL` | `https://api.deslicer.ai` | deslicer-ai portal (resolve-backend) |
 | `--observer-api-url` / `OBSERVER_API_URL` | _(unset)_ | Air-gapped escape hatch — skip resolve |
+| `DESLICER_API_TOKEN` (env only) | _(unset)_ | Observer API key (`tools` scope) for the bundle flow — see [docs/bundle-flow.md](docs/bundle-flow.md) |
 | `--ci-platform` | `auto` | Force platform: `github`, `gitlab`, `azure`, `bitbucket`, `local` |
 | `--log-format` | `human` | `human` or `json` |
 
@@ -77,6 +94,9 @@ For raw CLI usage inside a workflow, install `deslicer` and call `deslicer auth 
 
 ## Documentation
 
+- [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
+- [Bundle flow](docs/bundle-flow.md) — GitHub-App-free plans from a local directory
+- [CI outputs](docs/ci-outputs.md) — output variables per command and CI platform
 - [Installation](docs/installation.md) — Homebrew, cargo, curl, Docker, and CI platform matrix
 - [OIDC troubleshooting](docs/oidc-troubleshooting.md) — exit codes and fixes
 - [Environments](docs/environments.md) — `.deslicer/environments/` convention
