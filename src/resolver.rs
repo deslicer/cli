@@ -8,6 +8,7 @@ pub struct ResolvedBackend {
     pub observer_api_url: url::Url,
     pub audience: String,
     pub resolution_path: String,
+    pub proxy_mode: bool,
 }
 
 #[derive(Serialize)]
@@ -25,6 +26,8 @@ struct ResolveBackendResponse {
     observer_api_url: String,
     audience: String,
     resolution_path: String,
+    #[serde(default)]
+    proxy_mode: bool,
 }
 
 pub async fn resolve(
@@ -39,6 +42,7 @@ pub async fn resolve(
             observer_api_url: url,
             audience: AUDIENCE.to_string(),
             resolution_path: "observer_url_override".to_string(),
+            proxy_mode: false,
         });
     }
 
@@ -77,6 +81,7 @@ pub async fn resolve(
             observer_api_url,
             audience: parsed.audience,
             resolution_path: parsed.resolution_path,
+            proxy_mode: parsed.proxy_mode,
         });
     }
 

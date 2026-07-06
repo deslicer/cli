@@ -4,9 +4,10 @@
 
 use deslicer_cli::ci::CiPlatform;
 use deslicer_cli::errors::CliError;
-use deslicer_cli::observer_client::{Client, ReconcileMode};
+use deslicer_cli::observer_client::Client;
 use deslicer_cli::oidc_exchange;
 use deslicer_cli::resolver;
+use deslicer_cli::token_source::TokenSource;
 use deslicer_cli::Ctx;
 use std::sync::Mutex;
 use wiremock::matchers::{header, method, path};
@@ -49,6 +50,33 @@ async fn resolve_happy_path() {
     );
     assert_eq!(backend.audience, "https://api.deslicer.ai");
     assert_eq!(backend.resolution_path, "installation_binding");
+    assert!(!backend.proxy_mode);
+}
+
+#[tokio::test]
+async fn resolve_proxy_mode_flag_is_parsed() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/cli/resolve-backend"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "observer_api_url": "https://api.deslicer.ai/api/cli/observer/",
+            "audience": "https://api.deslicer.ai",
+            "resolution_path": "tenant_default",
+            "proxy_mode": true
+        })))
+        .mount(&server)
+        .await;
+
+    let ctx = test_ctx(url::Url::parse(&server.uri()).unwrap(), None);
+    let backend = resolver::resolve(&ctx, "jwt", CiPlatform::Github, None, None)
+        .await
+        .unwrap();
+
+    assert!(backend.proxy_mode);
+    assert_eq!(
+        backend.observer_api_url.as_str(),
+        "https://api.deslicer.ai/api/cli/observer/"
+    );
 }
 
 #[tokio::test]
@@ -180,28 +208,96 @@ async fn exchange_maps_401_to_exit_4() {
 }
 
 #[tokio::test]
-async fn client_reconcile_happy_path() {
+async fn client_orchestrated_plan_returns_both_ids() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .and(path("/api/v1/state/reconcile"))
+        .and(path("/api/cli/observer/v1/plan"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "plan-1",
+            "plan_id": "plan-external",
+            "plan_row_id": "plan-row",
             "status": "draft",
-            "summary": "reconcile ok"
+            "compile": { "accepted": true }
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/api/cli/observer/", server.uri())).unwrap();
+    let client = Client::new(base, "ci-jwt".to_string());
+    let created = client
+        .create_plan_orchestrated(Some("staging"))
+        .await
+        .unwrap();
+
+    assert_eq!(created.plan_id, "plan-external");
+    assert_eq!(created.plan_row_id.as_deref(), Some("plan-row"));
+    assert_eq!(created.status, "draft");
+}
+
+#[tokio::test]
+async fn client_execute_parses_execution_queued() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plans/plan-external/execute"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "execution_id": "exec-1",
+            "plan_id": "plan-external",
+            "status": "queued",
+            "jobs_total": 4
         })))
         .mount(&server)
         .await;
 
     let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
     let client = Client::new(base, "tools-token".to_string());
-    let plan = client
-        .reconcile(&Some("staging".to_string()), ReconcileMode::PlanOnly)
-        .await
-        .unwrap();
+    let queued = client.execute("plan-external").await.unwrap();
 
-    assert_eq!(plan.id, "plan-1");
-    assert_eq!(plan.status, "draft");
-    assert_eq!(plan.summary.as_deref(), Some("reconcile ok"));
+    assert_eq!(queued.execution_id, "exec-1");
+    assert_eq!(queued.jobs_total, 4);
+}
+
+#[tokio::test]
+async fn client_progress_parses_real_shape() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans/plan-external/progress"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "plan_id": "plan-external",
+            "progress_status": "partial",
+            "total_items": 8,
+            "fully_completed_items": 3,
+            "total_host_items": 24
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = Client::new(base, "tools-token".to_string());
+    let progress = client.progress("plan-external").await.unwrap();
+
+    assert_eq!(progress.progress_status, "partial");
+    assert!(!progress.is_terminal());
+    assert_eq!(progress.total_items, 8);
+    assert_eq!(progress.fully_completed_items, 3);
+}
+
+#[tokio::test]
+async fn client_approve_mfa_403_maps_to_exit_12() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plans/plan-x/approve"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "error": "mfa_required",
+            "message": "Plan approval requires a verified human identity"
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = Client::new(base, "tools-token".to_string());
+    let err = client.approve("plan-x").await.unwrap_err();
+
+    assert!(matches!(err, CliError::HumanApprovalRequired(_)));
+    assert_eq!(err.exit_code(), 12);
 }
 
 #[tokio::test]
@@ -250,6 +346,60 @@ async fn client_get_plan_404_maps_to_exit_11() {
 
     assert!(matches!(err, CliError::PlanNotFound(_)));
     assert_eq!(err.exit_code(), 11);
+}
+
+/// Proxy mode: an expired CI OIDC JWT triggers a 401; the client must fetch
+/// a fresh JWT from the CI platform token service and retry once.
+#[tokio::test]
+async fn client_refreshes_ci_jwt_on_401() {
+    let _guard = ENV_LOCK.lock().unwrap();
+
+    let server = MockServer::start().await;
+
+    // GitHub Actions OIDC token service.
+    Mock::given(method("GET"))
+        .and(path("/gh-oidc"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "value": "fresh-jwt"
+        })))
+        .mount(&server)
+        .await;
+
+    // Observer/proxy: reject the stale JWT, accept the fresh one.
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans/plan-1"))
+        .and(header("Authorization", "Bearer stale-jwt"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "detail": "token expired"
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans/plan-1"))
+        .and(header("Authorization", "Bearer fresh-jwt"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "plan-1",
+            "status": "pending_approval"
+        })))
+        .mount(&server)
+        .await;
+
+    std::env::set_var(
+        "ACTIONS_ID_TOKEN_REQUEST_URL",
+        format!("{}/gh-oidc?dummy=1", server.uri()),
+    );
+    std::env::set_var("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "runner-token");
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let tokens = TokenSource::ci_oidc(CiPlatform::Github, Some("stale-jwt".to_string()));
+    let client = Client::new(base, tokens);
+
+    let plan = client.get_plan("plan-1").await.unwrap();
+
+    std::env::remove_var("ACTIONS_ID_TOKEN_REQUEST_URL");
+    std::env::remove_var("ACTIONS_ID_TOKEN_REQUEST_TOKEN");
+
+    assert_eq!(plan.status, "pending_approval");
 }
 
 #[test]

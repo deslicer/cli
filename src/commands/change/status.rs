@@ -7,19 +7,13 @@ use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
+    /// External plan id.
     #[arg(long)]
     pub plan_id: String,
 }
 
 const MAX_ATTEMPTS: u32 = 10;
 const INITIAL_DELAY_MS: u64 = 500;
-
-fn is_terminal_status(status: &str) -> bool {
-    matches!(
-        status,
-        "succeeded" | "failed" | "cancelled" | "completed" | "timed_out"
-    )
-}
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let (_session, client) = match authenticate(&ctx, None, Some(&args.plan_id)).await {
@@ -36,7 +30,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             Err(err) => return map_cli_error(err),
         };
 
-        if is_terminal_status(&progress.status) {
+        if progress.is_terminal() {
             return emit_plan_progress(&progress);
         }
 

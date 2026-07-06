@@ -1,5 +1,5 @@
 use crate::ci::{detect_platform, CiPlatform};
-use crate::observer_client::{ChangePlan, PlanProgress};
+use crate::observer_client::{ChangePlan, ExecutionQueued, ExecutionSummary, PlanProgress};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
@@ -88,7 +88,8 @@ pub fn emit_message(key_values: &[(&str, String)]) -> i32 {
 pub fn emit_change_plan(plan: &ChangePlan) -> i32 {
     println!("{}", serde_json::to_string(plan).unwrap_or_default());
     let pairs = [
-        ("plan_id", plan.id.clone()),
+        ("plan_id", plan.external_id().to_string()),
+        ("plan_row_id", plan.id.clone()),
         ("plan_status", plan.status.clone()),
         ("plan_summary", plan.summary.clone().unwrap_or_default()),
     ];
@@ -98,8 +99,36 @@ pub fn emit_change_plan(plan: &ChangePlan) -> i32 {
 pub fn emit_plan_progress(progress: &PlanProgress) -> i32 {
     println!("{}", serde_json::to_string(progress).unwrap_or_default());
     let pairs = [
-        ("plan_id", progress.id.clone()),
-        ("plan_status", progress.status.clone()),
+        ("plan_id", progress.plan_id.clone()),
+        ("progress_status", progress.progress_status.clone()),
+        ("total_items", progress.total_items.to_string()),
+        (
+            "fully_completed_items",
+            progress.fully_completed_items.to_string(),
+        ),
+    ];
+    emit_to_sink(&pairs)
+}
+
+pub fn emit_execution_queued(execution: &ExecutionQueued) -> i32 {
+    println!("{}", serde_json::to_string(execution).unwrap_or_default());
+    let pairs = [
+        ("execution_id", execution.execution_id.clone()),
+        ("execution_status", execution.status.clone()),
+        ("jobs_total", execution.jobs_total.to_string()),
+        ("plan_id", execution.plan_id.clone().unwrap_or_default()),
+    ];
+    emit_to_sink(&pairs)
+}
+
+pub fn emit_execution_summary(summary: &ExecutionSummary) -> i32 {
+    println!("{}", serde_json::to_string(summary).unwrap_or_default());
+    let pairs = [
+        ("execution_id", summary.execution_id.clone()),
+        ("execution_status", summary.status.clone()),
+        ("jobs_total", summary.jobs_total.to_string()),
+        ("jobs_succeeded", summary.jobs_succeeded.to_string()),
+        ("jobs_failed", summary.jobs_failed.to_string()),
     ];
     emit_to_sink(&pairs)
 }
