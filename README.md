@@ -44,7 +44,7 @@ deslicer change plan \
   --name "my-first-plan"
 ```
 
-See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits, and security model. Testing from a source checkout against a local Observer? Follow [docs/local-testing.md](docs/local-testing.md).
+See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits, and security model. For how the CLI fits into DAP and deslicer-ai, see [docs/architecture.md](docs/architecture.md). Testing from a source checkout against a local Observer? Follow [docs/local-testing.md](docs/local-testing.md).
 
 ## Commands
 
@@ -97,6 +97,7 @@ For raw CLI usage inside a workflow, install `deslicer` and call `deslicer auth 
 
 ## Documentation
 
+- [Architecture](docs/architecture.md) — how the CLI integrates with DAP and deslicer-ai
 - [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
 - [Bundle flow](docs/bundle-flow.md) — GitHub-App-free plans from a local directory
 - [CI outputs](docs/ci-outputs.md) — output variables per command and CI platform

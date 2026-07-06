@@ -1,6 +1,6 @@
 # Bundle flow (GitHub-App-free)
 
-`deslicer change plan --source-dir <dir>` compiles a change plan from a locally packaged source bundle instead of a git clone. No GitHub App installation, no OIDC exchange, and no repository integration are required.
+`deslicer change plan --source-dir <dir>` compiles a change plan from a locally packaged source bundle instead of a git clone. No GitHub App installation, no OIDC exchange, and no repository integration are required. This path bypasses deslicer-ai entirely — see [architecture.md](architecture.md#path-b--bundle-upload-github-app-free-no-dai).
 
 Use it when:
 
