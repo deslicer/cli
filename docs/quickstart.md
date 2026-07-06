@@ -2,6 +2,8 @@
 
 Get from zero to an approved, deployed Splunk configuration change. Pick the path that matches where you are running the CLI.
 
+For system context (components, sequence diagrams, DAP vs DAI boundaries), see [architecture.md](architecture.md).
+
 | Path | Where it runs | Auth | Requires |
 |------|---------------|------|----------|
 | [A. CI pipeline (OIDC)](#path-a-ci-pipeline-with-oidc) | GitHub Actions, GitLab CI, Azure DevOps, Bitbucket | CI OIDC token, exchanged automatically | Repo allowlisted + environment bound in the Deslicer portal |
