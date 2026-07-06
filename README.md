@@ -42,7 +42,7 @@ deslicer change plan \
   --name "my-first-plan"
 ```
 
-See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits, and security model.
+See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits, and security model. Testing from a source checkout against a local Observer? Follow [docs/local-testing.md](docs/local-testing.md).
 
 ## Commands
 
@@ -97,6 +97,7 @@ For raw CLI usage inside a workflow, install `deslicer` and call `deslicer auth 
 - [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
 - [Bundle flow](docs/bundle-flow.md) — GitHub-App-free plans from a local directory
 - [CI outputs](docs/ci-outputs.md) — output variables per command and CI platform
+- [Local testing](docs/local-testing.md) — build from source and test against a local Observer
 - [Installation](docs/installation.md) — Homebrew, cargo, curl, Docker, and CI platform matrix
 - [OIDC troubleshooting](docs/oidc-troubleshooting.md) — exit codes and fixes
 - [Environments](docs/environments.md) — `.deslicer/environments/` convention
