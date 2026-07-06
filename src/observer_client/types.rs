@@ -110,3 +110,23 @@ pub(crate) struct OrchestrationVerifyResponse {
     pub accepted: bool,
     pub dry_run: bool,
 }
+
+/// Observer `POST /api/v1/plan-sources/bundles` response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleUploaded {
+    pub id: String,
+    pub sha256: String,
+    #[serde(default)]
+    pub size_bytes: i64,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+}
+
+/// Observer `POST /api/v1/plans` response wrapper.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ChangePlanResponse {
+    pub success: bool,
+    #[serde(default)]
+    pub message: String,
+    pub plan: Option<ChangePlan>,
+}

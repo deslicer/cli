@@ -8,7 +8,9 @@
 mod http_errors;
 mod types;
 
-pub use types::{ChangePlan, ExecutionQueued, ExecutionSummary, OrchestratedPlan, PlanProgress};
+pub use types::{
+    BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, OrchestratedPlan, PlanProgress,
+};
 
 use http_errors::{map_observer_error, parse_retry_after_header, retry_delay};
 use reqwest::Method;
@@ -92,6 +94,100 @@ impl Client {
         } else {
             Err(CliError::Other("compile dry-run was not accepted".into()))
         }
+    }
+
+    /// Direct mode: upload a source bundle (gzip bytes) for GitHub-App-free
+    /// compilation. The declared SHA-256 is verified server-side
+    /// (REQ-SIGN-008).
+    pub async fn upload_bundle(
+        &self,
+        bytes: Vec<u8>,
+        sha256: &str,
+        source_label: Option<&str>,
+    ) -> Result<BundleUploaded, CliError> {
+        let url = self.request_url("api/v1/plan-sources/bundles")?;
+        let bearer = self.tokens.bearer().await?;
+
+        let mut req = self
+            .http
+            .post(url)
+            .header("Authorization", format!("Bearer {bearer}"))
+            .header("Content-Type", "application/gzip")
+            .header("X-Bundle-Sha256", sha256);
+        if let Some(label) = source_label {
+            req = req.header("X-Bundle-Source-Label", label);
+        }
+
+        let response = req
+            .body(bytes)
+            .send()
+            .await
+            .map_err(|e| CliError::Transport(e.to_string()))?;
+
+        let status = response.status();
+        let retry_after = parse_retry_after_header(response.headers());
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| CliError::Transport(e.to_string()))?;
+
+        if !status.is_success() {
+            let body_text = String::from_utf8_lossy(&body).into_owned();
+            return Err(map_observer_error(status, &body_text, retry_after));
+        }
+
+        serde_json::from_slice(&body)
+            .map_err(|e| CliError::Transport(format!("invalid bundle upload JSON: {e}")))
+    }
+
+    /// Direct mode: create a draft plan compiled from an uploaded bundle.
+    pub async fn create_plan_from_bundle(
+        &self,
+        bundle_id: &str,
+        target_group_id: &str,
+        name: Option<&str>,
+    ) -> Result<ChangePlan, CliError> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            source_type: &'a str,
+            source_bundle_id: &'a str,
+            target_group_id: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            name: Option<&'a str>,
+        }
+
+        let body = Body {
+            source_type: "bundle",
+            source_bundle_id: bundle_id,
+            target_group_id,
+            name,
+        };
+        let resp: types::ChangePlanResponse = self
+            .request_json(Method::POST, "api/v1/plans", Some(&body))
+            .await?;
+        match resp.plan {
+            Some(plan) if resp.success => Ok(plan),
+            _ => Err(CliError::Other(format!(
+                "plan creation failed: {}",
+                resp.message
+            ))),
+        }
+    }
+
+    /// Direct mode: trigger the compile-runner for a plan (internal row id).
+    /// For bundle-sourced plans the `git_ref` is a placeholder — the source
+    /// is pinned by the bundle digest, not a git ref.
+    pub async fn trigger_compile(&self, plan_row_id: &str, git_ref: &str) -> Result<(), CliError> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            git_ref: &'a str,
+        }
+
+        let path = format!("api/v1/runners/compile/{plan_row_id}");
+        let _: serde_json::Value = self
+            .request_json(Method::POST, &path, Some(&Body { git_ref }))
+            .await?;
+        Ok(())
     }
 
     /// Lookup by external plan id (UUID v4).
