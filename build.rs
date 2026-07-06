@@ -8,6 +8,11 @@ fn main() {
     println!("cargo:rustc-env=DESLICER_GIT_SHA={sha}");
     println!("cargo:rerun-if-env-changed=DESLICER_GIT_SHA");
     println!("cargo:rerun-if-changed=.git/HEAD");
+
+    // Target triple for self-update artifact selection (`deslicer update`).
+    // Build scripts always receive TARGET from cargo.
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
+    println!("cargo:rustc-env=DESLICER_TARGET={target}");
 }
 
 fn git_short_sha() -> Option<String> {

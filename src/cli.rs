@@ -42,6 +42,8 @@ pub enum Command {
     Auth(crate::commands::auth::AuthCmd),
     #[command(subcommand)]
     Change(crate::commands::change::ChangeCmd),
+    /// Update the deslicer binary to the latest release
+    Update(crate::commands::update::Args),
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
@@ -92,6 +94,7 @@ impl Cli {
         match self.command {
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
+            Command::Update(args) => crate::commands::update::run(args).await,
         }
     }
 }
