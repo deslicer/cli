@@ -31,6 +31,8 @@ cargo test --all-features
 cargo run -- auth status --ci-platform local
 ```
 
+To exercise the full plan flow against a local or remote Observer API, see [local-testing.md](local-testing.md).
+
 ## Code standards
 
 - **No `.unwrap()` or `.expect()` in non-test code** — the workspace enforces `-D clippy::unwrap_used` / `expect_used` posture. Use explicit error handling with `?` and typed errors.

@@ -14,7 +14,7 @@ Use it when:
 |-------------|---------------|
 | `OBSERVER_API_URL` | Your Observer **management plane** URL (ask your platform admin) |
 | `DESLICER_API_TOKEN` | An Observer API key with the `tools` scope — Deslicer portal → **Platform → API keys** |
-| Target host group UUID | Deslicer portal → host groups, or `GET /api/v1/host-groups` |
+| Target host group UUID | Deslicer portal → host groups, or `GET /api/v1/groups` |
 
 The bundle flow is **direct mode only**: it talks straight to the Observer API and ignores the deslicer-ai CI proxy. Both environment variables must be set (flags `--observer-api-url` works too; the token is env-only so it never appears in `ps` output).
 
