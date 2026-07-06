@@ -6,6 +6,7 @@ pub mod observer_client;
 pub mod oidc_exchange;
 pub mod output;
 pub mod resolver;
+pub mod token_source;
 pub mod tool_download;
 
 pub use cli::Ctx;
