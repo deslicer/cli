@@ -218,7 +218,7 @@ async fn test_change_reject(platform: CiPlatform) {
         .await;
 
     let client = auth_client(&deslicer, platform).await;
-    let plan = client.reject(PLAN_ID).await.unwrap();
+    let plan = client.reject(PLAN_ID, "e2e rejection reason").await.unwrap();
     assert_eq!(plan.status, "rejected");
 }
 

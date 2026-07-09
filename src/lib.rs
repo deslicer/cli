@@ -2,6 +2,7 @@ pub mod bundle;
 pub mod ci;
 pub mod cli;
 pub mod commands;
+pub mod diff_summary;
 pub mod errors;
 pub mod observer_client;
 pub mod oidc_exchange;

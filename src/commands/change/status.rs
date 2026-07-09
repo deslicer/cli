@@ -1,8 +1,8 @@
 use clap::Args as ClapArgs;
 
 use crate::commands::pipeline::{authenticate, map_cli_error};
-use crate::observer_client::PlanProgress;
-use crate::output::emit_plan_progress;
+use crate::diff_summary::diff_counts_from_observer_value;
+use crate::output::emit_plan_status;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
@@ -21,8 +21,26 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(err),
     };
 
+    let plan = match client.get_plan(&args.plan_id).await {
+        Ok(plan) => Some(plan),
+        Err(err) => {
+            eprintln!("could not load plan lifecycle status: {err}");
+            None
+        }
+    };
+
+    let diff = if let Some(ref p) = plan {
+        client
+            .get_dry_run_diff(&p.id)
+            .await
+            .ok()
+            .and_then(|body| diff_counts_from_observer_value(&body))
+    } else {
+        None
+    };
+
     let mut delay_ms = INITIAL_DELAY_MS;
-    let mut last: Option<PlanProgress> = None;
+    let mut last = None;
 
     for attempt in 0..MAX_ATTEMPTS {
         let progress = match client.progress(&args.plan_id).await {
@@ -31,7 +49,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         };
 
         if progress.is_terminal() {
-            return emit_plan_progress(&progress);
+            return emit_plan_status(plan.as_ref(), &progress, diff.as_ref());
         }
 
         last = Some(progress);
@@ -43,7 +61,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     }
 
     match last {
-        Some(progress) => emit_plan_progress(&progress),
+        Some(progress) => emit_plan_status(plan.as_ref(), &progress, diff.as_ref()),
         None => {
             eprintln!("no progress available for plan {}", args.plan_id);
             1

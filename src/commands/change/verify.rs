@@ -1,7 +1,8 @@
 use clap::Args as ClapArgs;
 
 use crate::commands::pipeline::{authenticate, map_cli_error, require_proxy_mode};
-use crate::output::{emit_change_plan, emit_message};
+use crate::diff_summary::diff_counts_from_observer_value;
+use crate::output::{emit_change_plan_with_diff, emit_message};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
@@ -17,25 +18,6 @@ pub struct Args {
     /// created from.
     #[arg(long)]
     pub git_ref: Option<String>,
-}
-
-/// Extract a change summary from the persisted dry-run diff JSON
-/// (compile_runner_dry_run_v1 shape: summary.{additions,modifications,deletions,total}).
-fn diff_summary_pairs(diff: &serde_json::Value) -> Vec<(&'static str, String)> {
-    let summary = diff.get("diff_json").unwrap_or(diff).get("summary");
-    let count = |key: &str| -> String {
-        summary
-            .and_then(|s| s.get(key))
-            .and_then(|v| v.as_u64())
-            .map(|n| n.to_string())
-            .unwrap_or_default()
-    };
-    vec![
-        ("diff_total", count("total")),
-        ("diff_additions", count("additions")),
-        ("diff_modifications", count("modifications")),
-        ("diff_deletions", count("deletions")),
-    ]
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
@@ -64,16 +46,25 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return map_cli_error(err);
     }
 
+    // Refresh lifecycle status after verify (compile may have advanced the plan).
+    let plan = match client.get_plan(&args.plan_id).await {
+        Ok(plan) => plan,
+        Err(_) => plan,
+    };
+
     // The diff is best-effort output: verification already succeeded above.
     match client.get_dry_run_diff(&plan.id).await {
         Ok(diff) => {
             println!("{}", serde_json::to_string(&diff).unwrap_or_default());
-            emit_message(&diff_summary_pairs(&diff));
+            let counts = diff_counts_from_observer_value(&diff);
+            if let Some(ref counts) = counts {
+                emit_message(&crate::output::diff_count_pairs(counts));
+            }
+            emit_change_plan_with_diff(&plan, counts.as_ref())
         }
         Err(err) => {
             eprintln!("dry-run accepted, but the diff could not be fetched: {err}");
+            emit_change_plan_with_diff(&plan, None)
         }
     }
-
-    emit_change_plan(&plan)
 }
