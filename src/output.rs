@@ -105,10 +105,7 @@ pub fn diff_count_pairs(counts: &DiffCounts) -> Vec<(&'static str, String)> {
         ("diff_additions", counts.additions.to_string()),
         ("diff_modifications", counts.modifications.to_string()),
         ("diff_deletions", counts.deletions.to_string()),
-        (
-            "diff_has_destructive",
-            counts.has_destructive.to_string(),
-        ),
+        ("diff_has_destructive", counts.has_destructive.to_string()),
     ]
 }
 
@@ -193,11 +190,8 @@ pub fn emit_plan_status(
         pairs.extend(diff_count_pairs(counts));
     }
     if let Some(plan) = plan {
-        let _ = append_github_step_summary(&plan_summary_markdown(
-            "Deslicer plan status",
-            plan,
-            diff,
-        ));
+        let _ =
+            append_github_step_summary(&plan_summary_markdown("Deslicer plan status", plan, diff));
     }
     emit_to_sink(&pairs)
 }

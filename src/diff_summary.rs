@@ -47,10 +47,8 @@ fn summary_object(root: &Value) -> Option<&Value> {
 }
 
 fn summary_in_node(node: &Value) -> Option<&Value> {
-    node.get("summary").or_else(|| {
-        node.get("diff_json")
-            .and_then(|inner| inner.get("summary"))
-    })
+    node.get("summary")
+        .or_else(|| node.get("diff_json").and_then(|inner| inner.get("summary")))
 }
 
 fn json_u64(obj: &Value, key: &str) -> u64 {

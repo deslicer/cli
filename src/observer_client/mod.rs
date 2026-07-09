@@ -224,9 +224,7 @@ impl Client {
 
     /// Observer approve/reject return `{ success, message, plan }`, not a bare plan.
     async fn post_change_plan_mutation(&self, path: &str) -> Result<ChangePlan, CliError> {
-        let bytes = self
-            .request_bytes(Method::POST, path, None::<&()>)
-            .await?;
+        let bytes = self.request_bytes(Method::POST, path, None::<&()>).await?;
         parse_change_plan_body(&bytes)
     }
 
