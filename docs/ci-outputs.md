@@ -16,14 +16,33 @@ If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), th
 
 ## Output keys per command
 
-### `change plan`, `change show`, `change approve`, `change reject`
+### `change plan`, `change show`, `change approve`, `change reject`, `change verify`
 
 | Key | Description |
 |-----|-------------|
 | `plan_id` | External plan id (UUID v4) — use this in all follow-up commands |
 | `plan_row_id` | Internal row id (UUID v7) |
-| `plan_status` | e.g. `draft`, `pending_approval`, `approved`, `rejected`, `failed` |
-| `plan_summary` | Human-readable summary (may be empty) |
+| `plan_status` | e.g. `draft`, `pending_approval`, `approved_unsigned`, `rejected`, `failed` |
+| `plan_summary` | Human-readable summary (change counts when a dry-run diff is available) |
+| `diff_total` | Total change items (verify / plan after compile) |
+| `diff_additions` | Additions in the dry-run diff |
+| `diff_modifications` | Modifications in the dry-run diff |
+| `diff_deletions` | Deletions in the dry-run diff |
+| `diff_has_destructive` | `true` when the diff includes deletions |
+
+### `change status`
+
+| Key | Description |
+|-----|-------------|
+| `plan_id` | External plan id |
+| `plan_status` | Plan lifecycle status from `GET /api/v1/plans/{id}` |
+| `plan_summary` | Plan summary or change-count summary when diff is available |
+| `progress_status` | Aggregate item-completion state |
+| `total_items` | Change items in the plan |
+| `fully_completed_items` | Items applied on every target host |
+| `diff_*` | Same keys as verify when a persisted dry-run diff exists |
+
+GitHub Actions also receives a **job step summary** (markdown table) when `GITHUB_STEP_SUMMARY` is set.
 
 ### `change deploy` (queued, with `--no-wait`)
 
@@ -43,15 +62,6 @@ If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), th
 | `jobs_total` | Number of per-host jobs |
 | `jobs_succeeded` | Jobs that completed successfully |
 | `jobs_failed` | Jobs that failed |
-
-### `change status`, `change verify`
-
-| Key | Description |
-|-----|-------------|
-| `plan_id` | External plan id |
-| `progress_status` | Aggregate progress state |
-| `total_items` | Change items in the plan |
-| `fully_completed_items` | Items applied on every target host |
 
 ## Example: chaining steps in GitHub Actions
 

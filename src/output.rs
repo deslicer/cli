@@ -1,4 +1,5 @@
 use crate::ci::{detect_platform, CiPlatform};
+use crate::diff_summary::DiffCounts;
 use crate::observer_client::{ChangePlan, ExecutionQueued, ExecutionSummary, PlanProgress};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
@@ -69,6 +70,19 @@ fn write_outputs(sink: OutputSink, pairs: &[(&str, String)]) -> io::Result<()> {
     }
 }
 
+fn append_github_step_summary(markdown: &str) -> io::Result<()> {
+    if markdown.trim().is_empty() {
+        return Ok(());
+    }
+    let path = match std::env::var("GITHUB_STEP_SUMMARY") {
+        Ok(path) => path,
+        Err(_) => return Ok(()),
+    };
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(file, "{markdown}")?;
+    Ok(())
+}
+
 fn emit_to_sink(pairs: &[(&str, String)]) -> i32 {
     let platform = detect_platform(None);
     let sink = detect_sink(platform);
@@ -85,20 +99,83 @@ pub fn emit_message(key_values: &[(&str, String)]) -> i32 {
     emit_to_sink(key_values)
 }
 
+pub fn diff_count_pairs(counts: &DiffCounts) -> Vec<(&'static str, String)> {
+    vec![
+        ("diff_total", counts.total.to_string()),
+        ("diff_additions", counts.additions.to_string()),
+        ("diff_modifications", counts.modifications.to_string()),
+        ("diff_deletions", counts.deletions.to_string()),
+        ("diff_has_destructive", counts.has_destructive.to_string()),
+    ]
+}
+
+pub fn emit_diff_counts(counts: &DiffCounts) -> i32 {
+    emit_to_sink(&diff_count_pairs(counts))
+}
+
+fn plan_summary_markdown(title: &str, plan: &ChangePlan, diff: Option<&DiffCounts>) -> String {
+    let mut lines = vec![
+        format!("## {title}"),
+        String::new(),
+        format!("| Field | Value |"),
+        format!("| --- | --- |"),
+        format!("| Plan ID | `{}` |", plan.external_id()),
+        format!("| Row ID | `{}` |", plan.id),
+        format!("| Status | **{}** |", plan.status),
+    ];
+    let summary = plan.display_summary();
+    if !summary.is_empty() {
+        lines.push(format!("| Summary | {summary} |"));
+    }
+    if let Some(counts) = diff {
+        lines.push(format!(
+            "| Changes | {} (+{} / ~{} / -{}) |",
+            counts.total, counts.additions, counts.modifications, counts.deletions
+        ));
+        if counts.has_destructive {
+            lines.push("| Destructive | yes |".to_string());
+        }
+    }
+    lines.join("\n")
+}
+
 pub fn emit_change_plan(plan: &ChangePlan) -> i32 {
+    emit_change_plan_with_diff(plan, None)
+}
+
+pub fn emit_change_plan_with_diff(plan: &ChangePlan, diff: Option<&DiffCounts>) -> i32 {
     println!("{}", serde_json::to_string(plan).unwrap_or_default());
-    let pairs = [
+    let summary = if let Some(counts) = diff {
+        counts.human_summary()
+    } else {
+        plan.display_summary()
+    };
+    let mut pairs = vec![
         ("plan_id", plan.external_id().to_string()),
         ("plan_row_id", plan.id.clone()),
         ("plan_status", plan.status.clone()),
-        ("plan_summary", plan.summary.clone().unwrap_or_default()),
+        ("plan_summary", summary),
     ];
+    if let Some(counts) = diff {
+        pairs.extend(diff_count_pairs(counts));
+    }
+    let _ = append_github_step_summary(&plan_summary_markdown("Deslicer plan", plan, diff));
     emit_to_sink(&pairs)
 }
 
 pub fn emit_plan_progress(progress: &PlanProgress) -> i32 {
+    emit_plan_status(None, progress, None)
+}
+
+pub fn emit_plan_status(
+    plan: Option<&ChangePlan>,
+    progress: &PlanProgress,
+    diff: Option<&DiffCounts>,
+) -> i32 {
     println!("{}", serde_json::to_string(progress).unwrap_or_default());
-    let pairs = [
+    let plan_status = plan.map(|p| p.status.as_str()).unwrap_or_default();
+    let plan_summary = plan.map(ChangePlan::display_summary).unwrap_or_default();
+    let mut pairs = vec![
         ("plan_id", progress.plan_id.clone()),
         ("progress_status", progress.progress_status.clone()),
         ("total_items", progress.total_items.to_string()),
@@ -106,7 +183,16 @@ pub fn emit_plan_progress(progress: &PlanProgress) -> i32 {
             "fully_completed_items",
             progress.fully_completed_items.to_string(),
         ),
+        ("plan_status", plan_status.to_string()),
+        ("plan_summary", plan_summary),
     ];
+    if let Some(counts) = diff {
+        pairs.extend(diff_count_pairs(counts));
+    }
+    if let Some(plan) = plan {
+        let _ =
+            append_github_step_summary(&plan_summary_markdown("Deslicer plan status", plan, diff));
+    }
     emit_to_sink(&pairs)
 }
 
@@ -118,6 +204,11 @@ pub fn emit_execution_queued(execution: &ExecutionQueued) -> i32 {
         ("jobs_total", execution.jobs_total.to_string()),
         ("plan_id", execution.plan_id.clone().unwrap_or_default()),
     ];
+    let summary = format!(
+        "## Deslicer deploy queued\n\n| Field | Value |\n| --- | --- |\n| Execution | `{}` |\n| Status | **{}** |\n| Jobs | {} |",
+        execution.execution_id, execution.status, execution.jobs_total
+    );
+    let _ = append_github_step_summary(&summary);
     emit_to_sink(&pairs)
 }
 
@@ -130,6 +221,14 @@ pub fn emit_execution_summary(summary: &ExecutionSummary) -> i32 {
         ("jobs_succeeded", summary.jobs_succeeded.to_string()),
         ("jobs_failed", summary.jobs_failed.to_string()),
     ];
+    let md = format!(
+        "## Deslicer deploy result\n\n| Field | Value |\n| --- | --- |\n| Execution | `{}` |\n| Status | **{}** |\n| Jobs | {}/{} succeeded |",
+        summary.execution_id,
+        summary.status,
+        summary.jobs_succeeded,
+        summary.jobs_total
+    );
+    let _ = append_github_step_summary(&md);
     emit_to_sink(&pairs)
 }
 
@@ -178,5 +277,25 @@ mod tests {
         std::env::remove_var("GITHUB_OUTPUT");
         let pairs = [("plan_id", "fallback".to_string())];
         write_outputs(OutputSink::GithubOutput, &pairs).unwrap();
+    }
+
+    #[test]
+    fn step_summary_appends_markdown() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().into_owned();
+        std::env::set_var("GITHUB_STEP_SUMMARY", &path);
+        let plan = ChangePlan {
+            id: "row".into(),
+            plan_id: Some("ext".into()),
+            status: "pending_approval".into(),
+            name: None,
+            summary: None,
+        };
+        let _ = append_github_step_summary(&plan_summary_markdown("Test", &plan, None));
+        std::env::remove_var("GITHUB_STEP_SUMMARY");
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("pending_approval"));
+        assert!(content.contains("ext"));
     }
 }

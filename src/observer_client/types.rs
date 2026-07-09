@@ -17,7 +17,7 @@ pub struct ChangePlan {
     pub status: String,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "description")]
     pub summary: Option<String>,
 }
 
@@ -25,6 +25,14 @@ impl ChangePlan {
     /// External plan id when present, falling back to the row id.
     pub fn external_id(&self) -> &str {
         self.plan_id.as_deref().unwrap_or(&self.id)
+    }
+
+    /// Human-readable summary for CI output (falls back to plan name).
+    pub fn display_summary(&self) -> String {
+        self.summary
+            .clone()
+            .or_else(|| self.name.clone())
+            .unwrap_or_default()
     }
 }
 

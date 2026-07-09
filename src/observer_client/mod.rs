@@ -207,12 +207,25 @@ impl Client {
 
     pub async fn approve(&self, plan_id: &str) -> Result<ChangePlan, CliError> {
         let path = format!("api/v1/plans/{plan_id}/approve");
-        self.request_json(Method::POST, &path, None::<&()>).await
+        self.post_change_plan_mutation(&path).await
     }
 
-    pub async fn reject(&self, plan_id: &str) -> Result<ChangePlan, CliError> {
+    pub async fn reject(&self, plan_id: &str, reason: &str) -> Result<ChangePlan, CliError> {
+        #[derive(Serialize)]
+        struct RejectBody<'a> {
+            reason: &'a str,
+        }
         let path = format!("api/v1/plans/{plan_id}/reject");
-        self.request_json(Method::POST, &path, None::<&()>).await
+        let bytes = self
+            .request_bytes(Method::POST, &path, Some(&RejectBody { reason }))
+            .await?;
+        parse_change_plan_body(&bytes)
+    }
+
+    /// Observer approve/reject return `{ success, message, plan }`, not a bare plan.
+    async fn post_change_plan_mutation(&self, path: &str) -> Result<ChangePlan, CliError> {
+        let bytes = self.request_bytes(Method::POST, path, None::<&()>).await?;
+        parse_change_plan_body(&bytes)
     }
 
     /// Queue execution of an approved plan (external plan id).
@@ -351,5 +364,28 @@ impl Client {
             url.query_pairs_mut().append_pair("environment", env);
         }
         Ok(url)
+    }
+}
+
+fn parse_change_plan_body(bytes: &[u8]) -> Result<ChangePlan, CliError> {
+    if let Ok(envelope) = serde_json::from_slice::<types::ChangePlanResponse>(bytes) {
+        if let Some(plan) = envelope.plan {
+            return Ok(plan);
+        }
+    }
+    serde_json::from_slice::<ChangePlan>(bytes)
+        .map_err(|e| CliError::Transport(format!("invalid plan JSON: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_wrapped_approve_response() {
+        let body = br#"{"success":true,"message":"ok","plan":{"id":"row","plan_id":"ext","status":"approved_unsigned"}}"#;
+        let plan = parse_change_plan_body(body).expect("plan");
+        assert_eq!(plan.external_id(), "ext");
+        assert_eq!(plan.status, "approved_unsigned");
     }
 }

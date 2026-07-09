@@ -3,7 +3,7 @@ use clap::Args as ClapArgs;
 use crate::commands::pipeline::{authenticate, map_cli_error, require_proxy_mode};
 use crate::errors::CliError;
 use crate::observer_client::{ChangePlan, Client, OrchestratedPlan};
-use crate::output::emit_change_plan;
+use crate::output::{emit_change_plan, emit_change_plan_with_diff};
 use crate::token_source::TokenSource;
 use crate::Ctx;
 
@@ -189,5 +189,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return 1;
     }
 
-    emit_change_plan(&plan)
+    let diff = client
+        .get_dry_run_diff(&plan.id)
+        .await
+        .ok()
+        .and_then(|body| crate::diff_summary::diff_counts_from_observer_value(&body));
+    emit_change_plan_with_diff(&plan, diff.as_ref())
 }
