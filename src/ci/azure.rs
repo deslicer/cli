@@ -20,7 +20,10 @@ impl OidcTokenProvider for AzureProvider {
 
         // Phase 1: POST to SYSTEM_OIDCREQUESTURI directly. Service-connection
         // query params (api-version, serviceConnectionId) are deferred.
-        let client = reqwest::Client::new();
+        let parsed = url::Url::parse(&request_uri).map_err(|e| OidcError::Http(e.to_string()))?;
+        crate::http::assert_url_allowed(&parsed).map_err(|e| OidcError::Http(e.to_string()))?;
+
+        let client = crate::http::client();
         let response = client
             .post(&request_uri)
             .header("Authorization", format!("Bearer {access_token}"))

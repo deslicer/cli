@@ -41,6 +41,8 @@ hex = "0.4"
 # Bundle source packaging (GitHub-App-free plan flow, REQ-SIGN-008)
 tar = "0.4"
 flate2 = "1"
+keyring = "3"
+toml = "0.8"
 
 [dev-dependencies]
 wiremock = "0.6"

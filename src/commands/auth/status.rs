@@ -3,6 +3,7 @@ use clap::Args as ClapArgs;
 use serde_json::{json, Value};
 
 use crate::ci::{self, CiPlatform, OidcError};
+use crate::token_store::load_stored_session;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
@@ -14,6 +15,12 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let platform = ci::detect_platform(ctx.ci_override);
     let audience = ci::AUDIENCE;
+
+    if platform == CiPlatform::Local {
+        if let Ok(Some(session)) = load_stored_session() {
+            return print_device_status(&session);
+        }
+    }
 
     let token_result = ci::provider_for(platform).fetch_token(audience).await;
 
@@ -60,6 +67,24 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         "audit": audit,
     });
 
+    let text = match serde_json::to_string_pretty(&output) {
+        Ok(s) => s,
+        Err(_) => output.to_string(),
+    };
+    println!("{text}");
+    0
+}
+
+fn print_device_status(session: &crate::token_store::StoredSession) -> i32 {
+    let output = json!({
+        "platform": "device",
+        "logged_in": session.is_active(),
+        "tenant_id": session.tenant_id,
+        "display_name": session.display_name,
+        "expires_at": session.expires_at,
+        "observer_api_url": session.observer_api_url,
+        "resolution_path": "device_session",
+    });
     let text = match serde_json::to_string_pretty(&output) {
         Ok(s) => s,
         Err(_) => output.to_string(),

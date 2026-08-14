@@ -32,7 +32,7 @@ impl Client {
         Self {
             base,
             tokens: tokens.into(),
-            http: reqwest::Client::new(),
+            http: crate::http::client(),
             ci_platform: None,
             environment: None,
         }
@@ -360,6 +360,7 @@ impl Client {
             .base
             .join(path)
             .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))?;
+        crate::http::assert_url_allowed(&url)?;
         if let Some(env) = &self.environment {
             url.query_pairs_mut().append_pair("environment", env);
         }

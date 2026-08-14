@@ -75,34 +75,41 @@ fn orchestrated_as_change_plan(created: &OrchestratedPlan) -> ChangePlan {
     }
 }
 
-/// Direct-mode client for the bundle flow: static Observer API key, no CI
-/// OIDC and no proxy (the whole point of the GitHub-App-free path).
-fn bundle_flow_client(ctx: &Ctx) -> Result<Client, CliError> {
-    let base = ctx.observer_api_url.clone().ok_or_else(|| {
-        CliError::Other(
-            "--source-dir requires direct Observer access: set --observer-api-url \
-             or the OBSERVER_API_URL env var"
-                .into(),
-        )
-    })?;
-    let token = std::env::var("DESLICER_API_TOKEN")
+fn static_bundle_token() -> Option<String> {
+    std::env::var("DESLICER_API_TOKEN")
         .ok()
-        .filter(|t| !t.trim().is_empty())
-        .ok_or_else(|| {
-            CliError::Other(
-                "--source-dir requires the DESLICER_API_TOKEN env var (an Observer \
-                 API key with the `tools` scope)"
-                    .into(),
-            )
-        })?;
-    Ok(Client::new(base, TokenSource::static_token(token)))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+}
+
+/// Bundle upload talks to Observer either with a static tools-scope key
+/// (air-gap / laptop) or through the DAI CI proxy after OIDC resolve.
+async fn bundle_flow_client(ctx: &Ctx, args: &Args) -> Result<Client, CliError> {
+    if let (Some(base), Some(token)) = (ctx.observer_api_url.clone(), static_bundle_token()) {
+        return Ok(Client::new(base, TokenSource::static_token(token)));
+    }
+
+    match authenticate(ctx, args.environment.as_deref(), None).await {
+        Ok((_session, client)) => Ok(client),
+        Err(err) => {
+            if ctx.observer_api_url.is_some() {
+                return Err(CliError::Other(
+                    "--source-dir with --observer-api-url requires the \
+                     DESLICER_API_TOKEN env var (an Observer API key with the \
+                     `tools` scope)"
+                        .into(),
+                ));
+            }
+            Err(err)
+        }
+    }
 }
 
 async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError> {
     let source_dir = args.source_dir.as_deref().expect("clap guarantees value");
     let target_group = args.target_group.as_deref().expect("clap requires flag");
 
-    let client = bundle_flow_client(ctx)?;
+    let client = bundle_flow_client(ctx, args).await?;
 
     let packaged = crate::bundle::package_directory(source_dir)?;
     eprintln!(
@@ -158,6 +165,15 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
     if let Err(err) = require_proxy_mode(&session, "change plan") {
         return map_cli_error(err);
+    }
+
+    if session.is_device_session() {
+        return map_cli_error(CliError::Other(
+            "`change plan` without --source-dir starts a git-sourced compile. \
+             Device sessions have no repository credentials. Re-run with \
+             --source-dir <path> --target-group <id>."
+                .into(),
+        ));
     }
 
     let created = match client

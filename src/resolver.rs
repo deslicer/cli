@@ -47,13 +47,14 @@ pub async fn resolve(
     }
 
     let url = join_api_path(&ctx.deslicer_api_url, "api/cli/resolve-backend")?;
+    crate::http::assert_url_allowed(&url)?;
     let body = ResolveBackendRequest {
         repo: repo_from_ci(platform),
         environment,
         plan_id,
     };
 
-    let http = reqwest::Client::new();
+    let http = crate::http::client();
     let response = http
         .post(url)
         .header("Authorization", format!("Bearer {jwt}"))

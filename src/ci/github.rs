@@ -34,8 +34,10 @@ impl OidcTokenProvider for GithubProvider {
         let request_url = required_env("ACTIONS_ID_TOKEN_REQUEST_URL")?;
 
         let url = format!("{request_url}&audience={}", percent_encode_query(audience));
+        let parsed = url::Url::parse(&url).map_err(|e| OidcError::Http(e.to_string()))?;
+        crate::http::assert_url_allowed(&parsed).map_err(|e| OidcError::Http(e.to_string()))?;
 
-        let client = reqwest::Client::new();
+        let client = crate::http::client();
         let response = client
             .get(&url)
             .header("Authorization", format!("Bearer {request_token}"))

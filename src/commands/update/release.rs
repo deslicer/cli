@@ -78,10 +78,7 @@ pub fn download_url(tag: &str, artifact: &str) -> String {
 }
 
 pub fn http_client() -> Result<reqwest::Client, CliError> {
-    reqwest::Client::builder()
-        .user_agent(concat!("deslicer-cli/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| CliError::Transport(format!("build HTTP client: {e}")))
+    crate::http::try_client()
 }
 
 #[cfg(test)]
