@@ -1,9 +1,12 @@
 use clap::Args as ClapArgs;
 
-use crate::commands::pipeline::{authenticate, map_cli_error, require_proxy_mode};
+use crate::ci::{self, CiPlatform, AUDIENCE};
+use crate::commands::pipeline::{
+    authenticate, map_cli_error, require_proxy_mode, AuthenticatedSession,
+};
 use crate::errors::CliError;
 use crate::observer_client::{ChangePlan, Client, OrchestratedPlan};
-use crate::output::{emit_change_plan, emit_change_plan_with_diff};
+use crate::output::{emit_change_plan, emit_change_plan_with_diff, emit_change_plans};
 use crate::token_source::TokenSource;
 use crate::Ctx;
 
@@ -176,39 +179,137 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         ));
     }
 
-    let created = match client
-        .create_plan_orchestrated(args.environment.as_deref())
-        .await
+    match run_git_plans(&ctx, &session, &client, &args).await {
+        Ok(code) => code,
+        Err(err) => map_cli_error(err),
+    }
+}
+
+fn environments_for_plan(explicit: Option<&str>, discovered: Vec<String>) -> Vec<Option<String>> {
+    if let Some(env) = explicit {
+        return vec![Some(env.to_string())];
+    }
+    if discovered.is_empty() {
+        vec![None]
+    } else {
+        discovered.into_iter().map(Some).collect()
+    }
+}
+
+async fn discover_environments(
+    ctx: &Ctx,
+    session: &AuthenticatedSession,
+    explicit: Option<&str>,
+) -> Result<Vec<Option<String>>, CliError> {
+    if explicit.is_some() || ctx.observer_api_url.is_some() || session.platform == CiPlatform::Local
     {
-        Ok(created) => created,
-        Err(err) => return map_cli_error(err),
-    };
-
-    // Older proxy builds return only the internal row id, which cannot be
-    // polled through GET /plans/{plan_id} — skip waiting in that case.
-    if args.no_wait || created.plan_row_id.is_none() {
-        return emit_change_plan(&orchestrated_as_change_plan(&created));
+        return Ok(environments_for_plan(explicit, Vec::new()));
     }
-
-    let plan = match wait_for_compile(&client, &created.plan_id).await {
-        Ok(plan) => plan,
-        Err(msg) => {
-            eprintln!("plan compile did not complete: {msg}");
-            emit_change_plan(&orchestrated_as_change_plan(&created));
-            return 1;
-        }
-    };
-
-    if is_compile_failure(&plan.status) {
-        eprintln!("plan compile failed with status: {}", plan.status);
-        emit_change_plan(&plan);
-        return 1;
-    }
-
-    let diff = client
-        .get_dry_run_diff(&plan.id)
+    let jwt = ci::provider_for(session.platform)
+        .fetch_token(AUDIENCE)
         .await
-        .ok()
-        .and_then(|body| crate::diff_summary::diff_counts_from_observer_value(&body));
-    emit_change_plan_with_diff(&plan, diff.as_ref())
+        .map_err(CliError::from)?;
+    let discovered = crate::resolver::resolve_environments(ctx, &jwt, session.platform).await?;
+    Ok(environments_for_plan(explicit, discovered))
+}
+
+async fn compile_one_environment(
+    client: &Client,
+    environment: Option<&str>,
+    no_wait: bool,
+) -> Result<(ChangePlan, bool), CliError> {
+    let created = client.create_plan_orchestrated(environment).await?;
+    if no_wait || created.plan_row_id.is_none() {
+        return Ok((orchestrated_as_change_plan(&created), false));
+    }
+    let plan = wait_for_compile(client, &created.plan_id)
+        .await
+        .map_err(CliError::Other)?;
+    if is_compile_failure(&plan.status) {
+        return Err(CliError::Other(format!(
+            "plan compile failed with status: {}",
+            plan.status
+        )));
+    }
+    Ok((plan, true))
+}
+
+async fn run_git_plans(
+    ctx: &Ctx,
+    session: &AuthenticatedSession,
+    client: &Client,
+    args: &Args,
+) -> Result<i32, CliError> {
+    let environments = discover_environments(ctx, session, args.environment.as_deref()).await?;
+    let mut plans = Vec::new();
+    let mut any_failed = false;
+    let mut last_ready: Option<ChangePlan> = None;
+
+    for environment in &environments {
+        match compile_one_environment(client, environment.as_deref(), args.no_wait).await {
+            Ok((plan, ready)) => {
+                if ready {
+                    last_ready = Some(plan.clone());
+                }
+                plans.push(plan);
+            }
+            Err(err) => {
+                eprintln!("{err}");
+                any_failed = true;
+            }
+        }
+    }
+
+    if plans.is_empty() {
+        return Err(CliError::Other(
+            "no plans were created for the resolved environments".into(),
+        ));
+    }
+
+    let emit_code = if plans.len() == 1 {
+        if let Some(ready) = last_ready.as_ref() {
+            let diff = client
+                .get_dry_run_diff(&ready.id)
+                .await
+                .ok()
+                .and_then(|body| crate::diff_summary::diff_counts_from_observer_value(&body));
+            emit_change_plan_with_diff(ready, diff.as_ref())
+        } else {
+            emit_change_plan(&plans[0])
+        }
+    } else {
+        emit_change_plans(&plans)
+    };
+
+    if any_failed {
+        Ok(1)
+    } else {
+        Ok(emit_code)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::environments_for_plan;
+
+    #[test]
+    fn explicit_environment_wins() {
+        let resolved = environments_for_plan(Some("prod"), vec!["staging".into(), "prod".into()]);
+        assert_eq!(resolved, vec![Some("prod".to_string())]);
+    }
+
+    #[test]
+    fn empty_discovery_falls_back_to_unscoped_plan() {
+        let resolved = environments_for_plan(None, Vec::new());
+        assert_eq!(resolved, vec![None]);
+    }
+
+    #[test]
+    fn discovered_environments_fan_out() {
+        let resolved = environments_for_plan(None, vec!["staging".into(), "prod".into()]);
+        assert_eq!(
+            resolved,
+            vec![Some("staging".to_string()), Some("prod".to_string())]
+        );
+    }
 }

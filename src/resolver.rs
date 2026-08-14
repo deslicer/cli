@@ -89,6 +89,53 @@ pub async fn resolve(
     Err(map_resolver_error(status, &response_body, retry_after))
 }
 
+#[derive(serde::Deserialize)]
+struct ResolveEnvironmentsResponse {
+    environments: Vec<String>,
+}
+
+/// Discover every environment bound to this CI repo/branch.
+/// An empty list means the tenant has no named bindings; callers may fall
+/// back to a single unscoped plan.
+pub async fn resolve_environments(
+    ctx: &Ctx,
+    jwt: &str,
+    platform: CiPlatform,
+) -> Result<Vec<String>, CliError> {
+    if platform == CiPlatform::Local {
+        return Ok(Vec::new());
+    }
+
+    let url = join_api_path(&ctx.deslicer_api_url, "api/cli/resolve-environments")?;
+    crate::http::assert_url_allowed(&url)?;
+
+    let http = crate::http::client();
+    let response = http
+        .post(url)
+        .header("Authorization", format!("Bearer {jwt}"))
+        .header("X-Deslicer-CI-Platform", platform.header_value())
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| CliError::Transport(e.to_string()))?;
+
+    let status = response.status();
+    let retry_after = parse_retry_after_header(response.headers());
+    let response_body = response
+        .text()
+        .await
+        .map_err(|e| CliError::Transport(e.to_string()))?;
+
+    if status.is_success() {
+        let parsed: ResolveEnvironmentsResponse = serde_json::from_str(&response_body)
+            .map_err(|e| CliError::Transport(format!("invalid resolve-environments JSON: {e}")))?;
+        return Ok(parsed.environments);
+    }
+
+    Err(map_resolver_error(status, &response_body, retry_after))
+}
+
 fn repo_from_ci(platform: CiPlatform) -> Option<String> {
     let key = match platform {
         CiPlatform::Github => "GITHUB_REPOSITORY",
@@ -159,4 +206,50 @@ fn parse_retry_after_header(headers: &reqwest::header::HeaderMap) -> Option<u64>
         .get(reqwest::header::RETRY_AFTER)
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse::<u64>().ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::LogFormat;
+    use serde_json::json;
+    use url::Url;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn test_ctx(base: &str) -> Ctx {
+        Ctx {
+            deslicer_api_url: Url::parse(base).unwrap(),
+            observer_api_url: None,
+            ci_override: Some(CiPlatform::Github),
+            log_format: LogFormat::Human,
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_environments_returns_bound_names() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/cli/resolve-environments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "environments": ["staging", "prod"]
+            })))
+            .mount(&server)
+            .await;
+
+        let ctx = test_ctx(&format!("{}/", server.uri()));
+        let names = resolve_environments(&ctx, "jwt", CiPlatform::Github)
+            .await
+            .unwrap();
+        assert_eq!(names, vec!["staging".to_string(), "prod".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn resolve_environments_skips_local_platform() {
+        let ctx = test_ctx("https://api.deslicer.ai/");
+        let names = resolve_environments(&ctx, "jwt", CiPlatform::Local)
+            .await
+            .unwrap();
+        assert!(names.is_empty());
+    }
 }

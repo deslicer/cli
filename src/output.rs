@@ -163,6 +163,52 @@ pub fn emit_change_plan_with_diff(plan: &ChangePlan, diff: Option<&DiffCounts>) 
     emit_to_sink(&pairs)
 }
 
+pub fn emit_change_plans(plans: &[ChangePlan]) -> i32 {
+    if let [plan] = plans {
+        return emit_change_plan(plan);
+    }
+    println!("{}", serde_json::to_string(plans).unwrap_or_default());
+    let plan_ids: Vec<String> = plans
+        .iter()
+        .map(|plan| plan.external_id().to_string())
+        .collect();
+    let first = plans.first();
+    let pairs = vec![
+        (
+            "plan_id",
+            first
+                .map(ChangePlan::external_id)
+                .unwrap_or_default()
+                .to_string(),
+        ),
+        ("plan_ids", plan_ids.join(",")),
+        ("plan_count", plans.len().to_string()),
+        (
+            "plan_status",
+            first.map(|plan| plan.status.clone()).unwrap_or_default(),
+        ),
+    ];
+    let _ = append_github_step_summary(&plans_summary_markdown(plans));
+    emit_to_sink(&pairs)
+}
+
+fn plans_summary_markdown(plans: &[ChangePlan]) -> String {
+    let mut lines = vec![
+        "## Deslicer plans".to_string(),
+        String::new(),
+        "| Environment plan | Status |".to_string(),
+        "| --- | --- |".to_string(),
+    ];
+    for plan in plans {
+        lines.push(format!(
+            "| `{}` | **{}** |",
+            plan.external_id(),
+            plan.status
+        ));
+    }
+    lines.join("\n")
+}
+
 pub fn emit_plan_progress(progress: &PlanProgress) -> i32 {
     emit_plan_status(None, progress, None)
 }
@@ -297,5 +343,28 @@ mod tests {
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("pending_approval"));
         assert!(content.contains("ext"));
+    }
+
+    #[test]
+    fn plans_summary_lists_each_plan() {
+        let plans = [
+            ChangePlan {
+                id: "row-1".into(),
+                plan_id: Some("ext-1".into()),
+                status: "draft".into(),
+                name: None,
+                summary: None,
+            },
+            ChangePlan {
+                id: "row-2".into(),
+                plan_id: Some("ext-2".into()),
+                status: "pending_approval".into(),
+                name: None,
+                summary: None,
+            },
+        ];
+        let markdown = plans_summary_markdown(&plans);
+        assert!(markdown.contains("ext-1"));
+        assert!(markdown.contains("ext-2"));
     }
 }

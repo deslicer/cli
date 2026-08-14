@@ -14,6 +14,8 @@ struct StartResponse {
     device_code: String,
     user_code: String,
     verification_uri: String,
+    #[serde(default)]
+    verification_uri_complete: Option<String>,
     interval: u64,
     expires_in: u64,
 }
@@ -56,10 +58,18 @@ pub async fn login_device_session(ctx: &Ctx) -> Result<StoredSession, CliError> 
         .await
         .map_err(|e| CliError::Transport(format!("invalid device start JSON: {e}")))?;
 
-    eprintln!(
-        "Open {} and enter code: {}",
-        started.verification_uri, started.user_code
-    );
+    if let Some(complete) = &started.verification_uri_complete {
+        eprintln!("Open {complete} to approve this CLI.");
+        eprintln!(
+            "Or enter code {} at {}",
+            started.user_code, started.verification_uri
+        );
+    } else {
+        eprintln!(
+            "Open {} and enter code: {}",
+            started.verification_uri, started.user_code
+        );
+    }
 
     poll_for_token(ctx, &started).await
 }
@@ -147,6 +157,7 @@ mod tests {
                 "device_code": "devcode1234567890abcd",
                 "user_code": "ABCD-EFGH",
                 "verification_uri": "https://app.deslicer.ai/dashboard/cli-auth",
+                "verification_uri_complete": "https://app.deslicer.ai/dashboard/cli-auth?user_code=ABCD-EFGH",
                 "interval": 1,
                 "expires_in": 60
             })))
