@@ -7,6 +7,7 @@ pub mod diff_summary;
 pub mod errors;
 pub mod http;
 pub mod observer_client;
+pub mod observer_token;
 pub mod oidc_exchange;
 pub mod output;
 pub mod resolver;

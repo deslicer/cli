@@ -3,6 +3,9 @@ use clap::Args as ClapArgs;
 use serde_json::{json, Value};
 
 use crate::ci::{self, CiPlatform, OidcError};
+use crate::commands::auth::format::{
+    print_output, status_ci_human, status_device_human, status_token_human,
+};
 use crate::token_store::load_stored_session;
 use crate::Ctx;
 
@@ -16,9 +19,25 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let platform = ci::detect_platform(ctx.ci_override);
     let audience = ci::AUDIENCE;
 
+    if crate::observer_token::direct_auth_ready(&ctx) {
+        let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
+        print_output(
+            ctx.log_format,
+            &json!({
+                "platform": platform.header_value(),
+                "identity": "observer_api_token",
+                "observer_api_url": url,
+                "resolution_path": crate::observer_token::RESOLUTION_PATH,
+                "audience": audience,
+            }),
+            &status_token_human(url),
+        );
+        return 0;
+    }
+
     if platform == CiPlatform::Local {
         if let Ok(Some(session)) = load_stored_session() {
-            return print_device_status(&session);
+            return print_device_status(&ctx, &session);
         }
     }
 
@@ -67,15 +86,21 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         "audit": audit,
     });
 
-    let text = match serde_json::to_string_pretty(&output) {
-        Ok(s) => s,
-        Err(_) => output.to_string(),
-    };
-    println!("{text}");
+    let backend_url = resolved_backend
+        .get("observer_api_url")
+        .and_then(Value::as_str);
+    let resolution_path = resolved_backend
+        .get("resolution_path")
+        .and_then(Value::as_str);
+    print_output(
+        ctx.log_format,
+        &output,
+        &status_ci_human(platform.header_value(), backend_url, resolution_path),
+    );
     0
 }
 
-fn print_device_status(session: &crate::token_store::StoredSession) -> i32 {
+fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
     let output = json!({
         "platform": "device",
         "logged_in": session.is_active(),
@@ -85,11 +110,17 @@ fn print_device_status(session: &crate::token_store::StoredSession) -> i32 {
         "observer_api_url": session.observer_api_url,
         "resolution_path": "device_session",
     });
-    let text = match serde_json::to_string_pretty(&output) {
-        Ok(s) => s,
-        Err(_) => output.to_string(),
-    };
-    println!("{text}");
+    print_output(
+        ctx.log_format,
+        &output,
+        &status_device_human(
+            session.is_active(),
+            &session.tenant_id,
+            &session.display_name,
+            &session.expires_at,
+            &session.observer_api_url,
+        ),
+    );
     0
 }
 

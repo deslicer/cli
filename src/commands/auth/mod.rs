@@ -2,6 +2,7 @@ use clap::Subcommand;
 
 use crate::Ctx;
 
+pub mod format;
 pub mod login;
 pub mod logout;
 pub mod status;

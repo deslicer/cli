@@ -138,3 +138,31 @@ pub(crate) struct ChangePlanResponse {
     pub message: String,
     pub plan: Option<ChangePlan>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_host_group_list_and_ignores_unknown_fields() {
+        let body = br#"[{"id":"019f36d6-3f61-7eea-9417-7ac4a8a10f69","name":"search-heads","display_name":"Search Heads","member_count":3,"group_type":"role","tenant_id":"11111111-2222-4333-8444-555566667777"}]"#;
+        let groups: Vec<HostGroup> = serde_json::from_slice(body).expect("groups");
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].id, "019f36d6-3f61-7eea-9417-7ac4a8a10f69");
+        assert_eq!(groups[0].name, "search-heads");
+        assert_eq!(groups[0].display_name.as_deref(), Some("Search Heads"));
+        assert_eq!(groups[0].member_count, Some(3));
+    }
+}
+
+/// Observer `HostGroupWithCount` subset from `GET /api/v1/groups`.
+/// `id` is the value for `change plan --target-group`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostGroup {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub member_count: Option<i64>,
+}

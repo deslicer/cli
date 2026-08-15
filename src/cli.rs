@@ -42,6 +42,11 @@ pub enum Command {
     Auth(crate::commands::auth::AuthCmd),
     #[command(subcommand)]
     Change(crate::commands::change::ChangeCmd),
+    /// List host groups (`id` is the value for `change plan --target-group`)
+    #[command(subcommand)]
+    Groups(crate::commands::groups::GroupsCmd),
+    /// Generate shell completions (bash, zsh, fish)
+    Completion(crate::commands::completion::Args),
     /// Update the deslicer binary to the latest release
     Update(crate::commands::update::Args),
 }
@@ -94,6 +99,8 @@ impl Cli {
         match self.command {
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
+            Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
+            Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(args).await,
         }
     }

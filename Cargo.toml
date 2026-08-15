@@ -24,6 +24,7 @@ path = "src/lib.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "process"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
@@ -41,7 +42,9 @@ hex = "0.4"
 # Bundle source packaging (GitHub-App-free plan flow, REQ-SIGN-008)
 tar = "0.4"
 flate2 = "1"
-keyring = "3"
+# Platform natives are required: keyring 3 defaults to an in-process mock
+# that accepts writes and then disappears (the auth-login keychain warning).
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 toml = "0.8"
 
 [dev-dependencies]
