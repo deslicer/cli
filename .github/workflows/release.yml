@@ -217,8 +217,6 @@ jobs:
     # Depends on hashes for the subjects and publish so the release exists
     # before the .intoto.jsonl attestation is attached to it.
     needs: [hashes, publish]
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       actions: read
       id-token: write
