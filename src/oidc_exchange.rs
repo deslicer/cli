@@ -22,6 +22,7 @@ pub async fn exchange(
     let url = observer_api_url
         .join("api/v1/auth/ci-oidc")
         .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))?;
+    crate::http::assert_url_allowed(&url)?;
 
     let body = match environment {
         Some(env) => CiOidcRequest {
@@ -30,7 +31,7 @@ pub async fn exchange(
         None => CiOidcRequest { environment: None },
     };
 
-    let http = reqwest::Client::new();
+    let http = crate::http::client();
     let response = http
         .post(url)
         .header("Authorization", format!("Bearer {jwt}"))

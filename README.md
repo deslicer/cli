@@ -52,6 +52,8 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 |-------|---------|-------------|
 | **auth** | `deslicer auth login` | Exchange CI OIDC for a session; resolve Observer backend |
 | **auth** | `deslicer auth status` | Print OIDC/platform binding diagnostics |
+| **groups** | `deslicer groups list` | List host groups (`id` is the value for `--target-group`) |
+| | `deslicer completion bash\|zsh\|fish` | Print shell completions to stdout |
 | **change** | `deslicer change plan` | Create or refresh a change plan (add `--source-dir` for the GitHub-App-free bundle flow) |
 | **change** | `deslicer change show` | Show plan details |
 | **change** | `deslicer change approve` | Approve a pending plan |
@@ -67,7 +69,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 |------------|---------|---------|
 | `--deslicer-api-url` / `DESLICER_API_URL` | `https://api.deslicer.ai` | deslicer-ai portal (resolve-backend) |
 | `--observer-api-url` / `OBSERVER_API_URL` | _(unset)_ | Air-gapped escape hatch — skip resolve |
-| `DESLICER_API_TOKEN` (env only) | _(unset)_ | Observer API key (`tools` scope) for the bundle flow — see [docs/bundle-flow.md](docs/bundle-flow.md) |
+| `DESLICER_API_TOKEN` (env only) | _(unset)_ | Observer API key (`tools` scope) for direct Observer access (bundle flow or git-sourced CI). Create under **Platform → API keys**. Not DAI's stored admin/read key. |
 | `--ci-platform` | `auto` | Force platform: `github`, `gitlab`, `azure`, `bitbucket`, `local` |
 | `--log-format` | `human` | `human` or `json` |
 
@@ -93,7 +95,12 @@ jobs:
           plan-id: ${{ inputs.plan_id }}
 ```
 
-For raw CLI usage inside a workflow, install `deslicer` and call `deslicer auth login` followed by the desired `deslicer change` subcommand. See [docs/installation.md](docs/installation.md).
+For raw CLI usage inside a workflow, install `deslicer` and either:
+
+- grant `id-token: write` and run `deslicer auth login` (OIDC via DAI), or
+- set `OBSERVER_API_URL` + `DESLICER_API_TOKEN` and run `deslicer change plan --target-group <uuid>` (direct Observer; no OIDC).
+
+See [docs/installation.md](docs/installation.md) and [docs/quickstart.md](docs/quickstart.md#path-a2-ci-pipeline-with-an-observer-api-token).
 
 ## Documentation
 

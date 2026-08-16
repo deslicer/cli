@@ -5,11 +5,13 @@
 //! the proxy prefix when the base carries a trailing slash, so the same
 //! request paths work in both modes.
 
+mod direct_create;
 mod http_errors;
 mod types;
 
 pub use types::{
-    BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, OrchestratedPlan, PlanProgress,
+    BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, HostGroup, OrchestratedPlan,
+    PlanProgress,
 };
 
 use http_errors::{map_observer_error, parse_retry_after_header, retry_delay};
@@ -32,7 +34,7 @@ impl Client {
         Self {
             base,
             tokens: tokens.into(),
-            http: reqwest::Client::new(),
+            http: crate::http::client(),
             ci_platform: None,
             environment: None,
         }
@@ -140,40 +142,6 @@ impl Client {
             .map_err(|e| CliError::Transport(format!("invalid bundle upload JSON: {e}")))
     }
 
-    /// Direct mode: create a draft plan compiled from an uploaded bundle.
-    pub async fn create_plan_from_bundle(
-        &self,
-        bundle_id: &str,
-        target_group_id: &str,
-        name: Option<&str>,
-    ) -> Result<ChangePlan, CliError> {
-        #[derive(Serialize)]
-        struct Body<'a> {
-            source_type: &'a str,
-            source_bundle_id: &'a str,
-            target_group_id: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            name: Option<&'a str>,
-        }
-
-        let body = Body {
-            source_type: "bundle",
-            source_bundle_id: bundle_id,
-            target_group_id,
-            name,
-        };
-        let resp: types::ChangePlanResponse = self
-            .request_json(Method::POST, "api/v1/plans", Some(&body))
-            .await?;
-        match resp.plan {
-            Some(plan) if resp.success => Ok(plan),
-            _ => Err(CliError::Other(format!(
-                "plan creation failed: {}",
-                resp.message
-            ))),
-        }
-    }
-
     /// Direct mode: trigger the compile-runner for a plan (internal row id).
     /// For bundle-sourced plans the `git_ref` is a placeholder — the source
     /// is pinned by the bundle digest, not a git ref.
@@ -250,6 +218,11 @@ impl Client {
     pub async fn get_dry_run_diff(&self, plan_row_id: &str) -> Result<serde_json::Value, CliError> {
         let path = format!("api/v1/plans/{plan_row_id}/diff");
         self.get_json(&path).await
+    }
+
+    /// Host groups for `change plan --target-group`.
+    pub async fn list_groups(&self) -> Result<Vec<HostGroup>, CliError> {
+        self.get_json("api/v1/groups").await
     }
 
     async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, CliError> {
@@ -360,6 +333,7 @@ impl Client {
             .base
             .join(path)
             .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))?;
+        crate::http::assert_url_allowed(&url)?;
         if let Some(env) = &self.environment {
             url.query_pairs_mut().append_pair("environment", env);
         }

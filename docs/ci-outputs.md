@@ -29,6 +29,8 @@ If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), th
 | `diff_modifications` | Modifications in the dry-run diff |
 | `diff_deletions` | Deletions in the dry-run diff |
 | `diff_has_destructive` | `true` when the diff includes deletions |
+| `plan_ids` | Comma-separated external plan ids when `change plan` fans out across environments |
+| `plan_count` | Number of plans created by environment fan-out (`1` when `--environment` is set) |
 
 ### `change status`
 
@@ -73,6 +75,8 @@ GitHub Actions also receives a **job step summary** (markdown table) when `GITHU
 - name: Deploy (after environment approval)
   run: deslicer change deploy --plan-id "${{ steps.plan.outputs.plan_id }}" --environment production
 ```
+
+Omitting `--environment` asks deslicer-ai for every bound environment and creates one plan per name. Downstream steps that need a single plan should keep `--environment`, or split on `plan_ids`.
 
 ## Exit codes
 

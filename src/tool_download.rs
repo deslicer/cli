@@ -73,8 +73,9 @@ async fn fetch_tool_bytes(base: &url::Url, token: &str) -> Result<Vec<u8>, CliEr
     let url = base
         .join("api/v1/tools/download")
         .map_err(|e| CliError::Transport(format!("invalid download URL: {e}")))?;
+    crate::http::assert_url_allowed(&url)?;
 
-    let response = reqwest::Client::new()
+    let response = crate::http::client()
         .get(url)
         .header("Authorization", format!("Bearer {token}"))
         .send()

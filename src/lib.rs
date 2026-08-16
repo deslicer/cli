@@ -2,13 +2,17 @@ pub mod bundle;
 pub mod ci;
 pub mod cli;
 pub mod commands;
+pub mod device_flow;
 pub mod diff_summary;
 pub mod errors;
+pub mod http;
 pub mod observer_client;
+pub mod observer_token;
 pub mod oidc_exchange;
 pub mod output;
 pub mod resolver;
 pub mod token_source;
+pub mod token_store;
 pub mod tool_download;
 
 pub use cli::Ctx;

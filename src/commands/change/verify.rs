@@ -2,6 +2,7 @@ use clap::Args as ClapArgs;
 
 use crate::commands::pipeline::{authenticate, map_cli_error, require_proxy_mode};
 use crate::diff_summary::diff_counts_from_observer_value;
+use crate::errors::CliError;
 use crate::output::{emit_change_plan_with_diff, emit_message};
 use crate::Ctx;
 
@@ -38,7 +39,19 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(err),
     };
 
-    if let Err(err) = client
+    if session.is_device_session() {
+        if args.git_ref.is_some() {
+            return map_cli_error(CliError::Other(
+                "`change verify --git-ref` requires CI OIDC. Device sessions \
+                 can only re-compile bundle-sourced plans."
+                    .into(),
+            ));
+        }
+        if let Err(err) = client.trigger_compile(&plan.id, "bundle").await {
+            eprintln!("verification failed: {err}");
+            return map_cli_error(err);
+        }
+    } else if let Err(err) = client
         .verify_plan_orchestrated(&plan.id, args.git_ref.as_deref())
         .await
     {

@@ -1,9 +1,12 @@
 use clap::Args as ClapArgs;
 
-use crate::commands::pipeline::{authenticate, map_cli_error, require_proxy_mode};
+use crate::ci::{self, CiPlatform, AUDIENCE};
+use crate::commands::pipeline::{
+    authenticate, map_cli_error, require_proxy_mode, AuthenticatedSession,
+};
 use crate::errors::CliError;
 use crate::observer_client::{ChangePlan, Client, OrchestratedPlan};
-use crate::output::{emit_change_plan, emit_change_plan_with_diff};
+use crate::output::{emit_change_plan, emit_change_plan_with_diff, emit_change_plans};
 use crate::token_source::TokenSource;
 use crate::Ctx;
 
@@ -75,34 +78,41 @@ fn orchestrated_as_change_plan(created: &OrchestratedPlan) -> ChangePlan {
     }
 }
 
-/// Direct-mode client for the bundle flow: static Observer API key, no CI
-/// OIDC and no proxy (the whole point of the GitHub-App-free path).
-fn bundle_flow_client(ctx: &Ctx) -> Result<Client, CliError> {
-    let base = ctx.observer_api_url.clone().ok_or_else(|| {
-        CliError::Other(
-            "--source-dir requires direct Observer access: set --observer-api-url \
-             or the OBSERVER_API_URL env var"
-                .into(),
-        )
-    })?;
-    let token = std::env::var("DESLICER_API_TOKEN")
+fn static_bundle_token() -> Option<String> {
+    std::env::var("DESLICER_API_TOKEN")
         .ok()
-        .filter(|t| !t.trim().is_empty())
-        .ok_or_else(|| {
-            CliError::Other(
-                "--source-dir requires the DESLICER_API_TOKEN env var (an Observer \
-                 API key with the `tools` scope)"
-                    .into(),
-            )
-        })?;
-    Ok(Client::new(base, TokenSource::static_token(token)))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+}
+
+/// Bundle upload talks to Observer either with a static tools-scope key
+/// (air-gap / laptop) or through the DAI CI proxy after OIDC resolve.
+async fn bundle_flow_client(ctx: &Ctx, args: &Args) -> Result<Client, CliError> {
+    if let (Some(base), Some(token)) = (ctx.observer_api_url.clone(), static_bundle_token()) {
+        return Ok(Client::new(base, TokenSource::static_token(token)));
+    }
+
+    match authenticate(ctx, args.environment.as_deref(), None).await {
+        Ok((_session, client)) => Ok(client),
+        Err(err) => {
+            if ctx.observer_api_url.is_some() {
+                return Err(CliError::Other(
+                    "--source-dir with --observer-api-url requires the \
+                     DESLICER_API_TOKEN env var (an Observer API key with the \
+                     `tools` scope)"
+                        .into(),
+                ));
+            }
+            Err(err)
+        }
+    }
 }
 
 async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError> {
     let source_dir = args.source_dir.as_deref().expect("clap guarantees value");
     let target_group = args.target_group.as_deref().expect("clap requires flag");
 
-    let client = bundle_flow_client(ctx)?;
+    let client = bundle_flow_client(ctx, args).await?;
 
     let packaged = crate::bundle::package_directory(source_dir)?;
     eprintln!(
@@ -160,39 +170,146 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return map_cli_error(err);
     }
 
-    let created = match client
-        .create_plan_orchestrated(args.environment.as_deref())
-        .await
+    if session.is_device_session() {
+        return map_cli_error(CliError::Other(
+            "`change plan` without --source-dir starts a git-sourced compile. \
+             Device sessions have no repository credentials. Re-run with \
+             --source-dir <path> --target-group <id>."
+                .into(),
+        ));
+    }
+
+    match run_git_plans(&ctx, &session, &client, &args).await {
+        Ok(code) => code,
+        Err(err) => map_cli_error(err),
+    }
+}
+
+fn environments_for_plan(explicit: Option<&str>, discovered: Vec<String>) -> Vec<Option<String>> {
+    if let Some(env) = explicit {
+        return vec![Some(env.to_string())];
+    }
+    if discovered.is_empty() {
+        vec![None]
+    } else {
+        discovered.into_iter().map(Some).collect()
+    }
+}
+
+async fn discover_environments(
+    ctx: &Ctx,
+    session: &AuthenticatedSession,
+    explicit: Option<&str>,
+) -> Result<Vec<Option<String>>, CliError> {
+    if explicit.is_some() || ctx.observer_api_url.is_some() || session.platform == CiPlatform::Local
     {
-        Ok(created) => created,
-        Err(err) => return map_cli_error(err),
-    };
-
-    // Older proxy builds return only the internal row id, which cannot be
-    // polled through GET /plans/{plan_id} — skip waiting in that case.
-    if args.no_wait || created.plan_row_id.is_none() {
-        return emit_change_plan(&orchestrated_as_change_plan(&created));
+        return Ok(environments_for_plan(explicit, Vec::new()));
     }
-
-    let plan = match wait_for_compile(&client, &created.plan_id).await {
-        Ok(plan) => plan,
-        Err(msg) => {
-            eprintln!("plan compile did not complete: {msg}");
-            emit_change_plan(&orchestrated_as_change_plan(&created));
-            return 1;
-        }
-    };
-
-    if is_compile_failure(&plan.status) {
-        eprintln!("plan compile failed with status: {}", plan.status);
-        emit_change_plan(&plan);
-        return 1;
-    }
-
-    let diff = client
-        .get_dry_run_diff(&plan.id)
+    let jwt = ci::provider_for(session.platform)
+        .fetch_token(AUDIENCE)
         .await
-        .ok()
-        .and_then(|body| crate::diff_summary::diff_counts_from_observer_value(&body));
-    emit_change_plan_with_diff(&plan, diff.as_ref())
+        .map_err(CliError::from)?;
+    let discovered = crate::resolver::resolve_environments(ctx, &jwt, session.platform).await?;
+    Ok(environments_for_plan(explicit, discovered))
+}
+
+async fn compile_one_environment(
+    client: &Client,
+    environment: Option<&str>,
+    no_wait: bool,
+) -> Result<(ChangePlan, bool), CliError> {
+    let created = client.create_plan_orchestrated(environment).await?;
+    if no_wait || created.plan_row_id.is_none() {
+        return Ok((orchestrated_as_change_plan(&created), false));
+    }
+    let plan = wait_for_compile(client, &created.plan_id)
+        .await
+        .map_err(CliError::Other)?;
+    if is_compile_failure(&plan.status) {
+        return Err(CliError::Other(format!(
+            "plan compile failed with status: {}",
+            plan.status
+        )));
+    }
+    Ok((plan, true))
+}
+
+async fn run_git_plans(
+    ctx: &Ctx,
+    session: &AuthenticatedSession,
+    client: &Client,
+    args: &Args,
+) -> Result<i32, CliError> {
+    let environments = discover_environments(ctx, session, args.environment.as_deref()).await?;
+    let mut plans = Vec::new();
+    let mut any_failed = false;
+    let mut last_ready: Option<ChangePlan> = None;
+
+    for environment in &environments {
+        match compile_one_environment(client, environment.as_deref(), args.no_wait).await {
+            Ok((plan, ready)) => {
+                if ready {
+                    last_ready = Some(plan.clone());
+                }
+                plans.push(plan);
+            }
+            Err(err) => {
+                eprintln!("{err}");
+                any_failed = true;
+            }
+        }
+    }
+
+    if plans.is_empty() {
+        return Err(CliError::Other(
+            "no plans were created for the resolved environments".into(),
+        ));
+    }
+
+    let emit_code = if plans.len() == 1 {
+        if let Some(ready) = last_ready.as_ref() {
+            let diff = client
+                .get_dry_run_diff(&ready.id)
+                .await
+                .ok()
+                .and_then(|body| crate::diff_summary::diff_counts_from_observer_value(&body));
+            emit_change_plan_with_diff(ready, diff.as_ref())
+        } else {
+            emit_change_plan(&plans[0])
+        }
+    } else {
+        emit_change_plans(&plans)
+    };
+
+    if any_failed {
+        Ok(1)
+    } else {
+        Ok(emit_code)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::environments_for_plan;
+
+    #[test]
+    fn explicit_environment_wins() {
+        let resolved = environments_for_plan(Some("prod"), vec!["staging".into(), "prod".into()]);
+        assert_eq!(resolved, vec![Some("prod".to_string())]);
+    }
+
+    #[test]
+    fn empty_discovery_falls_back_to_unscoped_plan() {
+        let resolved = environments_for_plan(None, Vec::new());
+        assert_eq!(resolved, vec![None]);
+    }
+
+    #[test]
+    fn discovered_environments_fan_out() {
+        let resolved = environments_for_plan(None, vec!["staging".into(), "prod".into()]);
+        assert_eq!(
+            resolved,
+            vec![Some("staging".to_string()), Some("prod".to_string())]
+        );
+    }
 }
