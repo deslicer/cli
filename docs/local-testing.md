@@ -38,7 +38,14 @@ Note: for the compile step to run, the Observer must be able to launch the compi
 
 ## 3. Pick a target host group
 
-Every plan targets a host group UUID:
+Every plan targets a host group UUID. After `deslicer auth login`:
+
+```bash
+deslicer --deslicer-api-url http://127.0.0.1:3000 groups list
+deslicer --deslicer-api-url http://127.0.0.1:3000 inventory list
+```
+
+Or with a direct Observer API key:
 
 ```bash
 curl -s -H "Authorization: Bearer $DESLICER_API_TOKEN" \

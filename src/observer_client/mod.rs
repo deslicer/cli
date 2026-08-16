@@ -7,8 +7,10 @@
 
 mod direct_create;
 mod http_errors;
+mod inventory;
 mod types;
 
+pub use inventory::InventoryGroup;
 pub use types::{
     BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, HostGroup, OrchestratedPlan,
     PlanProgress,
@@ -223,6 +225,12 @@ impl Client {
     /// Host groups for `change plan --target-group`.
     pub async fn list_groups(&self) -> Result<Vec<HostGroup>, CliError> {
         self.get_json("api/v1/groups").await
+    }
+
+    /// Ansible inventory groups from `GET /api/v1/inventory`.
+    pub async fn list_inventory(&self) -> Result<Vec<InventoryGroup>, CliError> {
+        let inventory: inventory::AnsibleInventory = self.get_json("api/v1/inventory").await?;
+        Ok(inventory.into_groups())
     }
 
     async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, CliError> {
