@@ -45,6 +45,9 @@ pub enum Command {
     /// List host groups (`id` is the value for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
+    /// List Ansible inventory groups
+    #[command(subcommand)]
+    Inventory(crate::commands::inventory::InventoryCmd),
     /// Generate shell completions (bash, zsh, fish)
     Completion(crate::commands::completion::Args),
     /// Update the deslicer binary to the latest release
@@ -100,6 +103,7 @@ impl Cli {
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
+            Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(args).await,
         }

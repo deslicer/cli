@@ -53,6 +53,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **auth** | `deslicer auth login` | Exchange CI OIDC for a session; resolve Observer backend |
 | **auth** | `deslicer auth status` | Print OIDC/platform binding diagnostics |
 | **groups** | `deslicer groups list` | List host groups (`id` is the value for `--target-group`) |
+| **inventory** | `deslicer inventory list` | List Ansible inventory groups and their hosts |
 | | `deslicer completion bash\|zsh\|fish` | Print shell completions to stdout |
 | **change** | `deslicer change plan` | Create or refresh a change plan (add `--source-dir` for the GitHub-App-free bundle flow) |
 | **change** | `deslicer change show` | Show plan details |
