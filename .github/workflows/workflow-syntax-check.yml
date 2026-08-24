@@ -1,0 +1,56 @@
+# Validates GitHub Actions workflow YAML before merge (same gate as DAP).
+name: Workflow Syntax Check
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          ACTIONLINT_VERSION="1.7.7"
+          ACTIONLINT_SHA256="023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+          curl -fsSL \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o /tmp/actionlint.tar.gz
+          echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: Lint workflow files
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            mapfile -t TARGETS < <(
+              git diff --name-only --diff-filter=ACMRT \
+                "origin/${{ github.base_ref }}...HEAD" \
+                -- '.github/workflows/*.yml' '.github/workflows/*.yaml'
+            )
+          else
+            mapfile -t TARGETS < <(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) -print)
+          fi
+          if [ "${#TARGETS[@]}" -eq 0 ]; then
+            echo "No workflow files to lint"
+            exit 0
+          fi
+          printf 'Linting %d file(s):\n' "${#TARGETS[@]}"
+          printf '  %s\n' "${TARGETS[@]}"
+          actionlint -color -shellcheck= "${TARGETS[@]}"

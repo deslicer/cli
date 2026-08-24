@@ -1,0 +1,45 @@
+# Weekly Rust + Actions updates. Harness reusable workflows stay pinned at @v1.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      crates-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "deslicer/deslicer-code-harness*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "deslicer/deslicer-code-harness/*"

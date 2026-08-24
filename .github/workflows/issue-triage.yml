@@ -1,0 +1,18 @@
+# Same harness issue-triage lane as DAP.
+# Trusted authors only (MEMBER / OWNER / COLLABORATOR) — enforced inside the reusable workflow.
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    uses: deslicer/deslicer-code-harness/.github/workflows/core_issue_triage.yml@v1
+    with:
+      model: gpt-5.2
+    secrets:
+      cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
