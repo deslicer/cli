@@ -56,6 +56,9 @@ pub enum Command {
     /// Print worker install recipes (device session)
     #[command(subcommand)]
     Worker(crate::commands::worker::WorkerCmd),
+    /// Provision or refresh a GitHub App config repo (device session)
+    #[command(subcommand)]
+    Repo(crate::commands::repo::RepoCmd),
     /// Generate shell completions (bash, zsh, fish)
     Completion(crate::commands::completion::Args),
     /// Update the deslicer binary to the latest release
@@ -115,6 +118,7 @@ impl Cli {
             Command::Init(args) => crate::commands::init::run(ctx, args).await,
             Command::Enroll(cmd) => crate::commands::enroll::dispatch(ctx, cmd).await,
             Command::Worker(cmd) => crate::commands::worker::dispatch(ctx, cmd).await,
+            Command::Repo(cmd) => crate::commands::repo::dispatch(ctx, cmd).await,
             Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(args).await,
         }

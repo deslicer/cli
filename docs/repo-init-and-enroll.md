@@ -49,6 +49,18 @@ Recipes come from the portal. The default snippet prompts for the token and
 passes it on stdin (`--token-stdin`). `--embed-token` requires a TTY and
 `--token-file`. The CLI does not SSH to hosts.
 
-`deslicer repo` (GitHub App provision/refresh) is a later phase.
+## GitHub App remote (`deslicer repo`)
+
+```text
+deslicer repo bootstrap --installation ID --name REPO [--description TEXT] [--yes]
+deslicer repo refresh   --installation ID --repo-id ID
+deslicer repo status    --installation ID
+```
+
+These commands wrap the existing GitHub App routes. They require
+`deslicer auth login`. Without `--yes`, `repo bootstrap` prints the
+organization, name, and `private` visibility and does not create the
+repository. GitLab, Azure DevOps, and Bitbucket never call provision;
+use `deslicer init --provider` for those hosts.
 
 Canonical contract: DAP `docs/components/dap/cli-repo-init-and-enroll-spec.md`.
