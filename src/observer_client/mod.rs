@@ -10,6 +10,7 @@ mod direct_create;
 mod enrollment;
 mod http_errors;
 mod inventory;
+mod repo;
 mod types;
 
 pub use bootstrap::{
@@ -20,6 +21,7 @@ pub use enrollment::{
     ListEnrollmentTokensResponse,
 };
 pub use inventory::InventoryGroup;
+pub use repo::{GithubRepoRow, ListReposResponse, ProvisionRepoRequest, ProvisionRepoResponse};
 pub use types::{
     BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, HostGroup, OrchestratedPlan,
     PlanProgress,
@@ -301,7 +303,10 @@ impl Client {
         Ok(())
     }
 
-    async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, CliError> {
+    pub(crate) async fn get_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        path: &str,
+    ) -> Result<T, CliError> {
         self.request_json(Method::GET, path, None::<&()>).await
     }
 
@@ -319,7 +324,7 @@ impl Client {
             .map_err(|e| CliError::Transport(format!("invalid plans JSON: {e}")))
     }
 
-    async fn request_json<T, B>(
+    pub(crate) async fn request_json<T, B>(
         &self,
         method: Method,
         path: &str,
@@ -334,7 +339,7 @@ impl Client {
             .map_err(|e| CliError::Transport(format!("invalid JSON response: {e}")))
     }
 
-    async fn request_bytes<B>(
+    pub(crate) async fn request_bytes<B>(
         &self,
         method: Method,
         path: &str,
