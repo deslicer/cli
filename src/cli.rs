@@ -48,6 +48,14 @@ pub enum Command {
     /// List Ansible inventory groups
     #[command(subcommand)]
     Inventory(crate::commands::inventory::InventoryCmd),
+    /// Write CI templates for a config repo (optional --bind)
+    Init(crate::commands::init::Args),
+    /// Mint, list, or revoke enrollment tokens (device session)
+    #[command(subcommand)]
+    Enroll(crate::commands::enroll::EnrollCmd),
+    /// Print worker install recipes (device session)
+    #[command(subcommand)]
+    Worker(crate::commands::worker::WorkerCmd),
     /// Generate shell completions (bash, zsh, fish)
     Completion(crate::commands::completion::Args),
     /// Update the deslicer binary to the latest release
@@ -104,6 +112,9 @@ impl Cli {
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
+            Command::Init(args) => crate::commands::init::run(ctx, args).await,
+            Command::Enroll(cmd) => crate::commands::enroll::dispatch(ctx, cmd).await,
+            Command::Worker(cmd) => crate::commands::worker::dispatch(ctx, cmd).await,
             Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(args).await,
         }

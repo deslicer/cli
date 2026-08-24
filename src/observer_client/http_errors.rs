@@ -16,6 +16,8 @@ pub(crate) fn map_observer_error(
         403 => {
             if mentions_human_approval(body) {
                 CliError::HumanApprovalRequired(message)
+            } else if mentions_worker_plane(body) {
+                CliError::Other(worker_plane_message(&message))
             } else if mentions_environment(body) {
                 CliError::EnvironmentNotBound(message)
             } else {
@@ -63,6 +65,20 @@ fn mentions_human_approval(text: &str) -> bool {
         .any(|needle| lowered.contains(needle))
 }
 
+fn mentions_worker_plane(text: &str) -> bool {
+    text.to_ascii_lowercase().contains("worker_plane")
+}
+
+fn worker_plane_message(server: &str) -> String {
+    if server.to_ascii_lowercase().contains("worker plane") {
+        format!(
+            "{server} Enable the worker plane in the portal before creating a bootstrap enrollment token."
+        )
+    } else {
+        "Worker plane is not enabled for this tenant. Enable it in the portal before creating a bootstrap enrollment token.".into()
+    }
+}
+
 pub(crate) fn retry_delay(
     headers: &reqwest::header::HeaderMap,
     attempt: u32,
@@ -80,4 +96,24 @@ pub(crate) fn parse_retry_after_header(headers: &reqwest::header::HeaderMap) -> 
         .get(reqwest::header::RETRY_AFTER)
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse::<u64>().ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worker_plane_forbidden_is_not_repo_allowlist() {
+        let err = map_observer_error(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"error":"worker_plane_not_enabled"}"#,
+            None,
+        );
+        match err {
+            CliError::Other(message) => {
+                assert!(message.to_ascii_lowercase().contains("worker plane"));
+            }
+            other => panic!("expected Other, got {other}"),
+        }
+    }
 }

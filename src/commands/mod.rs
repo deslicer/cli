@@ -1,7 +1,10 @@
 pub mod auth;
 pub mod change;
 pub mod completion;
+pub mod enroll;
 pub mod groups;
+pub mod init;
 pub mod inventory;
 pub mod pipeline;
 pub mod update;
+pub mod worker;
