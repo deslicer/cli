@@ -134,7 +134,7 @@ async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSess
     ))
 }
 
-fn join_api(base: &url::Url, path: &str) -> Result<url::Url, CliError> {
+pub(crate) fn join_api(base: &url::Url, path: &str) -> Result<url::Url, CliError> {
     base.join(path)
         .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))
 }

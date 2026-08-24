@@ -5,11 +5,20 @@
 //! the proxy prefix when the base carries a trailing slash, so the same
 //! request paths work in both modes.
 
+mod bootstrap;
 mod direct_create;
+mod enrollment;
 mod http_errors;
 mod inventory;
 mod types;
 
+pub use bootstrap::{
+    BootstrapTemplateFile, BootstrapTemplates, CreateEnvironmentBindingRequest, GithubInstallation,
+};
+pub use enrollment::{
+    CreateEnrollmentTokenRequest, CreateEnrollmentTokenResponse, EnrollmentTokenSummary,
+    ListEnrollmentTokensResponse,
+};
 pub use inventory::InventoryGroup;
 pub use types::{
     BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, HostGroup, OrchestratedPlan,
@@ -17,6 +26,8 @@ pub use types::{
 };
 
 use http_errors::{map_observer_error, parse_retry_after_header, retry_delay};
+
+pub(crate) use http_errors::{error_message, parse_retry_after_header as retry_after_header};
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
@@ -233,6 +244,63 @@ impl Client {
         Ok(inventory.into_groups())
     }
 
+    pub async fn fetch_bootstrap_templates(
+        &self,
+        provider: &str,
+    ) -> Result<BootstrapTemplates, CliError> {
+        let path = format!("api/v1/bootstrap-templates?provider={provider}");
+        self.get_json(&path).await
+    }
+
+    pub async fn list_github_installations(&self) -> Result<Vec<GithubInstallation>, CliError> {
+        #[derive(Deserialize)]
+        struct ListInstallationsResponse {
+            installations: Vec<GithubInstallation>,
+        }
+        let resp: ListInstallationsResponse =
+            self.get_json("api/v1/admin/github-installations").await?;
+        Ok(resp.installations)
+    }
+
+    pub async fn create_environment_binding(
+        &self,
+        body: &CreateEnvironmentBindingRequest,
+    ) -> Result<bool, CliError> {
+        let (status, body_text) = self
+            .request_status(
+                Method::POST,
+                "api/v1/admin/ci-environment-bindings",
+                Some(body),
+            )
+            .await?;
+        if status.is_success() {
+            return Ok(false);
+        }
+        if status == reqwest::StatusCode::CONFLICT {
+            return Ok(true);
+        }
+        Err(map_observer_error(status, &body_text, None))
+    }
+
+    pub async fn create_enrollment_token(
+        &self,
+        body: &CreateEnrollmentTokenRequest,
+    ) -> Result<CreateEnrollmentTokenResponse, CliError> {
+        self.request_json(Method::POST, "api/v1/enrollment-tokens", Some(body))
+            .await
+    }
+
+    pub async fn list_enrollment_tokens(&self) -> Result<ListEnrollmentTokensResponse, CliError> {
+        self.get_json("api/v1/enrollment-tokens").await
+    }
+
+    pub async fn revoke_enrollment_token(&self, jti: &uuid::Uuid) -> Result<(), CliError> {
+        let path = format!("api/v1/enrollment-tokens/{jti}");
+        self.request_bytes(Method::DELETE, &path, None::<&()>)
+            .await?;
+        Ok(())
+    }
+
     async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, CliError> {
         self.request_json(Method::GET, path, None::<&()>).await
     }
@@ -334,6 +402,39 @@ impl Client {
             let body_text = String::from_utf8_lossy(&bytes).into_owned();
             return Err(map_observer_error(status, &body_text, retry_after));
         }
+    }
+
+    async fn request_status<B>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&B>,
+    ) -> Result<(reqwest::StatusCode, String), CliError>
+    where
+        B: Serialize + ?Sized,
+    {
+        let url = self.request_url(path)?;
+        let bearer = self.tokens.bearer().await?;
+        let mut req = self
+            .http
+            .request(method, url)
+            .header("Authorization", format!("Bearer {bearer}"));
+        if let Some(platform) = self.ci_platform {
+            req = req.header("X-Deslicer-CI-Platform", platform.header_value());
+        }
+        if let Some(payload) = body {
+            req = req.json(payload);
+        }
+        let response = req
+            .send()
+            .await
+            .map_err(|e| CliError::Transport(e.to_string()))?;
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| CliError::Transport(e.to_string()))?;
+        Ok((status, String::from_utf8_lossy(&bytes).into_owned()))
     }
 
     fn request_url(&self, path: &str) -> Result<url::Url, CliError> {

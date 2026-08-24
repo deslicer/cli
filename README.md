@@ -54,6 +54,11 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **auth** | `deslicer auth status` | Print OIDC/platform binding diagnostics |
 | **groups** | `deslicer groups list` | List host groups (`id` is the value for `--target-group`) |
 | **inventory** | `deslicer inventory list` | List Ansible inventory groups and their hosts |
+| **init** | `deslicer init` | Write CI templates from Observer (`--provider`, optional `--bind`) |
+| **enroll** | `deslicer enroll create` | Mint a one-time enrollment token (device session; `--write-file` when not a TTY) |
+| **enroll** | `deslicer enroll list` | List tokens (never reprints the secret) |
+| **enroll** | `deslicer enroll revoke` | Revoke a token by UUID `--jti` |
+| **worker** | `deslicer worker instructions` | Print a worker install recipe (`--format`, `--product`, `--channel`) |
 | | `deslicer completion bash\|zsh\|fish` | Print shell completions to stdout |
 | **change** | `deslicer change plan` | Create or refresh a change plan (add `--source-dir` for the GitHub-App-free bundle flow) |
 | **change** | `deslicer change show` | Show plan details |
