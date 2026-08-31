@@ -33,8 +33,8 @@ const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 #[derive(ClapArgs)]
 pub struct Args {
-    /// Run id, printed when the run started
-    pub run_id: String,
+    /// Run id, printed when the run started. Omit to follow the latest run.
+    pub run_id: Option<String>,
 
     /// Wait for the run to finish instead of reporting where it got to
     #[arg(long, short = 'f')]
@@ -53,29 +53,35 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
-    // Before the session is resolved, so a mistyped id on a machine that has
-    // never logged in reports the typo rather than the missing session.
-    parse_run_id(&args.run_id)?;
+    if let Some(id) = args.run_id.as_deref() {
+        // Before the session is resolved, so a mistyped id on a machine that
+        // has never logged in reports the typo rather than the missing session.
+        parse_run_id(id)?;
+    }
 
     let client = AgentClient::from_ctx(&ctx)?;
+    let run_id = match args.run_id.as_deref() {
+        Some(id) => id.to_string(),
+        None => client.latest_run().await?.run_id,
+    };
 
     // Read the status first so a bad id, an expired session, or someone
     // else's run fails on a cheap request rather than after opening a stream.
-    let status = client.run_status(&args.run_id).await?;
+    let status = client.run_status(&run_id).await?;
 
     if !args.follow || status.is_terminal() {
         // Nothing to wait for; --follow degrades to a plain read.
-        return report_once(&ctx, &client, &args).await;
+        return report_once(&ctx, &client, &run_id).await;
     }
 
     if ctx.log_format == LogFormat::Human {
         // The poll fallback can sit silent for a couple of seconds and the
         // stream can take about as long to produce its first token; without
         // this the terminal looks hung.
-        eprintln!("Following run {}. Ctrl-C detaches.", args.run_id);
+        eprintln!("Following run {run_id}. Ctrl-C detaches.");
     }
 
-    if let Some(response) = client.resume_run(&args.run_id).await? {
+    if let Some(response) = client.resume_run(&run_id).await? {
         let end = stream_into_terminal(&ctx, &args, response).await?;
         return match end {
             StreamEnd::Cancelled => {
@@ -86,14 +92,14 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
             // truncated body looks the same from here — so the ledger has
             // the last word.
             StreamEnd::Completed | StreamEnd::Truncated => {
-                let status = client.run_status(&args.run_id).await?;
+                let status = client.run_status(&run_id).await?;
                 exit_for(status)
             }
         };
     }
 
-    poll_until_terminal(&client, &args.run_id).await?;
-    report_once(&ctx, &client, &args).await
+    poll_until_terminal(&client, &run_id).await?;
+    report_once(&ctx, &client, &run_id).await
 }
 
 /// Prints whatever the run has produced and exits on its outcome.
@@ -101,8 +107,8 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 /// Re-reads rather than taking the status the caller already holds: the output
 /// endpoint returns a strictly fresher view of the same row, and carries the
 /// answer with it.
-async fn report_once(ctx: &Ctx, client: &AgentClient, args: &Args) -> Result<i32, CliError> {
-    let output = client.run_output(&args.run_id).await?;
+async fn report_once(ctx: &Ctx, client: &AgentClient, run_id: &str) -> Result<i32, CliError> {
+    let output = client.run_output(run_id).await?;
 
     match ctx.log_format {
         LogFormat::Json => {

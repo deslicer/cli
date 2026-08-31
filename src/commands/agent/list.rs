@@ -39,12 +39,17 @@ fn format_agents_human(agents: &[AgentSummary]) -> String {
 
     let mut lines = vec!["ID  VISIBILITY  MODEL  NAME".to_string()];
     for agent in agents {
+        let name = if agent.is_orchestrator {
+            format!("{} (default)", agent.name)
+        } else {
+            agent.name.clone()
+        };
         lines.push(format!(
             "{}  {}  {}  {}",
             agent.id,
             agent.visibility,
             agent.model.as_deref().unwrap_or("-"),
-            agent.name,
+            name,
         ));
     }
     lines.push(String::new());
@@ -62,7 +67,15 @@ mod tests {
             description: None,
             model: Some("claude-sonnet-4".into()),
             visibility: "private".into(),
+            is_orchestrator: false,
         }
+    }
+
+    #[test]
+    fn marks_the_orchestrator_as_the_default() {
+        let mut a = agent("a1", "Orchestrator");
+        a.is_orchestrator = true;
+        assert!(format_agents_human(&[a]).contains("Orchestrator (default)"));
     }
 
     #[test]
