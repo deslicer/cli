@@ -12,14 +12,26 @@ use crate::errors::CliError;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Silence tolerated on a streaming body before it is treated as dead.
+///
+/// The server writes an SSE keepalive comment every 15s, so anything past a
+/// few multiples of that means the connection is gone rather than slow.
+const STREAM_READ_TIMEOUT: Duration = Duration::from_secs(90);
+const STREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const STREAM_TCP_KEEPALIVE: Duration = Duration::from_secs(30);
+
 const LOCAL_ENVS: &[&str] = &["dev", "test", "local"];
 
-pub fn try_client() -> Result<reqwest::Client, CliError> {
+fn base_builder() -> reqwest::ClientBuilder {
     reqwest::Client::builder()
         .user_agent(concat!("deslicer-cli/", env!("CARGO_PKG_VERSION")))
         .use_rustls_tls()
         .min_tls_version(reqwest::tls::Version::TLS_1_3)
         .redirect(reqwest::redirect::Policy::none())
+}
+
+pub fn try_client() -> Result<reqwest::Client, CliError> {
+    base_builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|e| CliError::Transport(format!("build HTTP client: {e}")))
@@ -29,6 +41,21 @@ pub fn client() -> reqwest::Client {
     // rustls-tls is compiled in; builder failure means a broken TLS backend.
     #[allow(clippy::expect_used)]
     try_client().expect("reqwest rustls client builder is infallible with rustls-tls")
+}
+
+/// Client for long-lived streaming responses (agent runs).
+///
+/// Deliberately has no total request timeout: an agent run legitimately takes
+/// minutes, and a deadline that fires mid-stream would look identical to the
+/// agent failing. Liveness comes from `read_timeout`, which resets on every
+/// chunk, so a stalled connection is still caught — just not a slow one.
+pub fn try_streaming_client() -> Result<reqwest::Client, CliError> {
+    base_builder()
+        .connect_timeout(STREAM_CONNECT_TIMEOUT)
+        .read_timeout(STREAM_READ_TIMEOUT)
+        .tcp_keepalive(STREAM_TCP_KEEPALIVE)
+        .build()
+        .map_err(|e| CliError::Transport(format!("build streaming HTTP client: {e}")))
 }
 
 pub fn assert_url_allowed(url: &Url) -> Result<(), CliError> {
