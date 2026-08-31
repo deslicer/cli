@@ -8,7 +8,9 @@
 
 use crate::errors::CliError;
 
-/// Validates an agent id, as accepted by `--agent`.
+/// Validates an agent id. Production `--agent` accepts a name or UUID via
+/// `resolve`; this helper stays test-only so clippy `-D dead-code` stays clean.
+#[cfg(test)]
 pub fn parse_agent_id(raw: &str) -> Result<&str, CliError> {
     require_uuid(
         raw,
