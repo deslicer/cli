@@ -27,12 +27,21 @@ deslicer agent list
 ```
 
 Prints the agents this session can run — the tenant's own agents plus the
-public catalogue — with the id `--agent` takes.
+public catalogue. The tenant Orchestrator is marked `(default)`. `--agent`
+accepts either the id or the name.
 
 ## Running an agent
 
+Omit `--agent` to run the tenant Orchestrator:
+
 ```bash
-deslicer agent run --agent <agent-id> "Which indexers are missing the latest bundle?"
+deslicer agent run "Which indexers are missing the latest bundle?"
+```
+
+To pick a different agent, pass a name or id:
+
+```bash
+deslicer agent run --agent slicer "Which indexers are missing the latest bundle?"
 ```
 
 The answer streams to **stdout** as it arrives; the conversation id, each tool
@@ -43,13 +52,14 @@ Omit the prompt to read it from stdin, which avoids the shell quoting and
 argument-length limits of a long prompt:
 
 ```bash
-cat incident-notes.md | deslicer agent run --agent <agent-id>
+cat incident-notes.md | deslicer agent run
 ```
 
 Useful flags:
 
 | Flag | Effect |
 |------|--------|
+| `-a`, `--agent <name-or-id>` | Run this agent instead of the tenant Orchestrator |
 | `--conversation <id>` | Continue an existing thread instead of starting a new one |
 | `--verbose` | Add the agent's reasoning to the progress already on stderr |
 | `--no-wait` | Start the run, print its id, and exit |
@@ -64,7 +74,7 @@ stable across attempts and the second request joins the first run rather than
 starting another:
 
 ```bash
-deslicer agent run --agent <agent-id> \
+deslicer agent run \
   --idempotency-key "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
   "Summarise today's forwarder errors."
 ```
@@ -80,14 +90,17 @@ server keeps going and stores the transcript.
 Start a run without waiting for it:
 
 ```bash
-run_id=$(deslicer agent run --agent <agent-id> --no-wait "Audit TLS settings across the fleet.")
+run_id=$(deslicer agent run --no-wait "Audit TLS settings across the fleet.")
 ```
 
-Then pick it up whenever:
+List recent runs, or pick one up by id:
 
 ```bash
+deslicer agent ls
 deslicer agent logs "$run_id" --follow
 ```
+
+`deslicer agent logs` without an id follows the most recent run.
 
 `--follow` streams a run that is still going and waits for it to finish;
 without it, `agent logs` prints where the run got to and exits. Either way the

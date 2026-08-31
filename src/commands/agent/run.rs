@@ -9,8 +9,9 @@ use crate::errors::CliError;
 use crate::Ctx;
 
 use super::client::{AgentClient, StartedRun};
-use super::ids::{parse_agent_id, parse_conversation_id};
+use super::ids::parse_conversation_id;
 use super::render::{RenderMode, Renderer};
+use super::resolve::resolve_agent;
 use super::stream::{consume_stream, StreamEnd};
 
 /// Exit code convention for "interrupted by SIGINT" (128 + 2).
@@ -18,9 +19,9 @@ const EXIT_INTERRUPTED: i32 = 130;
 
 #[derive(ClapArgs)]
 pub struct Args {
-    /// Agent id (see `deslicer agent list`)
+    /// Agent name or id. Omit to run the tenant Orchestrator.
     #[arg(long, short = 'a')]
-    pub agent: String,
+    pub agent: Option<String>,
 
     /// Prompt text. Omit to read the prompt from stdin.
     pub prompt: Option<String>,
@@ -50,12 +51,17 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
-    // Checked before the prompt is read, so a mistyped id fails immediately
-    // rather than after stdin has been consumed and can no longer be replayed.
-    parse_agent_id(&args.agent)?;
     if let Some(id) = args.conversation.as_deref() {
         parse_conversation_id(id)?;
     }
+
+    let client = AgentClient::from_ctx(&ctx)?;
+    // Resolved before the prompt is read, so a mistyped name fails immediately
+    // rather than after stdin has been consumed and can no longer be replayed.
+    let agent_id = match args.agent.as_deref() {
+        Some(raw) => Some(resolve_agent(&client, raw).await?),
+        None => None,
+    };
 
     let prompt = resolve_prompt(args.prompt)?;
     // A fresh key per invocation is the safe default: a user who re-runs the
@@ -65,9 +71,9 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         .idempotency_key
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    let started = AgentClient::from_ctx(&ctx)?
+    let started = client
         .start_run(
-            &args.agent,
+            agent_id.as_deref(),
             &prompt,
             args.conversation.as_deref(),
             &idempotency_key,
@@ -185,7 +191,7 @@ fn resolve_prompt(arg: Option<String>) -> Result<String, CliError> {
             if std::io::stdin().is_terminal() {
                 return Err(CliError::Other(
                     "no prompt given. Pass it as an argument or pipe it on stdin:\n  \
-                     deslicer agent run --agent <ID> \"why did plan X fail?\""
+                     deslicer agent run \"why did plan X fail?\""
                         .into(),
                 ));
             }
