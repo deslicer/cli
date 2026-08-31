@@ -35,7 +35,7 @@ where
 
     let after = &args[agent_at + 1..];
     match first_positional(after) {
-        Some(token) if is_subcommand(&token) => args,
+        Some(token) if is_subcommand(token) => args,
         Some(_) => insert_after(&args, agent_at, "run"),
         // `deslicer agent --help` must list subcommands, not the REPL's flags.
         None if has_help_flag(after) => args,
