@@ -45,7 +45,7 @@ flate2 = "1"
 # Platform natives are required: keyring 3 defaults to an in-process mock
 # that accepts writes and then disappears (the auth-login keychain warning).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
-toml = "0.8"
+toml = "1.1"
 
 [dev-dependencies]
 wiremock = "0.6"
