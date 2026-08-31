@@ -1,8 +1,9 @@
 # Agent runs
 
-`deslicer agent` runs a deslicer-ai agent from a terminal or a pipeline and
-streams the answer as it is produced. It talks to deslicer-ai directly — the
-Observer backend is not involved — so `--observer-api-url` and
+`deslicer agent` talks to a deslicer-ai agent from a terminal or a pipeline
+and streams the answer as it is produced. With no subcommand it opens a
+conversation on the tenant Orchestrator. It talks to deslicer-ai directly —
+the Observer backend is not involved — so `--observer-api-url` and
 `DESLICER_API_TOKEN` play no part here.
 
 ## Authentication
@@ -29,6 +30,51 @@ deslicer agent list
 Prints the agents this session can run — the tenant's own agents plus the
 public catalogue. The tenant Orchestrator is marked `(default)`. `--agent`
 accepts either the id or the name.
+
+## Conversation (REPL)
+
+On a terminal, `deslicer agent` starts a line-oriented conversation. Each
+prompt is one server run. The first prompt creates a conversation; later
+prompts reuse it. Status and tools go to stderr; the answer goes to stdout.
+
+```bash
+deslicer agent
+deslicer agent -a slicer
+deslicer agent "Which indexers are missing the latest bundle?"
+```
+
+A bare prompt after `agent` is the same as `agent run`. Known subcommands
+(`list`, `ls`, `run`, `logs`, `resume`) are never treated as prompts.
+
+Inside the REPL:
+
+| Input | Effect |
+|-------|--------|
+| empty line | ignored |
+| `/help` | list the slash commands |
+| `/exit`, `/quit`, Ctrl-D | leave |
+| Ctrl-C during a stream | detach; the REPL stays open. Follow the run with `agent logs --follow` |
+
+A new prompt is refused while the current run is still going. Non-TTY
+invocations without a prompt still require `agent run` or a piped stdin.
+
+## Resume
+
+`deslicer agent resume` continues this session's last conversation — the
+`conversationId` on your latest run. That is not the same as `agent logs`,
+which reattaches to a *run*.
+
+```bash
+deslicer agent resume
+deslicer agent resume "also check the SHC"
+deslicer agent resume --follow
+```
+
+On a TTY with no prompt it enters the REPL on that thread. With a prompt it
+starts a new run against the same conversation, using the last run's agent
+unless `-a` is set. `--follow` attaches to the last run if it is still going
+and does not start a second one. No history prints `No runs yet` and points
+at `deslicer agent`.
 
 ## Running an agent
 
@@ -107,8 +153,9 @@ without it, `agent logs` prints where the run got to and exits. Either way the
 run id is the handle — a conversation id is not, and `--conversation` starts a
 *new* run against the same thread.
 
-Ctrl-C during `agent run` or `agent logs --follow` detaches and tells you the
-command that reattaches. The run is unaffected.
+Ctrl-C during `agent run`, `agent logs --follow`, or a REPL turn detaches and
+tells you the command that reattaches. In the REPL the loop stays open. The
+run is unaffected.
 
 ## Exit codes
 

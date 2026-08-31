@@ -177,6 +177,25 @@ async fn reads_the_latest_run() {
     assert_eq!(latest.status, "running");
 }
 
+#[tokio::test]
+async fn try_latest_run_treats_404_as_no_history() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/cli/agents/runs/latest"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "error": "run_not_found",
+            "message": "No such run.",
+        })))
+        .mount(&server)
+        .await;
+
+    let latest = client_for(&server)
+        .try_latest_run()
+        .await
+        .expect("404 is empty history");
+    assert!(latest.is_none());
+}
+
 #[test]
 fn omits_agent_id_when_the_caller_wants_the_default() {
     let body = serde_json::to_value(RunRequestBody {

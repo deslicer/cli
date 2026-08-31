@@ -41,7 +41,7 @@ async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
 
 fn format_runs_human(runs: &[RunListItem]) -> String {
     if runs.is_empty() {
-        return "No runs yet. Start one with `deslicer agent run`.\n".to_string();
+        return "No runs yet. Start one with `deslicer agent`.\n".to_string();
     }
 
     let mut lines = vec!["RUN  STATUS  AGENT  STARTED  PREVIEW".to_string()];
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn empty_list_names_the_command_that_starts_a_run() {
-        assert!(format_runs_human(&[]).contains("deslicer agent run"));
+        assert!(format_runs_human(&[]).contains("deslicer agent"));
     }
 
     #[test]

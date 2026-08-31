@@ -163,8 +163,39 @@ impl AgentClient {
     }
 
     pub async fn latest_run(&self) -> Result<RunListItem, CliError> {
-        self.get_json(&format!("{RUN_PATH}/latest"), "read latest run")
+        self.try_latest_run().await?.ok_or_else(|| {
+            CliError::Other(
+                "no runs yet. Start one with `deslicer agent` or `deslicer agent run`.".into(),
+            )
+        })
+    }
+
+    /// Latest run for this session, or `None` when this member has none.
+    ///
+    /// Every 404 from `/latest` is "no row" — the handler uses the same
+    /// isolation 404 as a missing id, so a leaked handle cannot be told
+    /// apart from an empty history.
+    pub async fn try_latest_run(&self) -> Result<Option<RunListItem>, CliError> {
+        let url = self.endpoint(&format!("{RUN_PATH}/latest"))?;
+        let response = self
+            .json
+            .get(url)
+            .bearer_auth(&self.token)
+            .send()
             .await
+            .map_err(|e| CliError::Transport(format!("read latest run: {e}")))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(self.error_from(response).await);
+        }
+        response
+            .json()
+            .await
+            .map_err(|e| CliError::Transport(format!("decode latest run: {e}")))
+            .map(Some)
     }
 
     pub async fn run_status(&self, run_id: &str) -> Result<RunStatus, CliError> {

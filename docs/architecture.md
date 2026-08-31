@@ -70,7 +70,7 @@ their contents. B cannot: the bundle carries whatever is in the working tree.
 
 | | **Path A — CI / OIDC** | **Path A2 — CI / Observer token** | **Path B — Bundle upload** | **Path C — Agent run** |
 |---|---|---|---|---|
-| **Trigger** | `deslicer change plan` (default) | `deslicer change plan --target-group …` | `deslicer change plan --source-dir …` | `deslicer agent run` |
+| **Trigger** | `deslicer change plan` (default) | `deslicer change plan --target-group …` | `deslicer change plan --source-dir …` | `deslicer agent` |
 | **Auth** | CI OIDC JWT (audience `https://api.deslicer.ai`) | Static `DESLICER_API_TOKEN` (`tools` scope) | Static `DESLICER_API_TOKEN` (`tools` scope) | Device session (`deslicer login`) |
 | **DAI involved?** | Yes — resolve-backend; usually CI proxy | No — direct to Observer | No — direct to Observer | Yes — DAI runs the agent |
 | **Source** | Git clone at CI commit | Git clone at `GITHUB_SHA` / `CI_COMMIT_SHA` | Local `apps/` directory (tar.gz + SHA-256) | A prompt |
