@@ -1,6 +1,7 @@
 pub mod bundle;
 pub mod ci;
 pub mod cli;
+pub mod clone_token;
 pub mod commands;
 pub mod device_flow;
 pub mod diff_summary;
