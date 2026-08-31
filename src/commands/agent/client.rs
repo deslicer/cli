@@ -52,6 +52,34 @@ pub struct StartedRun {
     pub response: reqwest::Response,
 }
 
+/// Where a run got to, as recorded in the server's ledger.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RunStatus {
+    #[serde(rename = "runId")]
+    pub run_id: String,
+    pub status: String,
+    #[serde(default, rename = "conversationId")]
+    pub conversation_id: Option<String>,
+    #[serde(default, rename = "errorCode")]
+    pub error_code: Option<String>,
+}
+
+impl RunStatus {
+    /// Whether the run has stopped moving, either way.
+    pub fn is_terminal(&self) -> bool {
+        self.status != "running"
+    }
+}
+
+/// A run's status plus whatever answer has been persisted for it.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RunOutput {
+    #[serde(flatten)]
+    pub status: RunStatus,
+    #[serde(default)]
+    pub output: Option<String>,
+}
+
 pub struct AgentClient {
     base: url::Url,
     token: String,
@@ -139,6 +167,64 @@ impl AgentClient {
         })
     }
 
+    pub async fn run_status(&self, run_id: &str) -> Result<RunStatus, CliError> {
+        self.get_json(&run_path(run_id, "")?, "read run status")
+            .await
+    }
+
+    pub async fn run_output(&self, run_id: &str) -> Result<RunOutput, CliError> {
+        self.get_json(&run_path(run_id, "/output")?, "read run output")
+            .await
+    }
+
+    /// Reattaches to a run's live output.
+    ///
+    /// `None` means there is nothing to attach to — the deployment buffers no
+    /// streams, or this one has already been consumed. That is an ordinary
+    /// outcome, not a failure: the caller polls the output instead.
+    pub async fn resume_run(&self, run_id: &str) -> Result<Option<reqwest::Response>, CliError> {
+        let url = self.endpoint(&run_path(run_id, "/stream")?)?;
+        let response = self
+            .streaming
+            .get(url)
+            .bearer_auth(&self.token)
+            .header("accept", "text/event-stream")
+            .send()
+            .await
+            .map_err(|e| CliError::Transport(format!("resume agent run: {e}")))?;
+
+        if response.status() == reqwest::StatusCode::NO_CONTENT {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(self.error_from(response).await);
+        }
+        Ok(Some(response))
+    }
+
+    async fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        what: &str,
+    ) -> Result<T, CliError> {
+        let url = self.endpoint(path)?;
+        let response = self
+            .json
+            .get(url)
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|e| CliError::Transport(format!("{what}: {e}")))?;
+
+        if !response.status().is_success() {
+            return Err(self.error_from(response).await);
+        }
+        response
+            .json()
+            .await
+            .map_err(|e| CliError::Transport(format!("decode {what}: {e}")))
+    }
+
     fn endpoint(&self, path: &str) -> Result<url::Url, CliError> {
         let url = join_api(&self.base, path)?;
         assert_url_allowed(&url)?;
@@ -151,6 +237,21 @@ impl AgentClient {
         let body = response.text().await.unwrap_or_default();
         map_error_body(status, &body, retry_after)
     }
+}
+
+/// Builds a run-scoped path.
+///
+/// The id is interpolated into a URL, so it is checked against the shape the
+/// server issues rather than trusted to be free of path separators. A typo'd
+/// id should read as a bad argument here, not as a request to some other
+/// endpoint.
+fn run_path(run_id: &str, suffix: &str) -> Result<String, CliError> {
+    if uuid::Uuid::parse_str(run_id).is_err() {
+        return Err(CliError::Other(format!(
+            "'{run_id}' is not a run id. Run ids are UUIDs, printed when a run starts."
+        )));
+    }
+    Ok(format!("{RUN_PATH}/{run_id}{suffix}"))
 }
 
 fn header_value(response: &reqwest::Response, name: &str) -> Option<String> {
@@ -200,6 +301,10 @@ pub fn map_error_body(status: reqwest::StatusCode, body: &str, retry_after_secs:
             "{message}\nRun `deslicer agent list` to see the agents you can run."
         )),
         Some("run_in_progress") | Some("run_already_completed") => CliError::Other(message),
+        Some("run_not_found") => CliError::Other(format!(
+            "{message}\nRun ids are printed when a run starts, and are scoped to the \
+             account that started them."
+        )),
         Some("run_failed") => CliError::AgentRunFailed(message),
         Some(_) => CliError::Other(message),
         // No parsable body: fall back to the status class. A 5xx or 429 from
@@ -216,6 +321,140 @@ pub fn map_error_body(status: reqwest::StatusCode, body: &str, retry_after_secs:
 mod tests {
     use super::*;
     use reqwest::StatusCode;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    const RUN_ID: &str = "11111111-1111-4111-8111-111111111111";
+
+    /// Builds a client pointed at a mock server.
+    ///
+    /// Bypasses `from_ctx` so the tests do not need a device session in the
+    /// host keyring.
+    fn client_for(server: &MockServer) -> AgentClient {
+        AgentClient {
+            base: url::Url::parse(&server.uri()).expect("mock uri parses"),
+            token: "test-session-token".into(),
+            json: try_client().expect("json client"),
+            streaming: try_streaming_client().expect("streaming client"),
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_a_run_status() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/api/cli/agents/runs/{RUN_ID}")))
+            .and(header("authorization", "Bearer test-session-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "runId": RUN_ID,
+                "agentId": "agent-1",
+                "status": "succeeded",
+                "conversationId": "conv-1",
+                "errorCode": null,
+                "startedAt": "2026-08-31T07:00:00.000Z",
+                "finishedAt": "2026-08-31T07:00:09.000Z",
+            })))
+            .mount(&server)
+            .await;
+
+        let status = client_for(&server)
+            .run_status(RUN_ID)
+            .await
+            .expect("status reads");
+
+        assert_eq!(status.status, "succeeded");
+        assert_eq!(status.conversation_id.as_deref(), Some("conv-1"));
+        assert!(status.is_terminal());
+    }
+
+    #[tokio::test]
+    async fn reads_a_run_output() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/api/cli/agents/runs/{RUN_ID}/output")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "runId": RUN_ID,
+                "agentId": "agent-1",
+                "status": "succeeded",
+                "conversationId": "conv-1",
+                "errorCode": null,
+                "startedAt": "2026-08-31T07:00:00.000Z",
+                "finishedAt": "2026-08-31T07:00:09.000Z",
+                "output": "the answer",
+            })))
+            .mount(&server)
+            .await;
+
+        let output = client_for(&server)
+            .run_output(RUN_ID)
+            .await
+            .expect("output reads");
+
+        assert_eq!(output.output.as_deref(), Some("the answer"));
+        assert_eq!(output.status.status, "succeeded");
+    }
+
+    #[tokio::test]
+    async fn a_run_that_is_not_ours_reads_as_a_bad_argument() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/api/cli/agents/runs/{RUN_ID}")))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "error": "run_not_found",
+                "message": "No such run.",
+            })))
+            .mount(&server)
+            .await;
+
+        let err = client_for(&server)
+            .run_status(RUN_ID)
+            .await
+            .expect_err("should fail");
+
+        // The server deliberately does not say whether the run exists, so the
+        // CLI explains the two things the caller can check instead.
+        assert!(err.to_string().contains("printed when a run starts"));
+    }
+
+    #[tokio::test]
+    async fn no_buffered_stream_is_not_an_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/api/cli/agents/runs/{RUN_ID}/stream")))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        let resumed = client_for(&server)
+            .resume_run(RUN_ID)
+            .await
+            .expect("204 is an ordinary outcome");
+
+        // Signals "poll the output instead", not "the run is unreachable".
+        assert!(resumed.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_buffered_stream_comes_back_open() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/api/cli/agents/runs/{RUN_ID}/stream")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_string("data: {\"type\":\"text-delta\",\"delta\":\"hi\"}\n\n"),
+            )
+            .mount(&server)
+            .await;
+
+        let resumed = client_for(&server)
+            .resume_run(RUN_ID)
+            .await
+            .expect("resume succeeds")
+            .expect("a stream is returned");
+
+        assert_eq!(resumed.status(), StatusCode::OK);
+    }
 
     #[test]
     fn maps_too_many_runs_to_rate_limited() {
@@ -295,6 +534,54 @@ mod tests {
                 retry_after_secs: 5
             }
         ));
+    }
+
+    #[test]
+    fn run_path_rejects_an_id_that_could_reshape_the_url() {
+        // The id lands in a URL path; a traversal segment must read as a bad
+        // argument rather than as a request to a different endpoint.
+        let err = run_path("../../admin", "/stream").expect_err("should reject");
+        assert!(err.to_string().contains("not a run id"));
+    }
+
+    #[test]
+    fn run_path_builds_the_suffixed_endpoint() {
+        let path = run_path("55555555-5555-4555-8555-555555555555", "/output").expect("path");
+        assert_eq!(
+            path,
+            "api/cli/agents/runs/55555555-5555-4555-8555-555555555555/output"
+        );
+    }
+
+    #[test]
+    fn run_status_reads_terminality_off_the_status_field() {
+        let running: RunStatus =
+            serde_json::from_str(r#"{"runId":"r","status":"running"}"#).expect("parse");
+        assert!(!running.is_terminal());
+
+        let done: RunStatus =
+            serde_json::from_str(r#"{"runId":"r","status":"failed","errorCode":"abandoned"}"#)
+                .expect("parse");
+        assert!(done.is_terminal());
+        assert_eq!(done.error_code.as_deref(), Some("abandoned"));
+    }
+
+    #[test]
+    fn run_output_flattens_the_status_alongside_the_answer() {
+        let parsed: RunOutput = serde_json::from_str(
+            r#"{"runId":"r","status":"succeeded","conversationId":"c","output":"done"}"#,
+        )
+        .expect("parse");
+        assert_eq!(parsed.status.status, "succeeded");
+        assert_eq!(parsed.status.conversation_id.as_deref(), Some("c"));
+        assert_eq!(parsed.output.as_deref(), Some("done"));
+    }
+
+    #[test]
+    fn run_output_tolerates_an_answer_that_is_not_written_yet() {
+        let parsed: RunOutput =
+            serde_json::from_str(r#"{"runId":"r","status":"running"}"#).expect("parse");
+        assert!(parsed.output.is_none());
     }
 
     #[test]

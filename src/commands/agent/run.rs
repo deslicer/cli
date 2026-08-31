@@ -8,7 +8,7 @@ use crate::commands::pipeline::map_cli_error;
 use crate::errors::CliError;
 use crate::Ctx;
 
-use super::client::AgentClient;
+use super::client::{AgentClient, StartedRun};
 use super::render::{RenderMode, Renderer};
 use super::stream::{consume_stream, StreamEnd};
 
@@ -31,6 +31,10 @@ pub struct Args {
     /// Reuse a key so a retried invocation does not start a second run
     #[arg(long)]
     pub idempotency_key: Option<String>,
+
+    /// Start the run and return immediately, without waiting for the answer
+    #[arg(long)]
+    pub no_wait: bool,
 
     /// Show the agent's reasoning as it streams
     #[arg(long)]
@@ -63,6 +67,11 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         .await?;
 
     let conversation_id = started.conversation_id.clone();
+
+    if args.no_wait {
+        return detach(&ctx, started);
+    }
+
     if ctx.log_format == LogFormat::Human {
         if let Some(id) = conversation_id.as_deref() {
             // Printed before the first token so it survives a Ctrl-C: the run
@@ -109,6 +118,42 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
             conversation_id.as_deref(),
         ))),
     }
+}
+
+/// Reports the run's handle and hangs up without reading the body.
+///
+/// The server tees the orchestrator's output before it reaches the wire, so
+/// dropping the response here closes this connection without stopping the run.
+/// Whatever it produces is still readable through `agent logs`.
+fn detach(ctx: &Ctx, started: StartedRun) -> Result<i32, CliError> {
+    // A run started with --no-wait can only be found again by its id, so an
+    // id the server did not send is a hard failure rather than a warning.
+    let run_id = started.run_id.ok_or_else(|| {
+        CliError::AgentRunFailed(
+            "the run started but the server did not return its id, so it cannot be \
+             followed. Check the portal for the result."
+                .into(),
+        )
+    })?;
+
+    match ctx.log_format {
+        LogFormat::Json => {
+            let line = serde_json::to_string(&serde_json::json!({
+                "runId": run_id,
+                "conversationId": started.conversation_id,
+                "status": "running",
+            }))
+            .map_err(|e| CliError::Other(format!("encode run handle: {e}")))?;
+            println!("{line}");
+        }
+        LogFormat::Human => {
+            // stdout, not stderr: with --no-wait the id is the output.
+            println!("{run_id}");
+            eprintln!("Started. Follow it with `deslicer agent logs {run_id} --follow`.");
+        }
+    }
+
+    Ok(0)
 }
 
 async fn interrupted() {
