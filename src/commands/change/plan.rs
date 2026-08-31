@@ -20,14 +20,18 @@ pub struct Args {
     #[arg(long)]
     pub no_wait: bool,
 
-    /// GitHub-App-free flow: package this directory into a digest-pinned
-    /// bundle, upload it, and compile the plan from it instead of a git clone.
+    /// Air-gapped flow: package this directory into a digest-pinned bundle,
+    /// upload it, and compile from that instead of letting Observer clone.
     /// Requires OBSERVER_API_URL and DESLICER_API_TOKEN (direct mode).
+    ///
+    /// Prefer the default git-sourced compile: a bundle carries git-lfs pointer
+    /// files rather than their contents, so LFS-tracked config is not resolved.
+    /// Use this only when Observer has no network path back to the repository.
     #[arg(long, requires = "target_group")]
     pub source_dir: Option<std::path::PathBuf>,
 
-    /// Host group UUID the bundle-sourced plan targets (required with
-    /// --source-dir).
+    /// Host group UUID. Required with --source-dir, and with
+    /// OBSERVER_API_URL + DESLICER_API_TOKEN for git-sourced plans.
     #[arg(long)]
     pub target_group: Option<String>,
 
@@ -78,17 +82,13 @@ fn orchestrated_as_change_plan(created: &OrchestratedPlan) -> ChangePlan {
     }
 }
 
-fn static_bundle_token() -> Option<String> {
-    std::env::var("DESLICER_API_TOKEN")
-        .ok()
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-}
-
 /// Bundle upload talks to Observer either with a static tools-scope key
 /// (air-gap / laptop) or through the DAI CI proxy after OIDC resolve.
 async fn bundle_flow_client(ctx: &Ctx, args: &Args) -> Result<Client, CliError> {
-    if let (Some(base), Some(token)) = (ctx.observer_api_url.clone(), static_bundle_token()) {
+    if let (Some(base), Some(token)) = (
+        ctx.observer_api_url.clone(),
+        crate::observer_token::api_token(),
+    ) {
         return Ok(Client::new(base, TokenSource::static_token(token)));
     }
 
@@ -166,10 +166,6 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(err),
     };
 
-    if let Err(err) = require_proxy_mode(&session, "change plan") {
-        return map_cli_error(err);
-    }
-
     if session.is_device_session() {
         return map_cli_error(CliError::Other(
             "`change plan` without --source-dir starts a git-sourced compile. \
@@ -177,6 +173,20 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
              --source-dir <path> --target-group <id>."
                 .into(),
         ));
+    }
+
+    // Direct mode: talking to Observer with a tools-scope key rather than through
+    // the DAI CI proxy, so there is no OIDC resolve to supply repository identity
+    // or environment discovery. Handle it before the proxy-mode gate.
+    if session.is_observer_api_token() {
+        return match run_direct_git_plan(&session, &client, &args).await {
+            Ok(plan) => emit_change_plan(&plan),
+            Err(err) => map_cli_error(err),
+        };
+    }
+
+    if let Err(err) = require_proxy_mode(&session, "change plan") {
+        return map_cli_error(err);
     }
 
     match run_git_plans(&ctx, &session, &client, &args).await {
@@ -232,6 +242,55 @@ async fn compile_one_environment(
         )));
     }
     Ok((plan, true))
+}
+
+/// Git-sourced compile against Observer directly, without the DAI CI proxy.
+///
+/// The proxy path derives the repository, commit, and host group from the OIDC
+/// claims; a tools-scope key carries none of that, so the repository identity
+/// comes from the runner's own env and the host group from `--target-group`.
+async fn run_direct_git_plan(
+    session: &AuthenticatedSession,
+    client: &Client,
+    args: &Args,
+) -> Result<ChangePlan, CliError> {
+    let target_group = args.target_group.as_deref().ok_or_else(|| {
+        CliError::Other(
+            "git-sourced `change plan` with DESLICER_API_TOKEN requires \
+             --target-group <host-group-uuid>. Run `deslicer groups list` \
+             to find it."
+                .into(),
+        )
+    })?;
+    let identity = crate::ci::git_identity(session.platform)?;
+    // Forwarded so Observer's ephemeral runner can clone a private repo it has no
+    // GitHub App installation for. Absent is fine: Observer falls back to its own
+    // credential and fails closed if it has none.
+    let clone_token = crate::clone_token::from_env(session.platform);
+    let plan = client
+        .create_plan_from_git(
+            &identity.repository_url,
+            &identity.commit_sha,
+            target_group,
+            args.name.as_deref(),
+        )
+        .await?;
+    client
+        .trigger_compile_with_clone_token(&plan.id, &identity.commit_sha, clone_token.as_ref())
+        .await?;
+    if args.no_wait {
+        return Ok(plan);
+    }
+    let compiled = wait_for_compile(client, plan.external_id())
+        .await
+        .map_err(CliError::Other)?;
+    if is_compile_failure(&compiled.status) {
+        return Err(CliError::Other(format!(
+            "plan compile failed with status: {}",
+            compiled.status
+        )));
+    }
+    Ok(compiled)
 }
 
 async fn run_git_plans(
