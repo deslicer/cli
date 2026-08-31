@@ -12,6 +12,8 @@ use crate::http::{assert_url_allowed, try_client, try_streaming_client};
 use crate::token_store::load_active_session;
 use crate::Ctx;
 
+use super::ids::parse_run_id;
+
 const LIST_PATH: &str = "api/cli/agents";
 const RUN_PATH: &str = "api/cli/agents/runs";
 
@@ -246,11 +248,7 @@ impl AgentClient {
 /// id should read as a bad argument here, not as a request to some other
 /// endpoint.
 fn run_path(run_id: &str, suffix: &str) -> Result<String, CliError> {
-    if uuid::Uuid::parse_str(run_id).is_err() {
-        return Err(CliError::Other(format!(
-            "'{run_id}' is not a run id. Run ids are UUIDs, printed when a run starts."
-        )));
-    }
+    parse_run_id(run_id)?;
     Ok(format!("{RUN_PATH}/{run_id}{suffix}"))
 }
 

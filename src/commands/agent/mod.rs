@@ -3,6 +3,7 @@ use clap::Subcommand;
 use crate::Ctx;
 
 mod client;
+mod ids;
 mod list;
 mod logs;
 mod render;

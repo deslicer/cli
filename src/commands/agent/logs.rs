@@ -17,6 +17,7 @@ use crate::errors::CliError;
 use crate::Ctx;
 
 use super::client::{AgentClient, RunStatus};
+use super::ids::parse_run_id;
 use super::render::{RenderMode, Renderer};
 use super::stream::{consume_stream, StreamEnd};
 
@@ -52,6 +53,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
+    // Before the session is resolved, so a mistyped id on a machine that has
+    // never logged in reports the typo rather than the missing session.
+    parse_run_id(&args.run_id)?;
+
     let client = AgentClient::from_ctx(&ctx)?;
 
     // Read the status first so a bad id, an expired session, or someone

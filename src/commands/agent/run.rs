@@ -9,6 +9,7 @@ use crate::errors::CliError;
 use crate::Ctx;
 
 use super::client::{AgentClient, StartedRun};
+use super::ids::{parse_agent_id, parse_conversation_id};
 use super::render::{RenderMode, Renderer};
 use super::stream::{consume_stream, StreamEnd};
 
@@ -49,6 +50,13 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
+    // Checked before the prompt is read, so a mistyped id fails immediately
+    // rather than after stdin has been consumed and can no longer be replayed.
+    parse_agent_id(&args.agent)?;
+    if let Some(id) = args.conversation.as_deref() {
+        parse_conversation_id(id)?;
+    }
+
     let prompt = resolve_prompt(args.prompt)?;
     // A fresh key per invocation is the safe default: a user who re-runs the
     // command means it. `--idempotency-key` is for CI, where a retried job
