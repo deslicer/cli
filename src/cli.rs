@@ -38,7 +38,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Run agents and stream their answers (device session)
+    /// Talk to an agent (REPL by default; device session)
     #[command(subcommand)]
     Agent(crate::commands::agent::AgentCmd),
     #[command(subcommand)]

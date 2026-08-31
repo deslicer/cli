@@ -70,9 +70,11 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **change** | `deslicer change deploy` | Execute an approved plan |
 | **change** | `deslicer change verify` | Verify deployment outcome |
 | **change** | `deslicer change status` | Poll plan/execution status |
+| **agent** | `deslicer agent` | REPL on the tenant Orchestrator (`-a` to pick another agent) |
 | **agent** | `deslicer agent list` | List the agents this session can run |
 | **agent** | `deslicer agent ls` | List recent runs started by this session |
-| **agent** | `deslicer agent run` | Run an agent (Orchestrator by default; `-a` for name or id) |
+| **agent** | `deslicer agent run` | One-shot run (Orchestrator by default; `-a` for name or id) |
+| **agent** | `deslicer agent resume` | Continue the last conversation (REPL on a TTY; pass a prompt otherwise) |
 | **agent** | `deslicer agent logs` | Read or follow a run (`--follow`; omit the id for the latest) |
 | | `deslicer update` | Self-update the binary from GitHub Releases (`--check` to preview) |
 
