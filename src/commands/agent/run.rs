@@ -80,16 +80,18 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         return detach(&ctx, started);
     }
 
+    // Held for the interrupt and truncation messages: whichever way the read
+    // ends early, the run outlives it and these are the handles that find it.
+    let run_id = started.run_id.clone();
+
     if ctx.log_format == LogFormat::Human {
         if let Some(id) = conversation_id.as_deref() {
-            // Printed before the first token so it survives a Ctrl-C: the run
-            // keeps going server-side and this is how you find it again.
+            // Printed before the first token so it survives a Ctrl-C, and so a
+            // follow-up prompt can be aimed at this thread with --conversation.
             eprintln!("Conversation {id}");
         }
         if args.verbose {
-            if let Some(id) = started.run_id.as_deref() {
-                // Only useful when reporting a problem: it is the ledger row
-                // id, not something the CLI can act on.
+            if let Some(id) = run_id.as_deref() {
                 eprintln!("Run {id}");
             }
         }
@@ -119,10 +121,14 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     match end {
         StreamEnd::Completed => Ok(0),
         StreamEnd::Cancelled => {
-            eprintln!("{}", cancelled_message(conversation_id.as_deref()));
+            eprintln!(
+                "{}",
+                cancelled_message(run_id.as_deref(), conversation_id.as_deref())
+            );
             Ok(EXIT_INTERRUPTED)
         }
         StreamEnd::Truncated => Err(CliError::AgentRunFailed(truncated_message(
+            run_id.as_deref(),
             conversation_id.as_deref(),
         ))),
     }
@@ -198,22 +204,34 @@ fn resolve_prompt(arg: Option<String>) -> Result<String, CliError> {
     Ok(prompt)
 }
 
-fn cancelled_message(conversation_id: Option<&str>) -> String {
-    match conversation_id {
-        Some(id) => format!(
-            "Interrupted. The run continues server-side; \
-             resume with --conversation {id}."
-        ),
+/// Names the run so the reader can pick the answer back up.
+///
+/// The run id is the handle `agent logs` takes; the conversation id is not,
+/// and `--conversation` starts a *new* run rather than reattaching to this
+/// one. Only fall back to the conversation when the server withheld the run
+/// id, and then send the reader to the portal rather than to a command that
+/// would start second run.
+fn resume_hint(run_id: Option<&str>, conversation_id: Option<&str>) -> Option<String> {
+    if let Some(id) = run_id {
+        return Some(format!(
+            "follow it with `deslicer agent logs {id} --follow`"
+        ));
+    }
+    conversation_id.map(|id| format!("see conversation {id} in the portal"))
+}
+
+fn cancelled_message(run_id: Option<&str>, conversation_id: Option<&str>) -> String {
+    match resume_hint(run_id, conversation_id) {
+        Some(hint) => format!("Interrupted. The run continues server-side; {hint}."),
         None => "Interrupted. The run continues server-side.".to_string(),
     }
 }
 
-fn truncated_message(conversation_id: Option<&str>) -> String {
-    match conversation_id {
-        Some(id) => format!(
-            "the connection closed before the run finished. \
-             Check conversation {id} in the portal for the result."
-        ),
+fn truncated_message(run_id: Option<&str>, conversation_id: Option<&str>) -> String {
+    match resume_hint(run_id, conversation_id) {
+        Some(hint) => {
+            format!("the connection closed before the run finished, but it continues server-side; {hint}.")
+        }
         None => "the connection closed before the run finished.".to_string(),
     }
 }
@@ -235,18 +253,51 @@ mod tests {
     }
 
     #[test]
-    fn cancelled_message_names_the_resume_flag() {
-        let text = cancelled_message(Some("c-1"));
-        assert!(text.contains("--conversation c-1"));
+    fn cancelled_message_hands_back_the_command_that_reattaches() {
+        let text = cancelled_message(Some("r-1"), Some("c-1"));
+        assert!(text.contains("deslicer agent logs r-1 --follow"), "{text}");
+    }
+
+    /// `--conversation` starts a second run; suggesting it after a Ctrl-C
+    /// would duplicate work and still not show the interrupted answer.
+    #[test]
+    fn cancelled_message_never_suggests_the_conversation_flag() {
+        assert!(!cancelled_message(Some("r-1"), Some("c-1")).contains("--conversation"));
+        assert!(!cancelled_message(None, Some("c-1")).contains("--conversation"));
+    }
+
+    /// The run id is the only handle `agent logs` accepts, so it wins even
+    /// when both are known.
+    #[test]
+    fn resume_hint_prefers_the_run_over_the_conversation() {
+        let hint = resume_hint(Some("r-1"), Some("c-1")).expect("hint");
+        assert!(hint.contains("r-1"), "{hint}");
+        assert!(!hint.contains("c-1"), "{hint}");
     }
 
     #[test]
-    fn cancelled_message_without_a_conversation_still_reads() {
-        assert!(!cancelled_message(None).contains("--conversation"));
+    fn resume_hint_falls_back_to_the_portal_without_a_run_id() {
+        let hint = resume_hint(None, Some("c-9")).expect("hint");
+        assert!(hint.contains("c-9"), "{hint}");
+        assert!(!hint.contains("agent logs"), "{hint}");
     }
 
     #[test]
-    fn truncated_message_points_at_the_conversation() {
-        assert!(truncated_message(Some("c-9")).contains("c-9"));
+    fn resume_hint_is_absent_when_nothing_identifies_the_run() {
+        assert!(resume_hint(None, None).is_none());
+    }
+
+    #[test]
+    fn cancelled_message_without_any_handle_still_reads() {
+        assert_eq!(
+            cancelled_message(None, None),
+            "Interrupted. The run continues server-side."
+        );
+    }
+
+    #[test]
+    fn truncated_message_points_at_the_run() {
+        let text = truncated_message(Some("r-9"), Some("c-9"));
+        assert!(text.contains("deslicer agent logs r-9"), "{text}");
     }
 }

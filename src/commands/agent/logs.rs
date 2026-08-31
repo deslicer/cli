@@ -68,6 +68,13 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         return report_once(&ctx, &client, &args).await;
     }
 
+    if ctx.log_format == LogFormat::Human {
+        // The poll fallback can sit silent for a couple of seconds and the
+        // stream can take about as long to produce its first token; without
+        // this the terminal looks hung.
+        eprintln!("Following run {}. Ctrl-C detaches.", args.run_id);
+    }
+
     if let Some(response) = client.resume_run(&args.run_id).await? {
         let end = stream_into_terminal(&ctx, &args, response).await?;
         return match end {
