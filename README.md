@@ -54,6 +54,14 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **auth** | `deslicer auth status` | Print OIDC/platform binding diagnostics |
 | **groups** | `deslicer groups list` | List host groups (`id` is the value for `--target-group`) |
 | **inventory** | `deslicer inventory list` | List Ansible inventory groups and their hosts |
+| **init** | `deslicer init` | Write CI templates from Observer (`--provider`, optional `--bind`) |
+| **enroll** | `deslicer enroll create` | Mint a one-time enrollment token (device session; `--write-file` when not a TTY) |
+| **enroll** | `deslicer enroll list` | List tokens (never reprints the secret) |
+| **enroll** | `deslicer enroll revoke` | Revoke a token by UUID `--jti` |
+| **worker** | `deslicer worker instructions` | Print a worker install recipe (`--format`, `--product`, `--channel`) |
+| **repo** | `deslicer repo bootstrap` | Create a private GitHub App org repo (dry-run unless `--yes`) |
+| **repo** | `deslicer repo refresh` | Open a workflow refresh pull request |
+| **repo** | `deslicer repo status` | List linked repos and bootstrap job fields |
 | | `deslicer completion bash\|zsh\|fish` | Print shell completions to stdout |
 | **change** | `deslicer change plan` | Create or refresh a change plan (add `--source-dir` for the GitHub-App-free bundle flow) |
 | **change** | `deslicer change show` | Show plan details |
@@ -62,6 +70,9 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **change** | `deslicer change deploy` | Execute an approved plan |
 | **change** | `deslicer change verify` | Verify deployment outcome |
 | **change** | `deslicer change status` | Poll plan/execution status |
+| **agent** | `deslicer agent list` | List the agents this session can run |
+| **agent** | `deslicer agent run` | Run an agent and stream its answer (`--no-wait` to detach) |
+| **agent** | `deslicer agent logs` | Read or follow a run that is already going |
 | | `deslicer update` | Self-update the binary from GitHub Releases (`--check` to preview) |
 
 ### Global flags and environment
@@ -108,6 +119,7 @@ See [docs/installation.md](docs/installation.md) and [docs/quickstart.md](docs/q
 - [Architecture](docs/architecture.md) — how the CLI integrates with DAP and deslicer-ai
 - [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
 - [Bundle flow](docs/bundle-flow.md) — GitHub-App-free plans from a local directory
+- [Agent runs](docs/agent-runs.md) — run a deslicer-ai agent from a terminal or a pipeline
 - [CI outputs](docs/ci-outputs.md) — output variables per command and CI platform
 - [Local testing](docs/local-testing.md) — build from source and test against a local Observer
 - [Installation](docs/installation.md) — Homebrew, cargo, curl, Docker, and CI platform matrix
