@@ -1,8 +1,11 @@
 pub mod azure;
 pub mod bitbucket;
+pub mod git_identity;
 pub mod github;
 pub mod gitlab;
 pub mod local;
+
+pub use git_identity::{git_identity, CiGitIdentity};
 
 pub const AUDIENCE: &str = "https://api.deslicer.ai";
 

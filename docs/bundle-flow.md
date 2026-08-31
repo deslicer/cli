@@ -1,19 +1,26 @@
-# Bundle flow (GitHub-App-free)
+# Bundle flow (air-gapped / no network path to the repo)
 
 `deslicer change plan --source-dir <dir>` compiles a change plan from a locally packaged source bundle instead of a git clone. No GitHub App installation, no OIDC exchange, and no repository integration are required. This path bypasses deslicer-ai entirely — see [architecture.md](architecture.md#path-b--bundle-upload-github-app-free-no-dai).
 
+> **A bundle cannot resolve git-lfs.** The archive carries whatever is in the working
+> tree, so LFS-tracked files ship as pointer files and the resulting diff is wrong.
+> Being GitHub-App-free is no longer a reason to choose this path: the git-sourced
+> flow forwards the CI job's own `GITHUB_TOKEN` for a single clone, so a private repo
+> with no App installation still compiles from a real checkout. See
+> [quickstart.md § Path A2](quickstart.md#path-a2-ci-pipeline-with-an-observer-api-token).
+
 Use it when:
 
-- you are evaluating DAP and have not wired up a GitHub App yet,
-- your source lives outside GitHub (or in an air-gapped network),
-- your CI platform has no supported OIDC integration.
+- Observer has no network path back to your repository (air-gapped, or the repo lives on a host Observer cannot reach),
+- your source is not in a git repository at all,
+- you are packaging a directory assembled by an earlier build step rather than committed content.
 
 ## Prerequisites
 
 | Requirement | How to get it |
 |-------------|---------------|
 | `OBSERVER_API_URL` | Your Observer **management plane** URL (ask your platform admin) |
-| `DESLICER_API_TOKEN` | An Observer API key with the `tools` scope — Deslicer portal → **Platform → API keys** |
+| `DESLICER_API_TOKEN` | An Observer API key with the `tools` scope — Deslicer portal → **Platform → API keys**. Same secret can run git-sourced GitHub Actions (`change plan --target-group`) when the runner reaches Observer. Do not reuse DAI's stored admin/read keys. |
 | Target host group UUID | Deslicer portal → host groups, or `GET /api/v1/groups` |
 
 The bundle flow is **direct mode only**: it talks straight to the Observer API and ignores the deslicer-ai CI proxy. Both environment variables must be set (flags `--observer-api-url` works too; the token is env-only so it never appears in `ps` output).

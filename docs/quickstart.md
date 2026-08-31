@@ -7,6 +7,7 @@ For system context (components, sequence diagrams, DAP vs DAI boundaries), see [
 | Path | Where it runs | Auth | Requires |
 |------|---------------|------|----------|
 | [A. CI pipeline (OIDC)](#path-a-ci-pipeline-with-oidc) | GitHub Actions, GitLab CI, Azure DevOps, Bitbucket | CI OIDC token, exchanged automatically | Repo allowlisted + environment bound in the Deslicer portal |
+| [A2. CI pipeline (Observer API token)](#path-a2-ci-pipeline-with-an-observer-api-token) | GitHub Actions, GitLab CI | Static Observer API key | `OBSERVER_API_URL` + `DESLICER_API_TOKEN` + `--target-group` (runner must reach Observer management) |
 | [B. Bundle upload (GitHub-App-free)](#path-b-bundle-upload-github-app-free) | Any machine or CI runner | Static Observer API key | `OBSERVER_API_URL` + `DESLICER_API_TOKEN` |
 
 Install the CLI first — see [installation.md](installation.md).
@@ -52,13 +53,58 @@ deslicer change verify --plan-id "$PLAN_ID"
 
 `deploy` monitors the rollout until it finishes (use `--no-wait` to queue and return). `verify` re-runs a dry-run compile against the deployed state and confirms the change landed.
 
-### 5. Inspect at any time
+---
 
-```bash
-deslicer change status --plan-id "$PLAN_ID"   # plan/execution progress
-deslicer change show   --plan-id "$PLAN_ID"   # plan details
-deslicer change show                          # list recent plans
+## Path A2: CI pipeline with an Observer API token
+
+Use this when the runner can reach Observer's **management** plane and you do not want to set up CI OIDC. This is **not** DAI's stored admin/read key — mint a dedicated `tools`-scope key in the portal.
+
+### 1. Create the key
+
+In the Deslicer portal: **Platform → API keys** → create a key with scope **`tools`**. Copy the plaintext once. Store it as the GitHub Actions secret `DESLICER_API_TOKEN`. Also store `OBSERVER_API_URL` (management URL, not the data-plane port).
+
+Do not reuse the keys DAI stores on the tenant for the dashboard/CI proxy.
+
+### 2. GitHub Actions
+
+```yaml
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Plan change
+        env:
+          OBSERVER_API_URL: ${{ secrets.OBSERVER_API_URL }}
+          DESLICER_API_TOKEN: ${{ secrets.DESLICER_API_TOKEN }}
+          # Forwarded to Observer for one clone of this commit. Never stored.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: deslicer change plan --target-group ${{ vars.TARGET_GROUP_ID }}
 ```
+
+The CLI reads `GITHUB_REPOSITORY` and `GITHUB_SHA` from the runner (no `id-token: write` needed) and registers them on the plan. Observer's ephemeral compile-runner then clones that exact commit, so **git-lfs pointers are resolved to their contents** — something a bundle upload cannot do.
+
+### 3. Cloning a private repository without a GitHub App
+
+If your tenant has the Deslicer GitHub App installed on the repository, Observer mints its own short-lived installation token and that always takes precedence.
+
+Without an App installation, Observer has no credential of its own, so the CLI forwards the job's `GITHUB_TOKEN` for that single clone. The value is held in memory for one request, passed to the runner container as an environment variable, and never written to the database or a log line.
+
+Set `DESLICER_GIT_CLONE_TOKEN` instead when the job token cannot read the repository — for example when your Splunk configuration lives in a separate repo that needs a fine-grained PAT.
+
+Two boundaries are deliberate:
+
+- A repository that **is** mapped to a tenant App installation whose App is misconfigured still fails closed. A forwarded token can never substitute a foreign identity for a tenant-bound one.
+- GitLab remotes ignore `CI_JOB_TOKEN`; they continue to require a tenant repo binding plus `GITLAB_COMPILE_TOKEN` on Observer, because a GitLab job token needs a different HTTPS username and forwarding it would authenticate incorrectly rather than fail loudly.
+
+### 4. Approve
+
+Approve in the portal (**Automate → Plans**). A `tools` key cannot self-approve.
 
 ---
 
@@ -104,6 +150,18 @@ The CLI packages the directory (deterministic tar.gz), uploads it with its SHA-2
 Bundle-sourced plans are approved and executed from the Deslicer portal (**Automate → Plans**) — approval always requires a verified human identity.
 
 For details, limits, and the security model of this flow, see [bundle-flow.md](bundle-flow.md).
+
+---
+
+## Inspect a plan at any time
+
+Works for every path above:
+
+```bash
+deslicer change status --plan-id "$PLAN_ID"   # plan/execution progress
+deslicer change show   --plan-id "$PLAN_ID"   # plan details
+deslicer change show                          # list recent plans
+```
 
 ---
 

@@ -161,14 +161,41 @@ impl Client {
     /// For bundle-sourced plans the `git_ref` is a placeholder — the source
     /// is pinned by the bundle digest, not a git ref.
     pub async fn trigger_compile(&self, plan_row_id: &str, git_ref: &str) -> Result<(), CliError> {
+        self.trigger_compile_with_clone_token(plan_row_id, git_ref, None)
+            .await
+    }
+
+    /// Trigger the compile-runner, optionally forwarding the CI job's own git
+    /// credential so Observer can clone a private repository it has no GitHub App
+    /// installation for.
+    ///
+    /// Observer never persists the token: it lives in memory for one request and
+    /// reaches the runner only as a container environment variable.
+    pub async fn trigger_compile_with_clone_token(
+        &self,
+        plan_row_id: &str,
+        git_ref: &str,
+        clone_token: Option<&crate::clone_token::CloneToken>,
+    ) -> Result<(), CliError> {
         #[derive(Serialize)]
         struct Body<'a> {
             git_ref: &'a str,
+            /// Omitted entirely when absent so Observer keeps using its own
+            /// credential rather than seeing an explicit null.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            clone_token: Option<&'a str>,
         }
 
         let path = format!("api/v1/runners/compile/{plan_row_id}");
         let _: serde_json::Value = self
-            .request_json(Method::POST, &path, Some(&Body { git_ref }))
+            .request_json(
+                Method::POST,
+                &path,
+                Some(&Body {
+                    git_ref,
+                    clone_token: clone_token.map(|t| t.expose_secret()),
+                }),
+            )
             .await?;
         Ok(())
     }

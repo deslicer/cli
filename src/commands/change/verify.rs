@@ -28,8 +28,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             Err(err) => return map_cli_error(err),
         };
 
-    if let Err(err) = require_proxy_mode(&session, "change verify") {
-        return map_cli_error(err);
+    // Direct mode with a tools-scope key re-compiles against Observer itself, so
+    // it does not need the DAI CI proxy that `verify_plan_orchestrated` goes through.
+    if !session.backend.proxy_mode && !session.is_observer_api_token() {
+        if let Err(err) = require_proxy_mode(&session, "change verify") {
+            return map_cli_error(err);
+        }
     }
 
     // Resolve the internal row id — the compile-runner and diff endpoints
@@ -48,6 +52,24 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             ));
         }
         if let Err(err) = client.trigger_compile(&plan.id, "bundle").await {
+            eprintln!("verification failed: {err}");
+            return map_cli_error(err);
+        }
+    } else if session.is_observer_api_token() {
+        let git_ref = match args.git_ref.clone() {
+            Some(value) => value,
+            None => match crate::ci::git_identity(session.platform) {
+                Ok(identity) => identity.commit_sha,
+                Err(err) => return map_cli_error(err),
+            },
+        };
+        // Same clone credential as `change plan`: re-compiling a git-sourced plan
+        // needs a fresh clone, so it needs the same repository access.
+        let clone_token = crate::clone_token::from_env(session.platform);
+        if let Err(err) = client
+            .trigger_compile_with_clone_token(&plan.id, &git_ref, clone_token.as_ref())
+            .await
+        {
             eprintln!("verification failed: {err}");
             return map_cli_error(err);
         }

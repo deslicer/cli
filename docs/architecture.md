@@ -2,7 +2,7 @@
 
 How the `deslicer` CLI integrates with **deslicer-ai (DAI)** — the portal and CI control plane — and **DAP (Deslicer Automation Platform)** — the Observer API, compile-runner, and worker execution stack.
 
-For hands-on steps, see [quickstart.md](quickstart.md) (Path A: CI OIDC, Path B: bundle upload).
+For hands-on steps, see [quickstart.md](quickstart.md) (Path A: CI OIDC, Path A2: CI with an Observer API token, Path B: bundle upload).
 
 ## Components
 
@@ -60,21 +60,25 @@ flowchart TB
 
 ## Three integration paths
 
-Paths A and B are two ways to get a change plan compiled; they differ in
+Paths A, A2, and B are three ways to get a change plan compiled; they differ in
 **auth**, **whether DAI is involved**, and **how source code reaches the
 compile-runner**. Path C is a different job entirely — asking an agent a
 question — and shares none of that machinery.
 
-| | **Path A — CI / OIDC** | **Path B — Bundle upload** | **Path C — Agent run** |
-|---|---|---|---|
-| **Trigger** | `deslicer change plan` (default) | `deslicer change plan --source-dir …` | `deslicer agent run` |
-| **Auth** | CI OIDC JWT (audience `https://api.deslicer.ai`) | Static `DESLICER_API_TOKEN` (`tools` scope) | Device session (`deslicer login`) |
-| **DAI involved?** | Yes — resolve-backend; usually CI proxy | No — direct to Observer | Yes — DAI runs the agent |
-| **Source** | Git clone at CI commit | Local `apps/` directory (tar.gz + SHA-256) | A prompt |
-| **GitHub App** | Repo bound in DAI (`github_installations`) | Not required | Not required |
-| **Trust tier** | Can be git-verified (`is_trusted_source`) | Always `is_trusted_source: false`, `source_tier: ci_bundle` | n/a — no plan is produced |
-| **Best for** | Production CI pipelines | Local eval, air-gap, unsupported CI OIDC | Asking a fleet question from a terminal |
-| **Docs** | [quickstart.md § Path A](quickstart.md#path-a-ci-pipeline-with-oidc) | [bundle-flow.md](bundle-flow.md) | [agent-runs.md](agent-runs.md) |
+A and A2 both compile from a real git clone, so git-lfs pointers are resolved to
+their contents. B cannot: the bundle carries whatever is in the working tree.
+
+| | **Path A — CI / OIDC** | **Path A2 — CI / Observer token** | **Path B — Bundle upload** | **Path C — Agent run** |
+|---|---|---|---|---|
+| **Trigger** | `deslicer change plan` (default) | `deslicer change plan --target-group …` | `deslicer change plan --source-dir …` | `deslicer agent run` |
+| **Auth** | CI OIDC JWT (audience `https://api.deslicer.ai`) | Static `DESLICER_API_TOKEN` (`tools` scope) | Static `DESLICER_API_TOKEN` (`tools` scope) | Device session (`deslicer login`) |
+| **DAI involved?** | Yes — resolve-backend; usually CI proxy | No — direct to Observer | No — direct to Observer | Yes — DAI runs the agent |
+| **Source** | Git clone at CI commit | Git clone at `GITHUB_SHA` / `CI_COMMIT_SHA` | Local `apps/` directory (tar.gz + SHA-256) | A prompt |
+| **GitHub App** | Repo bound in DAI (`github_installations`) | Not required — the job's `GITHUB_TOKEN` is forwarded for one clone | Not required | Not required |
+| **git-lfs** | Resolved (real clone) | Resolved (real clone) | **Not resolved** — the bundle carries pointer files | n/a |
+| **Trust tier** | Can be git-verified (`is_trusted_source`) | Same as Path A when the repo is connected | Always `is_trusted_source: false`, `source_tier: ci_bundle` | n/a — no plan is produced |
+| **Best for** | Production CI with OIDC | GitHub/GitLab when the runner can reach Observer | Observer has no network path to the repo | Asking a fleet question from a terminal |
+| **Docs** | [quickstart.md § Path A](quickstart.md#path-a-ci-pipeline-with-oidc) | [quickstart.md § Path A2](quickstart.md#path-a2-ci-pipeline-with-an-observer-api-token) | [bundle-flow.md](bundle-flow.md) | [agent-runs.md](agent-runs.md) |
 
 ---
 
@@ -261,7 +265,9 @@ Set `OBSERVER_API_URL` to the **management** plane URL. Using the data plane por
 | `src/oidc_exchange.rs` | `POST /api/v1/auth/ci-oidc` (non-proxy mode) |
 | `src/commands/pipeline.rs` | Authenticate: resolve + build `Client` |
 | `src/observer_client/` | HTTP to Observer or CI proxy (`/api/cli/observer/…`) |
-| `src/commands/change/plan.rs` | Orchestrated plan (Path A) vs bundle flow (Path B) |
+| `src/commands/change/plan.rs` | Orchestrated plan (Path A) vs direct git (A2) vs bundle flow (B) |
+| `src/clone_token.rs` | Resolves the job-scoped git credential forwarded for one clone |
+| `src/ci/git_identity.rs` | Repository URL + commit SHA from runner env (Path A2, no OIDC) |
 | `src/bundle.rs` | Deterministic tar.gz packaging |
 | `src/commands/agent/` | Agent runs (Path C): HTTP client, stream consumer, renderer |
 | `src/sse.rs` | Incremental Server-Sent Events parser |
