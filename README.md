@@ -70,6 +70,9 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **change** | `deslicer change deploy` | Execute an approved plan |
 | **change** | `deslicer change verify` | Verify deployment outcome |
 | **change** | `deslicer change status` | Poll plan/execution status |
+| **agent** | `deslicer agent list` | List the agents this session can run |
+| **agent** | `deslicer agent run` | Run an agent and stream its answer (`--no-wait` to detach) |
+| **agent** | `deslicer agent logs` | Read or follow a run that is already going |
 | | `deslicer update` | Self-update the binary from GitHub Releases (`--check` to preview) |
 
 ### Global flags and environment
@@ -116,6 +119,7 @@ See [docs/installation.md](docs/installation.md) and [docs/quickstart.md](docs/q
 - [Architecture](docs/architecture.md) — how the CLI integrates with DAP and deslicer-ai
 - [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
 - [Bundle flow](docs/bundle-flow.md) — GitHub-App-free plans from a local directory
+- [Agent runs](docs/agent-runs.md) — run a deslicer-ai agent from a terminal or a pipeline
 - [CI outputs](docs/ci-outputs.md) — output variables per command and CI platform
 - [Local testing](docs/local-testing.md) — build from source and test against a local Observer
 - [Installation](docs/installation.md) — Homebrew, cargo, curl, Docker, and CI platform matrix

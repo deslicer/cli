@@ -58,20 +58,23 @@ flowchart TB
     Worker --> Data
 ```
 
-## Two integration paths
+## Three integration paths
 
-The CLI supports two paths. They differ in **auth**, **whether DAI is involved**, and **how source code reaches the compile-runner**.
+Paths A and B are two ways to get a change plan compiled; they differ in
+**auth**, **whether DAI is involved**, and **how source code reaches the
+compile-runner**. Path C is a different job entirely — asking an agent a
+question — and shares none of that machinery.
 
-| | **Path A — CI / OIDC** | **Path B — Bundle upload** |
-|---|---|---|
-| **Trigger** | `deslicer change plan` (default) | `deslicer change plan --source-dir …` |
-| **Auth** | CI OIDC JWT (audience `https://api.deslicer.ai`) | Static `DESLICER_API_TOKEN` (`tools` scope) |
-| **DAI involved?** | Yes — resolve-backend; usually CI proxy | No — direct to Observer |
-| **Source** | Git clone at CI commit | Local `apps/` directory (tar.gz + SHA-256) |
-| **GitHub App** | Repo bound in DAI (`github_installations`) | Not required |
-| **Trust tier** | Can be git-verified (`is_trusted_source`) | Always `is_trusted_source: false`, `source_tier: ci_bundle` |
-| **Best for** | Production CI pipelines | Local eval, air-gap, unsupported CI OIDC |
-| **Docs** | [quickstart.md § Path A](quickstart.md#path-a-ci-pipeline-with-oidc) | [bundle-flow.md](bundle-flow.md) |
+| | **Path A — CI / OIDC** | **Path B — Bundle upload** | **Path C — Agent run** |
+|---|---|---|---|
+| **Trigger** | `deslicer change plan` (default) | `deslicer change plan --source-dir …` | `deslicer agent run` |
+| **Auth** | CI OIDC JWT (audience `https://api.deslicer.ai`) | Static `DESLICER_API_TOKEN` (`tools` scope) | Device session (`deslicer login`) |
+| **DAI involved?** | Yes — resolve-backend; usually CI proxy | No — direct to Observer | Yes — DAI runs the agent |
+| **Source** | Git clone at CI commit | Local `apps/` directory (tar.gz + SHA-256) | A prompt |
+| **GitHub App** | Repo bound in DAI (`github_installations`) | Not required | Not required |
+| **Trust tier** | Can be git-verified (`is_trusted_source`) | Always `is_trusted_source: false`, `source_tier: ci_bundle` | n/a — no plan is produced |
+| **Best for** | Production CI pipelines | Local eval, air-gap, unsupported CI OIDC | Asking a fleet question from a terminal |
+| **Docs** | [quickstart.md § Path A](quickstart.md#path-a-ci-pipeline-with-oidc) | [bundle-flow.md](bundle-flow.md) | [agent-runs.md](agent-runs.md) |
 
 ---
 
@@ -176,6 +179,42 @@ Steps map to `src/commands/change/plan.rs` (`run_bundle_flow`) and `src/bundle.r
 
 ---
 
+## Path C — Agent runs (DAI only)
+
+`deslicer agent` is the one command group that never reaches Observer. The CLI
+posts to deslicer-ai at `/api/cli/agents/runs` and reads the answer back as a
+Server-Sent Events stream; whatever Observer calls the agent makes on the way
+are the agent's own, made server-side with the tenant's stored credentials.
+
+```mermaid
+sequenceDiagram
+    participant CLI as deslicer CLI
+    participant DAI as deslicer-ai
+    participant Obs as observer-api
+
+    CLI->>DAI: POST /api/cli/agents/runs (device session)
+    DAI->>DAI: Orchestrate the agent
+    DAI->>Obs: Tool calls, as the tenant
+    DAI-->>CLI: SSE stream (answer, reasoning, tool activity)
+```
+
+Two properties follow from the run living in DAI rather than in the CLI
+process:
+
+- **The run outlives the connection.** Ctrl-C, a dropped network, or a closed
+  laptop stops the reading, not the run. `deslicer agent logs <run-id>
+  --follow` reattaches to a live stream when the deployment has Redis, and
+  falls back to polling the stored transcript when it does not.
+- **Auth is a person, not a pipeline.** Agent runs need a device session; a CI
+  OIDC token has no principal whose team and tool permissions the orchestrator
+  could resolve.
+
+Steps map to `src/commands/agent/` in this repo and
+`lib/integrations/cli-device/agent-run/` in deslicer-ai. Full detail:
+[agent-runs.md](agent-runs.md).
+
+---
+
 ## Human approval boundary
 
 ```mermaid
@@ -224,3 +263,5 @@ Set `OBSERVER_API_URL` to the **management** plane URL. Using the data plane por
 | `src/observer_client/` | HTTP to Observer or CI proxy (`/api/cli/observer/…`) |
 | `src/commands/change/plan.rs` | Orchestrated plan (Path A) vs bundle flow (Path B) |
 | `src/bundle.rs` | Deterministic tar.gz packaging |
+| `src/commands/agent/` | Agent runs (Path C): HTTP client, stream consumer, renderer |
+| `src/sse.rs` | Incremental Server-Sent Events parser |
