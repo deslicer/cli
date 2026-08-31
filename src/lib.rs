@@ -11,6 +11,7 @@ pub mod observer_token;
 pub mod oidc_exchange;
 pub mod output;
 pub mod resolver;
+pub mod sse;
 pub mod token_source;
 pub mod token_store;
 pub mod tool_download;

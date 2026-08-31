@@ -38,6 +38,9 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Run agents and stream their answers (device session)
+    #[command(subcommand)]
+    Agent(crate::commands::agent::AgentCmd),
     #[command(subcommand)]
     Auth(crate::commands::auth::AuthCmd),
     #[command(subcommand)]
@@ -111,6 +114,7 @@ impl Cli {
             log_format: self.log_format,
         };
         match self.command {
+            Command::Agent(cmd) => crate::commands::agent::dispatch(ctx, cmd).await,
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,

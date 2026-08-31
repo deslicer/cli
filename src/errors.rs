@@ -25,6 +25,8 @@ pub enum CliError {
          that requires reviewers so the CI proxy can attest the approver."
     )]
     HumanApprovalRequired(String),
+    #[error("agent run failed: {0}")]
+    AgentRunFailed(String),
     #[error("transport error: {0}")]
     Transport(String),
     #[error("{0}")]
@@ -43,6 +45,7 @@ impl CliError {
             CliError::BackendUnavailable(_) | CliError::Transport(_) => 10,
             CliError::PlanNotFound(_) => 11,
             CliError::HumanApprovalRequired(_) => 12,
+            CliError::AgentRunFailed(_) => 13,
             CliError::Other(_) => 1,
         }
     }
