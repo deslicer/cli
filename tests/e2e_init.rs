@@ -11,6 +11,8 @@ use url::Url;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+// REQ: serialize DESLICER_* env across async e2e tests (process-global).
+#[allow(clippy::await_holding_lock)]
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -35,6 +37,7 @@ fn clear_init_env() {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn init_github_token_writes_path_a2_workflow() {
     let _guard = env_lock().lock().expect("env lock");
     let cache = tempdir().expect("cache");
@@ -102,6 +105,7 @@ jobs:
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn init_refuses_sha_mismatch() {
     let _guard = env_lock().lock().expect("env lock");
     let cache = tempdir().expect("cache");
