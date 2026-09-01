@@ -104,6 +104,7 @@ async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSess
                 display_name: body.display_name,
                 observer_api_url,
                 tenant_slug: None,
+                deslicer_api_url: Some(ctx.deslicer_api_url.to_string()),
             });
         }
         let err_body: TokenError = response.json().await.unwrap_or_else(|_| TokenError {
@@ -185,6 +186,10 @@ mod tests {
         assert_eq!(session.display_name, "Ada");
         assert_eq!(session.tenant_id, "tenant-1");
         assert!(session.observer_api_url.ends_with("/api/cli/observer/"));
+        assert_eq!(
+            session.deslicer_api_url.as_deref(),
+            Some(ctx.deslicer_api_url.as_str())
+        );
         assert!(session.cli_session_token.starts_with("dslcli_"));
     }
 }

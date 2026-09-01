@@ -23,6 +23,10 @@ pub struct StoredSession {
     /// Old sessions omit the field; serde defaults to `None`.
     #[serde(default)]
     pub tenant_slug: Option<String>,
+    /// Portal that issued this session (`--deslicer-api-url` at login).
+    /// Old sessions omit the field; the origin of `observer_api_url` is used.
+    #[serde(default)]
+    pub deslicer_api_url: Option<String>,
 }
 
 impl StoredSession {
@@ -141,8 +145,23 @@ impl CompositeTokenStore {
     }
 }
 
+fn prefer_file_token_store() -> bool {
+    matches!(
+        std::env::var("DESLICER_TOKEN_STORE")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("file")
+    )
+}
+
 impl TokenStore for CompositeTokenStore {
     fn load(&self) -> Result<Option<StoredSession>, CliError> {
+        if prefer_file_token_store() {
+            return self.fallback.load();
+        }
         match self.preferred.load() {
             Ok(Some(session)) => Ok(Some(session)),
             Ok(None) => self.fallback.load(),
@@ -151,6 +170,9 @@ impl TokenStore for CompositeTokenStore {
     }
 
     fn save(&self, session: &StoredSession) -> Result<(), CliError> {
+        if prefer_file_token_store() {
+            return self.fallback.save(session);
+        }
         match self.preferred.save(session) {
             Ok(()) => {
                 let _ = self.fallback.clear();
@@ -167,6 +189,9 @@ impl TokenStore for CompositeTokenStore {
     }
 
     fn clear(&self) -> Result<(), CliError> {
+        if prefer_file_token_store() {
+            return self.fallback.clear();
+        }
         let keyring = self.preferred.clear();
         let file = self.fallback.clear();
         keyring.or(file)
@@ -267,6 +292,7 @@ mod tests {
             display_name: "Ada".into(),
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
             tenant_slug: None,
+            deslicer_api_url: None,
         };
         store.save(&session).unwrap();
         assert_eq!(store.load().unwrap(), Some(session));
@@ -283,6 +309,7 @@ mod tests {
             display_name: "Ada".into(),
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
             tenant_slug: None,
+            deslicer_api_url: None,
         };
         assert!(session.is_active());
     }
@@ -296,7 +323,27 @@ mod tests {
             display_name: "Ada".into(),
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
             tenant_slug: None,
+            deslicer_api_url: None,
         };
         assert!(!session.is_active());
+    }
+
+    #[test]
+    fn old_json_sessions_without_portal_url_still_parse() {
+        let session: StoredSession = serde_json::from_str(
+            r#"{
+                "cli_session_token": "dslcli_abc",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "tenant_id": "tenant",
+                "display_name": "Ada",
+                "observer_api_url": "https://ops.deslicer.show/api/cli/observer/"
+            }"#,
+        )
+        .unwrap();
+        assert!(session.deslicer_api_url.is_none());
+        assert_eq!(
+            session.observer_api_url,
+            "https://ops.deslicer.show/api/cli/observer/"
+        );
     }
 }
