@@ -152,6 +152,20 @@ fn path_a2_next_step() -> String {
      - Variable (or secret): OBSERVER_API_URL\n\
      - Variable: TARGET_GROUP_ID\n\
      - Variable: DESLICER_API_URL (portal base for plan links)\n\
-     Re-scaffold: deslicer init --provider github-token --force"
+     Re-scaffold: deslicer init --provider github-token --force\n\
+     Docs: deslicer docs path-a2"
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_a2_points_at_docs_command() {
+        let text = bind_next_step(InitProvider::GithubToken);
+        assert!(text.contains("deslicer docs path-a2"));
+        assert!(text.contains("DESLICER_API_TOKEN"));
+        assert!(!text.contains("id-token: write"));
+    }
 }

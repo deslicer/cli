@@ -16,6 +16,7 @@ no GitHub App) is always explicit:
 ```bash
 deslicer init --provider github-token --force
 # then set GH secrets/vars and commit
+# later: deslicer docs path-a2
 ```
 
 | Secret / variable | Path A2 |

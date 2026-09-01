@@ -20,7 +20,20 @@ use provider::{detect_provider, origin_for_dir, OriginRepo};
 use templates::load_templates;
 use write::write_templates;
 
+const INIT_EXAMPLES: &str = "\
+Examples:
+  deslicer init
+  deslicer init --provider github
+  deslicer init --provider github-token
+  deslicer init --provider github --bind --environment prod --target-group <uuid>
+
+Path A2 (Observer token, no GitHub App) is always explicit:
+  deslicer init --provider github-token
+  deslicer docs path-a2
+";
+
 #[derive(ClapArgs)]
+#[command(after_long_help = INIT_EXAMPLES)]
 pub struct Args {
     /// github, github-token, gitlab, bitbucket, azure, or auto (from `git remote get-url origin`)
     #[arg(long, default_value = "auto")]

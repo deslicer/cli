@@ -1,0 +1,70 @@
+# Copy curated cli/docs pages into deslicer/docs products/cli/.
+# Does not publish to docs.deslicer.io (enterprise allowlist only).
+
+name: CLI docs sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "docs/sync-manifest.toml"
+      - "scripts/sync-cli-docs.py"
+      - "src/commands/docs/**"
+      - ".github/workflows/docs-sync.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync products/cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout CLI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require CROSS_REPO_WORKFLOW_TOKEN
+        env:
+          CROSS_REPO_WORKFLOW_TOKEN: ${{ secrets.CROSS_REPO_WORKFLOW_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CROSS_REPO_WORKFLOW_TOKEN:-}" ]; then
+            echo "::error::Missing secret CROSS_REPO_WORKFLOW_TOKEN (fail-closed)"
+            exit 1
+          fi
+
+      - name: Clone docs and copy pages
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_WORKFLOW_TOKEN }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DEST="$(mktemp -d)"
+          gh repo clone deslicer/docs "$DEST" -- --depth 1 --branch main
+          python3 scripts/sync-cli-docs.py \
+            --cli-root . \
+            --docs-root "$DEST" \
+            --sha "$GIT_SHA"
+          cd "$DEST"
+          git config user.name "slicer-bot"
+          git config user.email "bot@deslicer.ai"
+          BRANCH="chore/cli-docs-sync-${GIT_SHA:0:8}"
+          git checkout -B "$BRANCH"
+          git add products/cli README.md
+          if git diff --cached --quiet; then
+            echo "docs already in sync"
+            exit 0
+          fi
+          git commit -m "chore: sync Deslicer CLI docs from ${GIT_SHA:0:8}"
+          git push -u origin "$BRANCH"
+          EXISTING="$(gh pr list --repo deslicer/docs --head "$BRANCH" --json number -q '.[0].number' || true)"
+          if [ -n "${EXISTING:-}" ]; then
+            echo "updated existing PR #$EXISTING"
+            exit 0
+          fi
+          gh pr create --repo deslicer/docs --base main --head "$BRANCH" \
+            --title "chore: sync Deslicer CLI docs (${GIT_SHA:0:8})" \
+            --body "Synced from deslicer/cli@${GIT_SHA}. Source of truth is cli/docs. Do not edit products/cli in this repo."

@@ -140,7 +140,7 @@ jobs:
           BIN=./target/debug/deslicer
           "$BIN" --help
           "$BIN" --version
-          for cmd in auth change groups inventory completion update; do
+          for cmd in auth change groups inventory init docs completion update; do
             "$BIN" "$cmd" --help
           done
           for sub in plan show approve reject deploy verify status; do
