@@ -1,2 +1,8 @@
-# Default reviewers for deslicer/cli
+# Public repository: reviews are required on main.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners
 * @deslicer/core
+
+# GitHub Actions workflows
+.github/workflows/ @deslicer/core
