@@ -2,6 +2,7 @@ pub mod agent;
 pub mod auth;
 pub mod change;
 pub mod completion;
+pub mod docs;
 pub mod enroll;
 pub mod groups;
 pub mod init;

@@ -1,0 +1,56 @@
+# Customer-facing CLI guides copied to deslicer/docs `products/cli/`.
+# Keep in lockstep with `src/commands/docs/catalog.rs` (cargo test).
+# Internal pages (local-testing, contributing, release-process) stay in this repo only.
+#
+# Public https://docs.deslicer.io publishes products/enterprise/ only.
+# This tree is for the private docs repo and customer copies (docs_update.py).
+
+[sync]
+dest_repo = "deslicer/docs"
+dest_dir = "products/cli"
+dest_branch = "main"
+
+[[page]]
+id = "quickstart"
+source = "docs/quickstart.md"
+dest = "01-quickstart.md"
+
+[[page]]
+id = "init"
+source = "docs/repo-init-and-enroll.md"
+dest = "02-repo-init-and-enroll.md"
+
+[[page]]
+id = "install"
+source = "docs/installation.md"
+dest = "03-installation.md"
+
+[[page]]
+id = "architecture"
+source = "docs/architecture.md"
+dest = "04-architecture.md"
+
+[[page]]
+id = "bundle"
+source = "docs/bundle-flow.md"
+dest = "05-bundle-flow.md"
+
+[[page]]
+id = "ci-outputs"
+source = "docs/ci-outputs.md"
+dest = "06-ci-outputs.md"
+
+[[page]]
+id = "environments"
+source = "docs/environments.md"
+dest = "07-environments.md"
+
+[[page]]
+id = "oidc"
+source = "docs/oidc-troubleshooting.md"
+dest = "08-oidc-troubleshooting.md"
+
+[[page]]
+id = "agent"
+source = "docs/agent-runs.md"
+dest = "09-agent-runs.md"

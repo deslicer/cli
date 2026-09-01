@@ -53,6 +53,8 @@ pub enum Command {
     Inventory(crate::commands::inventory::InventoryCmd),
     /// Write CI templates for a config repo (optional --bind)
     Init(crate::commands::init::Args),
+    /// Print documentation topic URLs (`--open` for a browser)
+    Docs(crate::commands::docs::Args),
     /// Mint, list, or revoke enrollment tokens (device session)
     #[command(subcommand)]
     Enroll(crate::commands::enroll::EnrollCmd),
@@ -120,6 +122,7 @@ impl Cli {
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Init(args) => crate::commands::init::run(ctx, args).await,
+            Command::Docs(args) => crate::commands::docs::run(ctx, args),
             Command::Enroll(cmd) => crate::commands::enroll::dispatch(ctx, cmd).await,
             Command::Worker(cmd) => crate::commands::worker::dispatch(ctx, cmd).await,
             Command::Repo(cmd) => crate::commands::repo::dispatch(ctx, cmd).await,

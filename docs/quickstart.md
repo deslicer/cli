@@ -57,7 +57,7 @@ deslicer change verify --plan-id "$PLAN_ID"
 
 ## Path A2: CI pipeline with an Observer API token
 
-Use this when the runner can reach Observer's **management** plane and you do not want to set up CI OIDC. This is **not** DAI's stored admin/read key — mint a dedicated `tools`-scope key in the portal.
+Use this when the runner can reach Observer's **management** plane and you do not want to set up CI OIDC. This is **not** DAI's stored admin/read key — mint a dedicated `tools`-scope key in the portal. Print this section later with `deslicer docs path-a2`.
 
 Auto-detect (`deslicer init` without `--provider` on a `github.com` remote) still scaffolds the **OIDC/App** path. Path A2 is always explicit:
 

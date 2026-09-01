@@ -55,6 +55,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **groups** | `deslicer groups list` | List host groups (`id` is the value for `--target-group`) |
 | **inventory** | `deslicer inventory list` | List Ansible inventory groups and their hosts |
 | **init** | `deslicer init` | Write CI templates from Observer (`--provider`, optional `--bind`) |
+| **docs** | `deslicer docs` | Print a topic URL (`path-a2`, `init`, …). `--print` for URL only; `--open` for a browser |
 | **enroll** | `deslicer enroll create` | Mint a one-time enrollment token (device session; `--write-file` when not a TTY) |
 | **enroll** | `deslicer enroll list` | List tokens (never reprints the secret) |
 | **enroll** | `deslicer enroll revoke` | Revoke a token by UUID `--jti` |
@@ -87,6 +88,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | `DESLICER_API_TOKEN` (env only) | _(unset)_ | Observer API key (`tools` scope) for direct Observer access (bundle flow or git-sourced CI). Create under **Platform → API keys**. Not DAI's stored admin/read key. |
 | `--ci-platform` | `auto` | Force platform: `github`, `gitlab`, `azure`, `bitbucket`, `local` |
 | `--log-format` | `human` | `human` or `json` |
+| `DESLICER_DOCS_BASE_URL` (env only) | GitHub `cli` blob on `main` | Hosted docs root when `/cli` exists (today `docs.deslicer.io` is Enterprise-only) |
 
 ## GitHub Actions
 
