@@ -13,14 +13,16 @@ mod provider;
 mod templates;
 mod write;
 
+pub use provider::InitProvider;
+
 use bind::{bind_next_step, bind_repo, BindOutcome};
-use provider::{detect_provider, origin_for_dir, InitProvider, OriginRepo};
+use provider::{detect_provider, origin_for_dir, OriginRepo};
 use templates::load_templates;
 use write::write_templates;
 
 #[derive(ClapArgs)]
 pub struct Args {
-    /// github, gitlab, bitbucket, azure, or auto (from `git remote get-url origin`)
+    /// github, github-token, gitlab, bitbucket, azure, or auto (from `git remote get-url origin`)
     #[arg(long, default_value = "auto")]
     pub provider: String,
 
@@ -86,7 +88,11 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 
     if !args.bind {
         println!();
-        println!("Bind this repo (optional):");
+        if matches!(provider, InitProvider::GithubToken) {
+            println!("Next steps:");
+        } else {
+            println!("Bind this repo (optional):");
+        }
         println!("{}", bind_next_step(provider));
         return Ok(0);
     }

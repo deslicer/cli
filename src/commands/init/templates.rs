@@ -113,6 +113,11 @@ fn provider_allows_path(provider: InitProvider, path: &str) -> bool {
                 || path.starts_with(".github/workflows/")
                 || path.starts_with(".deslicer/")
         }
+        InitProvider::GithubToken => {
+            path == "README.md"
+                || path.starts_with(".github/workflows/")
+                || path.starts_with(".github/scripts/")
+        }
         InitProvider::Gitlab => path == ".gitlab-ci.yml" || path.starts_with(".deslicer/gitlab/"),
         InitProvider::Azure => path == "azure-pipelines.yml",
         InitProvider::Bitbucket => path == "bitbucket-pipelines.yml",
@@ -253,5 +258,24 @@ mod tests {
         let decoded = decode_and_validate(InitProvider::Github, &bundle).unwrap();
         assert_eq!(decoded[0].contents, contents.as_bytes());
         assert!(!decoded[0].if_missing);
+    }
+
+    #[test]
+    fn github_token_allowlists_scripts() {
+        assert!(validate_template_path(
+            InitProvider::GithubToken,
+            ".github/scripts/append-plan-changed-files.sh"
+        )
+        .is_ok());
+        assert!(validate_template_path(
+            InitProvider::GithubToken,
+            ".github/workflows/deslicer-plan.yml"
+        )
+        .is_ok());
+        assert!(validate_template_path(
+            InitProvider::GithubToken,
+            ".deslicer/environments/README.md"
+        )
+        .is_err());
     }
 }

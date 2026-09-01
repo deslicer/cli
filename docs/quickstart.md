@@ -59,13 +59,31 @@ deslicer change verify --plan-id "$PLAN_ID"
 
 Use this when the runner can reach Observer's **management** plane and you do not want to set up CI OIDC. This is **not** DAI's stored admin/read key — mint a dedicated `tools`-scope key in the portal.
 
-### 1. Create the key
+Auto-detect (`deslicer init` without `--provider` on a `github.com` remote) still scaffolds the **OIDC/App** path. Path A2 is always explicit:
 
-In the Deslicer portal: **Platform → API keys** → create a key with scope **`tools`**. Copy the plaintext once. Store it as the GitHub Actions secret `DESLICER_API_TOKEN`. Also store `OBSERVER_API_URL` (management URL, not the data-plane port).
+```bash
+deslicer init --provider github-token --force
+# then set GH secrets/vars and commit
+```
+
+### 1. Create the key and repository settings
+
+In the Deslicer portal: **Platform → API keys** → create a key with scope **`tools`**. Copy the plaintext once. Store it as the GitHub Actions secret `DESLICER_API_TOKEN`.
+
+| Kind | Name | Purpose |
+|------|------|---------|
+| Secret | `DESLICER_API_TOKEN` | tools-scope Observer API key |
+| Variable (or secret) | `OBSERVER_API_URL` | Observer management URL (not the data-plane port) |
+| Variable | `TARGET_GROUP_ID` | Host group UUID |
+| Variable | `DESLICER_API_URL` | deslicer-ai portal base URL (plan UI links) |
 
 Do not reuse the keys DAI stores on the tenant for the dashboard/CI proxy.
 
 ### 2. GitHub Actions
+
+`deslicer init --provider github-token` writes pinned workflows that use `deslicer/change-action` (no floating `main`, no `id-token: write`). They run `change plan --target-group`, print a portal link, and append a metadata-only changed-files summary. Do **not** chain `change verify` after plan — re-compile fails with `invalid_plan_state`.
+
+Minimal shape (the scaffolded files are authoritative):
 
 ```yaml
 permissions:
@@ -80,7 +98,7 @@ jobs:
           lfs: true
       - name: Plan change
         env:
-          OBSERVER_API_URL: ${{ secrets.OBSERVER_API_URL }}
+          OBSERVER_API_URL: ${{ vars.OBSERVER_API_URL }}
           DESLICER_API_TOKEN: ${{ secrets.DESLICER_API_TOKEN }}
           # Forwarded to Observer for one clone of this commit. Never stored.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,6 +106,7 @@ jobs:
 ```
 
 The CLI reads `GITHUB_REPOSITORY` and `GITHUB_SHA` from the runner (no `id-token: write` needed) and registers them on the plan. Observer's ephemeral compile-runner then clones that exact commit, so **git-lfs pointers are resolved to their contents** — something a bundle upload cannot do.
+
 
 ### 3. Cloning a private repository without a GitHub App
 
