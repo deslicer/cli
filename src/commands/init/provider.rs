@@ -6,6 +6,8 @@ use crate::errors::CliError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InitProvider {
     Github,
+    /// Path A2: Observer API token, no GitHub App OIDC.
+    GithubToken,
     Gitlab,
     Azure,
     Bitbucket,
@@ -15,6 +17,7 @@ impl InitProvider {
     pub fn parse(raw: &str) -> Result<Self, CliError> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "github" => Ok(Self::Github),
+            "github-token" | "github_token" => Ok(Self::GithubToken),
             "gitlab" => Ok(Self::Gitlab),
             "azure" => Ok(Self::Azure),
             "bitbucket" => Ok(Self::Bitbucket),
@@ -22,7 +25,7 @@ impl InitProvider {
                 "provider auto must be resolved from git remote origin".into(),
             )),
             other => Err(CliError::Other(format!(
-                "unknown provider {other:?}; use github, gitlab, bitbucket, or azure"
+                "unknown provider {other:?}; use github, github-token, gitlab, bitbucket, or azure"
             ))),
         }
     }
@@ -30,6 +33,7 @@ impl InitProvider {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Github => "github",
+            Self::GithubToken => "github-token",
             Self::Gitlab => "gitlab",
             Self::Azure => "azure",
             Self::Bitbucket => "bitbucket",
@@ -65,7 +69,8 @@ fn git_origin_url(dir: &Path) -> Result<String, CliError> {
         .map_err(|err| CliError::Other(format!("git remote get-url origin failed: {err}")))?;
     if !output.status.success() {
         return Err(CliError::Other(
-            "no git remote named origin; pass --provider github|gitlab|bitbucket|azure".into(),
+            "no git remote named origin; pass --provider github|github-token|gitlab|bitbucket|azure"
+                .into(),
         ));
     }
     let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -135,7 +140,7 @@ fn provider_from_host(host: &str) -> Result<InitProvider, CliError> {
         return Ok(InitProvider::Bitbucket);
     }
     Err(CliError::Other(format!(
-        "unknown git host {host:?}; pass --provider github, gitlab, bitbucket, or azure"
+        "unknown git host {host:?}; pass --provider github, github-token, gitlab, bitbucket, or azure"
     )))
 }
 
@@ -164,12 +169,27 @@ mod tests {
     }
 
     #[test]
-    fn unknown_host_names_four_providers() {
+    fn unknown_host_names_providers() {
         let err = provider_from_host("git.example.internal").unwrap_err();
         let text = err.to_string();
         assert!(text.contains("github"));
+        assert!(text.contains("github-token"));
         assert!(text.contains("gitlab"));
         assert!(text.contains("bitbucket"));
         assert!(text.contains("azure"));
+    }
+
+    #[test]
+    fn parses_github_token_provider() {
+        assert_eq!(
+            InitProvider::parse("github-token").unwrap(),
+            InitProvider::GithubToken
+        );
+        assert_eq!(InitProvider::GithubToken.as_str(), "github-token");
+        // Auto-detect still maps github.com → OIDC Github, not token path.
+        assert_eq!(
+            provider_from_host("github.com").unwrap(),
+            InitProvider::Github
+        );
     }
 }

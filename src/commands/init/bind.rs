@@ -32,6 +32,9 @@ pub async fn bind_repo(
     match provider {
         InitProvider::Github => bind_github(client, origin, environment, target_group).await,
         InitProvider::Gitlab => bind_gitlab(client, origin, environment, target_group).await,
+        InitProvider::GithubToken => Ok(BindOutcome::PrintPortal {
+            message: path_a2_next_step(),
+        }),
         InitProvider::Azure => Ok(BindOutcome::PrintPortal {
             message: "Azure DevOps compile is bundle-only this release. Bind the environment in the portal (Platform → CI environments), then run `deslicer change plan --source-dir .`.".into(),
         }),
@@ -129,6 +132,7 @@ pub fn bind_next_step(provider: InitProvider) -> String {
              Or connect GitHub in the portal: Platform → GitHub → Connect"
                 .into()
         }
+        InitProvider::GithubToken => path_a2_next_step(),
         InitProvider::Gitlab => {
             "deslicer init --provider gitlab --bind --environment <name> --target-group <uuid>"
                 .into()
@@ -139,4 +143,15 @@ pub fn bind_next_step(provider: InitProvider) -> String {
                 .into()
         }
     }
+}
+
+/// Path A2: git-sourced plan with Observer tools token (no GitHub App bind).
+fn path_a2_next_step() -> String {
+    "Path A2 (Observer API token, no GitHub App). Set these, then commit the scaffolded workflows:\n\
+     - Secret: DESLICER_API_TOKEN (tools-scope Observer key)\n\
+     - Variable (or secret): OBSERVER_API_URL\n\
+     - Variable: TARGET_GROUP_ID\n\
+     - Variable: DESLICER_API_URL (portal base for plan links)\n\
+     Re-scaffold: deslicer init --provider github-token --force"
+        .into()
 }

@@ -113,6 +113,11 @@ fn provider_allows_path(provider: InitProvider, path: &str) -> bool {
                 || path.starts_with(".github/workflows/")
                 || path.starts_with(".deslicer/")
         }
+        InitProvider::GithubToken => {
+            path == "README.md"
+                || path.starts_with(".github/workflows/")
+                || path.starts_with(".github/scripts/")
+        }
         InitProvider::Gitlab => path == ".gitlab-ci.yml" || path.starts_with(".deslicer/gitlab/"),
         InitProvider::Azure => path == "azure-pipelines.yml",
         InitProvider::Bitbucket => path == "bitbucket-pipelines.yml",
@@ -143,7 +148,10 @@ fn cache_root() -> Result<PathBuf, CliError> {
             return Ok(PathBuf::from(trimmed).join("bootstrap-templates"));
         }
     }
-    let home = std::env::var("HOME").map_err(|_| CliError::Other("HOME is not set".into()))?;
+    // Windows CI/runners often set USERPROFILE but not HOME (token_store same pattern).
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| CliError::Other("HOME is not set".into()))?;
     Ok(PathBuf::from(home)
         .join(".cache")
         .join("deslicer")
@@ -166,11 +174,11 @@ fn write_offline_cache(
         .map_err(|err| CliError::Other(format!("serialize template cache: {err}")))?;
     std::fs::write(dir.join("bundle.json"), json)
         .map_err(|err| CliError::Other(format!("write template cache: {err}")))?;
-    std::fs::write(
-        cache_root()?.join(provider.as_str()).join("latest"),
-        bundle.tree_sha256.as_bytes(),
-    )
-    .map_err(|err| CliError::Other(format!("write template cache pointer: {err}")))?;
+    let provider_root = cache_root()?.join(provider.as_str());
+    std::fs::create_dir_all(&provider_root)
+        .map_err(|err| CliError::Other(format!("create template cache: {err}")))?;
+    std::fs::write(provider_root.join("latest"), bundle.tree_sha256.as_bytes())
+        .map_err(|err| CliError::Other(format!("write template cache pointer: {err}")))?;
     Ok(())
 }
 
@@ -253,5 +261,24 @@ mod tests {
         let decoded = decode_and_validate(InitProvider::Github, &bundle).unwrap();
         assert_eq!(decoded[0].contents, contents.as_bytes());
         assert!(!decoded[0].if_missing);
+    }
+
+    #[test]
+    fn github_token_allowlists_scripts() {
+        assert!(validate_template_path(
+            InitProvider::GithubToken,
+            ".github/scripts/append-plan-changed-files.sh"
+        )
+        .is_ok());
+        assert!(validate_template_path(
+            InitProvider::GithubToken,
+            ".github/workflows/deslicer-plan.yml"
+        )
+        .is_ok());
+        assert!(validate_template_path(
+            InitProvider::GithubToken,
+            ".deslicer/environments/README.md"
+        )
+        .is_err());
     }
 }
