@@ -275,6 +275,9 @@ async fn run_direct_git_plan(
             args.name.as_deref(),
         )
         .await?;
+    if !is_still_compiling(&plan.status) {
+        return Ok(plan);
+    }
     client
         .trigger_compile_with_clone_token(&plan.id, &identity.commit_sha, clone_token.as_ref())
         .await?;
@@ -370,5 +373,17 @@ mod tests {
             resolved,
             vec![Some("staging".to_string()), Some("prod".to_string())]
         );
+    }
+
+    #[test]
+    fn compile_is_only_triggered_while_still_compiling() {
+        assert!(super::is_still_compiling("draft"));
+        assert!(super::is_still_compiling("compiling"));
+        assert!(super::is_still_compiling("compile_pending"));
+        assert!(!super::is_still_compiling("pending_approval"));
+        assert!(!super::is_still_compiling("approved_unsigned"));
+        assert!(!super::is_still_compiling("executing"));
+        assert!(!super::is_still_compiling("completed"));
+        assert!(!super::is_still_compiling("failed"));
     }
 }
