@@ -49,24 +49,46 @@ UUID stems bypass fuzzy name matching and map one-to-one to the tenant record en
 
 ## File contents
 
-Environment files carry metadata used by the Action layer and portal (Plan 1d). Typical fields:
+Canonical Path A2 / Observer shape (byte-compatible header):
 
 ```yaml
-# .deslicer/environments/production.yml
-tenant_code: acme-prod
-description: Production Splunk fleet
-target_group: plant-a
+# Deslicer environment configuration.
+# File stem "acme-prod" maps to a workspace environment (tenant: Acme Prod).
+# Add apps under each inventory_group as `- source_path: <relative-app-path>`.
+# See README.md at the repository root for how this file is used.
+
+destinations:
+  - inventory_group: indexers
+    apps:
+      - source_path: apps/ta_nix
+  - inventory_group: forwarders
+    apps:
 ```
 
-Exact schema validation is enforced by the composite Action and portal — the CLI consumes the resolved binding after OIDC auth, not by walking these files itself.
+Each `inventory_group` is an Observer host group (`GET /api/v1/groups`). Apps are repo-relative `source_path` entries. The filename stem (`acme-prod` for `acme-prod.yml`) is the `--environment` value and the GitHub Environment name. A repo-level `DESLICER_ENVIRONMENT` variable is only the name pointer so `pull_request` can select that Environment.
+
+### Path A2 (Observer API token)
+
+`deslicer init --provider github-token --environment <tenant-slug>` writes `.deslicer/environments/<tenant-slug>.yml` with this tenant's host groups only. Refresh after inventory changes:
+
+```bash
+deslicer inventory sync
+# or: deslicer inventory sync --environment acme-prod --dry-run
+```
+
+Merge rules: new groups are appended (existing `apps:` lists stay intact); removed groups with empty `apps:` are dropped; removed groups that still list `source_path` apps are kept and the command exits 2 until you delete those apps from the file (and the repo) and re-run.
+
+`--force` on `init` overwrites workflow templates only — it does not wipe operator `apps:` lists.
+
+`init` prints a `gh` recipe to create the GitHub Environment and pipe secrets via stdin. The CLI never creates Environments or writes secrets. A second Observer backend is a second Environment plus a workflow matrix row, not a second repo-level token.
+
+GitHub App repos already receive this YAML from Observer `github_repo_sync`; do not use `inventory sync` as a substitute for App provision.
 
 ## Enumeration scope
 
-**Important:** walking `.deslicer/environments/` to list available environments is performed by the **GitHub Action / composite Action layer** (Plan 1d — `deslicer/change-action`), not by the `deslicer` CLI binary.
+`deslicer inventory sync` and Path A2 `init` read `.deslicer/environments/*.{yml,yaml}` locally to resolve a single filename stem when `--environment` is omitted. CI OIDC still resolves the binding through deslicer-ai after authentication.
 
-The CLI accepts `--environment <name>` and validates the binding through deslicer-ai after authentication. It does not glob the directory locally.
-
-For local discovery, list files manually:
+For a manual listing:
 
 ```bash
 ls .deslicer/environments/

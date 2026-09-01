@@ -103,6 +103,7 @@ async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSess
                 tenant_id: body.tenant_id,
                 display_name: body.display_name,
                 observer_api_url,
+                tenant_slug: None,
             });
         }
         let err_body: TokenError = response.json().await.unwrap_or_else(|_| TokenError {

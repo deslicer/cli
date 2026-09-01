@@ -48,7 +48,7 @@ pub enum Command {
     /// List host groups (`id` is the value for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
-    /// List Ansible inventory groups
+    /// List Ansible inventory groups, or sync the tenant environment file
     #[command(subcommand)]
     Inventory(crate::commands::inventory::InventoryCmd),
     /// Write CI templates for a config repo (optional --bind)
