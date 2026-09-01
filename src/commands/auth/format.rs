@@ -24,14 +24,16 @@ pub fn whoami_device_human(
     display_name: &str,
     tenant_id: &str,
     expires_at: &str,
+    tenant_slug: Option<&str>,
 ) -> String {
+    let workspace = workspace_label(tenant_id, tenant_slug);
     if logged_in {
         format!(
-            "Logged in as {display_name}\nIdentity: device\nWorkspace: {tenant_id}\nExpires: {expires_at}\n"
+            "Logged in as {display_name}\nIdentity: device\nWorkspace: {workspace}\nExpires: {expires_at}\n"
         )
     } else {
         format!(
-            "Session expired\nIdentity: device\nWorkspace: {tenant_id}\nExpires: {expires_at}\n"
+            "Session expired\nIdentity: device\nWorkspace: {workspace}\nExpires: {expires_at}\n"
         )
     }
 }
@@ -57,11 +59,21 @@ pub fn status_device_human(
     display_name: &str,
     expires_at: &str,
     observer_api_url: &str,
+    tenant_slug: Option<&str>,
 ) -> String {
     let state = if logged_in { "yes" } else { "no" };
+    let workspace = workspace_label(tenant_id, tenant_slug);
     format!(
-        "Identity: device\nLogged in: {state}\nWorkspace: {tenant_id}\nName: {display_name}\nExpires: {expires_at}\nBackend: {observer_api_url}\n"
+        "Identity: device\nLogged in: {state}\nWorkspace: {workspace}\nName: {display_name}\nExpires: {expires_at}\nBackend: {observer_api_url}\n"
     )
+}
+
+/// Prefer the portal slug. Never label a UUID as "Workspace" when a slug exists.
+pub fn workspace_label<'a>(tenant_id: &'a str, tenant_slug: Option<&'a str>) -> &'a str {
+    tenant_slug
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(tenant_id)
 }
 
 pub fn status_token_human(observer_api_url: Option<&str>) -> String {
@@ -106,5 +118,30 @@ mod tests {
         let text = pretty(&value);
         assert!(text.contains("\"logged_in\""));
         assert!(text.contains("true"));
+    }
+
+    #[test]
+    fn whoami_human_uses_slug_not_uuid_when_present() {
+        let text = whoami_device_human(
+            true,
+            "Ada",
+            "2fb5ef22-12ad-4d20-9e0f-4736f47953bb",
+            "2099-01-01T00:00:00.000Z",
+            Some("dap-102"),
+        );
+        assert!(text.contains("Workspace: dap-102"));
+        assert!(!text.contains("Workspace: 2fb5ef22"));
+    }
+
+    #[test]
+    fn whoami_human_falls_back_to_tenant_id_without_slug() {
+        let text = whoami_device_human(
+            true,
+            "Ada",
+            "2fb5ef22-12ad-4d20-9e0f-4736f47953bb",
+            "2099-01-01T00:00:00.000Z",
+            None,
+        );
+        assert!(text.contains("Workspace: 2fb5ef22-12ad-4d20-9e0f-4736f47953bb"));
     }
 }

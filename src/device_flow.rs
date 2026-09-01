@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::environment_name::is_valid_environment_name;
 use crate::errors::CliError;
 use crate::token_store::StoredSession;
 use crate::Ctx;
@@ -26,6 +27,9 @@ struct TokenSuccess {
     expires_at: String,
     tenant_id: String,
     display_name: String,
+    /// Present on current DAI; old portals omit the field.
+    #[serde(default)]
+    tenant_slug: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,7 +107,7 @@ async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSess
                 tenant_id: body.tenant_id,
                 display_name: body.display_name,
                 observer_api_url,
-                tenant_slug: None,
+                tenant_slug: persistable_tenant_slug(body.tenant_slug.as_deref()),
             });
         }
         let err_body: TokenError = response.json().await.unwrap_or_else(|_| TokenError {
@@ -138,6 +142,29 @@ async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSess
 pub(crate) fn join_api(base: &url::Url, path: &str) -> Result<url::Url, CliError> {
     base.join(path)
         .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))
+}
+
+/// Persist only a usable Observer env name. UUID / missing / garbage → None
+/// so init/inventory keep requiring `--environment` against old DAI.
+fn persistable_tenant_slug(raw: Option<&str>) -> Option<String> {
+    let trimmed = raw?.trim();
+    if trimmed.is_empty() || looks_like_uuid(trimmed) {
+        return None;
+    }
+    if !is_valid_environment_name(trimmed) {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn looks_like_uuid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+        && value.chars().all(|ch| ch.is_ascii_hexdigit() || ch == '-')
 }
 
 #[cfg(test)]
@@ -184,7 +211,83 @@ mod tests {
         let session = login_device_session(&ctx).await.unwrap();
         assert_eq!(session.display_name, "Ada");
         assert_eq!(session.tenant_id, "tenant-1");
+        assert_eq!(session.tenant_slug, None);
         assert!(session.observer_api_url.ends_with("/api/cli/observer/"));
         assert!(session.cli_session_token.starts_with("dslcli_"));
+    }
+
+    #[test]
+    fn token_success_deserializes_optional_tenant_slug() {
+        let with_slug: TokenSuccess = serde_json::from_value(json!({
+            "cli_session_token": "dslcli_ab",
+            "expires_at": "2099-01-01T00:00:00.000Z",
+            "tenant_id": "2fb5ef22-12ad-4d20-9e0f-4736f47953bb",
+            "display_name": "Ada",
+            "tenant_slug": "dap-102"
+        }))
+        .unwrap();
+        assert_eq!(
+            persistable_tenant_slug(with_slug.tenant_slug.as_deref()).as_deref(),
+            Some("dap-102")
+        );
+
+        let omitted: TokenSuccess = serde_json::from_value(json!({
+            "cli_session_token": "dslcli_ab",
+            "expires_at": "2099-01-01T00:00:00.000Z",
+            "tenant_id": "2fb5ef22-12ad-4d20-9e0f-4736f47953bb",
+            "display_name": "Ada"
+        }))
+        .unwrap();
+        assert_eq!(omitted.tenant_slug, None);
+
+        let uuid_slug: TokenSuccess = serde_json::from_value(json!({
+            "cli_session_token": "dslcli_ab",
+            "expires_at": "2099-01-01T00:00:00.000Z",
+            "tenant_id": "2fb5ef22-12ad-4d20-9e0f-4736f47953bb",
+            "display_name": "Ada",
+            "tenant_slug": "2fb5ef22-12ad-4d20-9e0f-4736f47953bb"
+        }))
+        .unwrap();
+        assert_eq!(
+            persistable_tenant_slug(uuid_slug.tenant_slug.as_deref()),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn login_persists_tenant_slug_from_token() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/cli/device/start"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "device_code": "devcode1234567890abcd",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://app.deslicer.ai/dashboard/cli-auth",
+                "interval": 1,
+                "expires_in": 60
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/cli/device/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "cli_session_token": format!("dslcli_{}", "cd".repeat(32)),
+                "expires_at": "2099-01-01T00:00:00.000Z",
+                "tenant_id": "2fb5ef22-12ad-4d20-9e0f-4736f47953bb",
+                "display_name": "Ada",
+                "tenant_slug": "dap-102"
+            })))
+            .mount(&server)
+            .await;
+
+        let ctx = Ctx {
+            deslicer_api_url: Url::parse(&format!("{}/", server.uri())).unwrap(),
+            observer_api_url: None,
+            ci_override: None,
+            log_format: LogFormat::Human,
+        };
+        let session = login_device_session(&ctx).await.unwrap();
+        assert_eq!(session.tenant_slug.as_deref(), Some("dap-102"));
+        assert_eq!(session.tenant_id, "2fb5ef22-12ad-4d20-9e0f-4736f47953bb");
     }
 }

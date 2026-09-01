@@ -155,7 +155,27 @@ pub const TOPICS: &[Topic] = &[
         anchor: None,
         sync: false,
     },
+    Topic {
+        id: "api-keys",
+        aliases: &["api-key", "observer-api-keys"],
+        title: "Observer API keys",
+        summary: "Open the portal page to create a tools-scoped Observer API key",
+        source_file: "",
+        dest_file: "",
+        anchor: None,
+        sync: false,
+    },
 ];
+
+/// Portal path for `deslicer docs api-keys`. Create is an in-page dialog.
+pub const DAP_PLATFORM_API_KEYS_PATH: &str = "/dashboard/dap/api-keys";
+
+pub fn portal_path(topic: &Topic) -> Option<&'static str> {
+    match topic.id {
+        "api-keys" => Some(DAP_PLATFORM_API_KEYS_PATH),
+        _ => None,
+    }
+}
 
 pub fn lookup(name: &str) -> Option<&'static Topic> {
     let key = name.trim().to_ascii_lowercase();
@@ -213,6 +233,12 @@ mod tests {
         assert_eq!(lookup("path-a2").map(|t| t.id), Some("path-a2"));
         assert_eq!(lookup("github-token").map(|t| t.id), Some("path-a2"));
         assert_eq!(lookup("INIT").map(|t| t.id), Some("init"));
+        assert_eq!(lookup("api-keys").map(|t| t.id), Some("api-keys"));
+        assert_eq!(lookup("api-key").map(|t| t.id), Some("api-keys"));
+        assert_eq!(
+            portal_path(lookup("api-keys").expect("api-keys")),
+            Some(DAP_PLATFORM_API_KEYS_PATH)
+        );
         assert!(lookup("nope").is_none());
     }
 
@@ -234,6 +260,9 @@ mod tests {
     fn every_source_file_exists() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         for topic in TOPICS {
+            if topic.source_file.is_empty() {
+                continue;
+            }
             let path = root.join(topic.source_file);
             assert!(
                 path.is_file(),

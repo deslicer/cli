@@ -1,12 +1,26 @@
-use super::catalog::{hosted_slug, Topic, DOCS_BASE_URL_ENV, GITHUB_DOCS_BLOB_BASE};
+use url::Url;
+
+use super::catalog::{hosted_slug, portal_path, Topic, DOCS_BASE_URL_ENV, GITHUB_DOCS_BLOB_BASE};
 
 /// Resolve the page URL for a topic.
 ///
-/// Default: GitHub blob of `cli/docs` on `main` (works today).
+/// Portal topics (`api-keys`) use `{deslicer_api_url}{portal_path}`.
+/// Markdown topics default to the GitHub blob of `cli/docs` on `main`.
 /// If `DESLICER_DOCS_BASE_URL` is set and the topic is customer-facing,
 /// use `{base}/{slug}` (Docusaurus strips `NN-` prefixes).
-pub fn topic_url(topic: &Topic) -> String {
+pub fn topic_url(topic: &Topic, portal_base: &Url) -> String {
+    if let Some(path) = portal_path(topic) {
+        return portal_page_url(portal_base, path);
+    }
     topic_url_with_env(topic, std::env::var(DOCS_BASE_URL_ENV).ok().as_deref())
+}
+
+pub fn portal_page_url(portal_base: &Url, path: &str) -> String {
+    let mut url = portal_base.clone();
+    url.set_path(path);
+    url.set_query(None);
+    url.set_fragment(None);
+    url.to_string()
 }
 
 pub fn topic_url_with_env(topic: &Topic, hosted_base: Option<&str>) -> String {
@@ -72,5 +86,16 @@ mod tests {
         let topic = lookup("contributing").expect("contributing");
         let url = topic_url_with_env(topic, Some("https://docs.deslicer.io/cli"));
         assert!(url.contains("github.com/deslicer/cli/blob/main/docs/contributing.md"));
+    }
+
+    #[test]
+    fn api_keys_uses_portal_host_and_fixed_path() {
+        let topic = lookup("api-keys").expect("api-keys");
+        let portal = Url::parse("https://ops.deslicer.show/").expect("url");
+        assert_eq!(
+            topic_url(topic, &portal),
+            "https://ops.deslicer.show/dashboard/dap/api-keys"
+        );
+        assert!(!topic_url(topic, &portal).contains("?create="));
     }
 }

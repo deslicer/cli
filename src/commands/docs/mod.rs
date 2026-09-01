@@ -38,6 +38,7 @@ Examples:
   deslicer docs path-a2
   deslicer docs init --print
   deslicer docs quickstart --open
+  deslicer docs api-keys --open
 
 Hosted site (optional):
   DESLICER_DOCS_BASE_URL=https://docs.deslicer.io/cli deslicer docs path-a2
@@ -72,7 +73,7 @@ fn print_list(ctx: &Ctx, url_only: bool) -> Result<(), String> {
                         "aliases": topic.aliases,
                         "title": topic.title,
                         "summary": topic.summary,
-                        "url": topic_url(topic),
+                        "url": topic_url(topic, &ctx.deslicer_api_url),
                         "sync": topic.sync,
                     })
                 })
@@ -88,7 +89,7 @@ fn print_list(ctx: &Ctx, url_only: bool) -> Result<(), String> {
         }
         LogFormat::Human if url_only => {
             for topic in TOPICS {
-                println!("{}", topic_url(topic));
+                println!("{}", topic_url(topic, &ctx.deslicer_api_url));
             }
         }
         LogFormat::Human => {
@@ -113,7 +114,7 @@ fn print_topic(ctx: &Ctx, name: &str, url_only: bool, open_browser: bool) -> Res
             known_topic_ids().join(", ")
         ));
     };
-    let url = topic_url(topic);
+    let url = topic_url(topic, &ctx.deslicer_api_url);
     match ctx.log_format {
         LogFormat::Json => {
             let payload = serde_json::json!({
@@ -134,7 +135,7 @@ fn print_topic(ctx: &Ctx, name: &str, url_only: bool, open_browser: bool) -> Res
         }
     }
     if open_browser {
-        open::open_url(&url)?;
+        open::open_url(&url, Some(&ctx.deslicer_api_url))?;
     }
     Ok(())
 }
@@ -164,5 +165,10 @@ mod tests {
     #[test]
     fn known_topic_ok() {
         print_topic(&ctx(LogFormat::Human), "path-a2", true, false).expect("print");
+    }
+
+    #[test]
+    fn api_keys_topic_ok() {
+        print_topic(&ctx(LogFormat::Human), "api-keys", true, false).expect("print");
     }
 }
