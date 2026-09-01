@@ -25,6 +25,7 @@ pub(crate) fn map_observer_error(
             }
         }
         404 => CliError::PlanNotFound(message),
+        409 if is_duplicate_plan_error(body) => CliError::Other(message),
         409 => CliError::AmbiguousBinding(message),
         429 => CliError::RateLimited {
             retry_after_secs: retry_after_secs.unwrap_or(30),
@@ -34,9 +35,21 @@ pub(crate) fn map_observer_error(
     }
 }
 
+pub(crate) fn is_duplicate_plan_error(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+        })
+        .is_some_and(|code| code == "duplicate_plan")
+}
+
 pub(crate) fn error_message(body: &str, status: reqwest::StatusCode) -> String {
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
-        for key in ["detail", "error", "message"] {
+        for key in ["detail", "message", "error"] {
             if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
                 if !text.is_empty() {
                     return text.to_string();
@@ -114,6 +127,37 @@ mod tests {
                 assert!(message.to_ascii_lowercase().contains("worker plane"));
             }
             other => panic!("expected Other, got {other}"),
+        }
+    }
+
+    #[test]
+    fn duplicate_plan_conflict_is_not_ambiguous_binding() {
+        let err = map_observer_error(
+            reqwest::StatusCode::CONFLICT,
+            r#"{"error":"duplicate_plan","message":"An active plan already exists for this repository and commit SHA"}"#,
+            None,
+        );
+        match err {
+            CliError::Other(message) => {
+                assert!(message.contains("active plan already exists"));
+                assert!(!message.contains("duplicate_plan"));
+            }
+            other => panic!("expected Other, got {other}"),
+        }
+    }
+
+    #[test]
+    fn other_conflict_stays_ambiguous_binding() {
+        let err = map_observer_error(
+            reqwest::StatusCode::CONFLICT,
+            r#"{"error":"ambiguous_environment","message":"multiple environments"}"#,
+            None,
+        );
+        match err {
+            CliError::AmbiguousBinding(message) => {
+                assert!(message.contains("multiple environments"));
+            }
+            other => panic!("expected AmbiguousBinding, got {other}"),
         }
     }
 }
