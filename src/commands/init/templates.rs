@@ -148,7 +148,10 @@ fn cache_root() -> Result<PathBuf, CliError> {
             return Ok(PathBuf::from(trimmed).join("bootstrap-templates"));
         }
     }
-    let home = std::env::var("HOME").map_err(|_| CliError::Other("HOME is not set".into()))?;
+    // Windows CI/runners often set USERPROFILE but not HOME (token_store same pattern).
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| CliError::Other("HOME is not set".into()))?;
     Ok(PathBuf::from(home)
         .join(".cache")
         .join("deslicer")

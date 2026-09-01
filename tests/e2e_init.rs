@@ -23,9 +23,16 @@ fn mock_file(path: &str, body: &str) -> serde_json::Value {
     })
 }
 
+fn clear_init_env() {
+    std::env::remove_var("DESLICER_API_TOKEN");
+    std::env::remove_var("DESLICER_CACHE_DIR");
+}
+
 #[tokio::test]
 async fn init_github_token_writes_path_a2_workflow() {
+    let cache = tempdir().expect("cache");
     std::env::set_var("DESLICER_API_TOKEN", "dap_tools_ci_key");
+    std::env::set_var("DESLICER_CACHE_DIR", cache.path());
 
     let plan = r#"# Path A2
 permissions:
@@ -73,12 +80,11 @@ jobs:
         force: false,
     };
     let code = init::run(ctx, args).await;
-    std::env::remove_var("DESLICER_API_TOKEN");
+    clear_init_env();
     assert_eq!(code, 0);
 
-    let written =
-        std::fs::read_to_string(dir.path().join(".github/workflows/deslicer-plan.yml"))
-            .expect("workflow");
+    let written = std::fs::read_to_string(dir.path().join(".github/workflows/deslicer-plan.yml"))
+        .expect("workflow");
     assert!(written.contains("--target-group"));
     assert!(!written.contains("id-token: write"));
     assert!(written.contains("contents: read"));
@@ -90,7 +96,9 @@ jobs:
 
 #[tokio::test]
 async fn init_refuses_sha_mismatch() {
+    let cache = tempdir().expect("cache");
     std::env::set_var("DESLICER_API_TOKEN", "dap_tools_ci_key");
+    std::env::set_var("DESLICER_CACHE_DIR", cache.path());
 
     let observer = MockServer::start().await;
     Mock::given(method("GET"))
@@ -124,6 +132,6 @@ async fn init_refuses_sha_mismatch() {
         force: false,
     };
     let code = init::run(ctx, args).await;
-    std::env::remove_var("DESLICER_API_TOKEN");
+    clear_init_env();
     assert_eq!(code, 1);
 }
