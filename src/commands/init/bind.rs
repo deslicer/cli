@@ -1,8 +1,10 @@
 use uuid::Uuid;
 
+use crate::cli::LogFormat;
 use crate::commands::pipeline::AuthenticatedSession;
 use crate::errors::CliError;
 use crate::observer_client::{Client, CreateEnvironmentBindingRequest, GithubInstallation};
+use crate::Ctx;
 
 use super::provider::{InitProvider, OriginRepo};
 
@@ -146,13 +148,45 @@ pub fn bind_next_step(provider: InitProvider) -> String {
 }
 
 /// Path A2: git-sourced plan with Observer tools token (no GitHub App bind).
+pub fn print_bind_outcome(ctx: &Ctx, outcome: &BindOutcome) {
+    match outcome {
+        BindOutcome::Bound { already } => {
+            if matches!(ctx.log_format, LogFormat::Json) {
+                println!(
+                    "{}",
+                    serde_json::json!({ "bound": true, "already": already })
+                );
+                return;
+            }
+            if *already {
+                println!("Environment already bound.");
+            } else {
+                println!("Environment binding created.");
+            }
+        }
+        BindOutcome::NeedsGithubConnect => {
+            println!("No GitHub App installation covers this org.");
+            println!("Connect GitHub in the portal: Platform → GitHub → Connect");
+            println!("Files were still written.");
+        }
+        BindOutcome::PrintPortal { message } => {
+            println!("{message}");
+        }
+    }
+}
+
 fn path_a2_next_step() -> String {
-    "Path A2 (Observer API token, no GitHub App). Set these, then commit the scaffolded workflows:\n\
-     - Secret: DESLICER_API_TOKEN (tools-scope Observer key)\n\
-     - Variable (or secret): OBSERVER_API_URL\n\
-     - Variable: TARGET_GROUP_ID\n\
-     - Variable: DESLICER_API_URL (portal base for plan links)\n\
+    "Path A2 (Observer API token, no GitHub App). One GitHub Environment per tenant\n\
+     (CLI does not create it or write secrets). After init, run the printed `gh` recipe,\n\
+     then commit the scaffolded workflows:\n\
+     - GitHub Environment named after the tenant slug (same as the YAML stem)\n\
+     - Environment secret: DESLICER_API_TOKEN (tools-scope Observer key)\n\
+     - Environment variable: OBSERVER_API_URL, TARGET_GROUP_ID, DESLICER_ENVIRONMENT\n\
+     - Repo-level variable DESLICER_ENVIRONMENT: name pointer so pull_request can select the Environment\n\
+     - Repo-level variable DESLICER_API_URL: portal base for plan links\n\
+     A second Observer backend is a second Environment plus a matrix row — not a second repo secret.\n\
      Re-scaffold: deslicer init --provider github-token --force\n\
+     Refresh inventory groups: deslicer inventory sync\n\
      Docs: deslicer docs path-a2"
         .into()
 }
@@ -166,6 +200,9 @@ mod tests {
         let text = bind_next_step(InitProvider::GithubToken);
         assert!(text.contains("deslicer docs path-a2"));
         assert!(text.contains("DESLICER_API_TOKEN"));
+        assert!(text.contains("DESLICER_ENVIRONMENT"));
+        assert!(text.contains("GitHub Environment"));
+        assert!(text.contains("deslicer inventory sync"));
         assert!(!text.contains("id-token: write"));
     }
 }

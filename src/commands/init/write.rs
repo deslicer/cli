@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::Path;
 
+use crate::cli::LogFormat;
 use crate::errors::CliError;
+use crate::Ctx;
 
 use super::provider::InitProvider;
 use super::templates::{resolve_write_path, DecodedTemplate};
@@ -54,6 +56,36 @@ pub fn write_templates(
 pub struct WriteSummary {
     pub written: usize,
     pub skipped: usize,
+}
+
+pub fn print_write_summary(
+    ctx: &Ctx,
+    provider: InitProvider,
+    dir: &Path,
+    written: usize,
+    skipped: usize,
+) {
+    match ctx.log_format {
+        LogFormat::Json => {
+            let payload = serde_json::json!({
+                "provider": provider.as_str(),
+                "dir": dir.display().to_string(),
+                "written": written,
+                "skipped": skipped,
+            });
+            println!("{payload}");
+        }
+        LogFormat::Human => {
+            println!(
+                "Wrote {written} {} file(s) under {}.",
+                provider.as_str(),
+                dir.display()
+            );
+            if skipped > 0 {
+                println!("Skipped {skipped} existing README file(s) (IfMissing).");
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use clap::Args as ClapArgs;
 
 use crate::ci::{self, CiPlatform, AUDIENCE};
+use crate::commands::change::plan_env::resolve_plan_environment;
 use crate::commands::pipeline::{
     authenticate, map_cli_error, require_proxy_mode, AuthenticatedSession,
 };
@@ -161,7 +162,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         };
     }
 
-    let (session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
+    let environment = match resolve_plan_environment(&ctx, args.environment.as_deref()) {
+        Ok(value) => value,
+        Err(err) => return map_cli_error(err),
+    };
+    let (session, client) = match authenticate(&ctx, environment.as_deref(), None).await {
         Ok(pair) => pair,
         Err(err) => return map_cli_error(err),
     };
@@ -189,7 +194,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return map_cli_error(err);
     }
 
-    match run_git_plans(&ctx, &session, &client, &args).await {
+    match run_git_plans(&ctx, &session, &client, &args, environment.as_deref()).await {
         Ok(code) => code,
         Err(err) => map_cli_error(err),
     }
@@ -301,8 +306,9 @@ async fn run_git_plans(
     session: &AuthenticatedSession,
     client: &Client,
     args: &Args,
+    environment: Option<&str>,
 ) -> Result<i32, CliError> {
-    let environments = discover_environments(ctx, session, args.environment.as_deref()).await?;
+    let environments = discover_environments(ctx, session, environment).await?;
     let mut plans = Vec::new();
     let mut any_failed = false;
     let mut last_ready: Option<ChangePlan> = None;

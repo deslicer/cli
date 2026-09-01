@@ -14,17 +14,22 @@ selects the **OIDC/App** provider (`github`). Path A2 (Observer API token,
 no GitHub App) is always explicit:
 
 ```bash
-deslicer init --provider github-token --force
-# then set GH secrets/vars and commit
+deslicer init --provider github-token --environment acme-prod --force
+# then run the printed GitHub Environment `gh` recipe and commit
+# later: deslicer inventory sync
 # later: deslicer docs path-a2
 ```
 
-| Secret / variable | Path A2 |
-| --- | --- |
-| `DESLICER_API_TOKEN` (secret) | tools-scope Observer key |
-| `OBSERVER_API_URL` (var or secret) | Observer management URL |
-| `TARGET_GROUP_ID` (var) | Host group UUID |
-| `DESLICER_API_URL` (var) | Portal base for plan links |
+Path A2 also writes `.deslicer/environments/<tenant-slug>.yml` (this tenant's host groups). See [environments.md](environments.md). One GitHub Environment per tenant; the CLI never creates it or writes secrets.
+
+| Scope | Secret / variable | Path A2 |
+| --- | --- | --- |
+| GitHub Environment `<slug>` | `DESLICER_API_TOKEN` (secret) | tools-scope Observer key |
+| GitHub Environment `<slug>` | `OBSERVER_API_URL` (var) | Observer management URL |
+| GitHub Environment `<slug>` | `TARGET_GROUP_ID` (var) | Host group UUID |
+| GitHub Environment `<slug>` | `DESLICER_ENVIRONMENT` (var) | Same slug as the YAML stem |
+| Repository | `DESLICER_ENVIRONMENT` (var) | Name pointer for `pull_request` |
+| Repository | `DESLICER_API_URL` (var) | Portal base for plan links |
 
 Unknown hosts must pass one of the named providers. `--dir` defaults to the
 current directory. Existing workflow files are not overwritten unless

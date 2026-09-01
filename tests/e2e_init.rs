@@ -58,6 +58,14 @@ jobs:
 
     let observer = MockServer::start().await;
     Mock::given(method("GET"))
+        .and(path("/api/v1/groups"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"id": "019f36d6-3f61-7eea-9417-7ac4a8a10f69", "name": "indexers"},
+            {"id": "019f36d6-3f61-7eea-9417-7ac4a8a10f70", "name": "forwarders"}
+        ])))
+        .mount(&observer)
+        .await;
+    Mock::given(method("GET"))
         .and(path("/api/v1/bootstrap-templates"))
         .and(query_param("provider", "github-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -82,7 +90,7 @@ jobs:
     };
     let args = init::Args {
         provider: "github-token".into(),
-        environment: None,
+        environment: Some("acme-prod".into()),
         target_group: None,
         dir: Some(dir.path().to_path_buf()),
         bind: false,
@@ -98,6 +106,10 @@ jobs:
     assert!(written.contains("--target-group"));
     assert!(!written.contains("id-token: write"));
     assert!(written.contains("contents: read"));
+    let env_file = std::fs::read_to_string(dir.path().join(".deslicer/environments/acme-prod.yml"))
+        .expect("tenant env");
+    assert!(env_file.contains("inventory_group: indexers"));
+    assert!(env_file.contains("inventory_group: forwarders"));
     assert_eq!(
         InitProvider::parse("github-token").unwrap(),
         InitProvider::GithubToken

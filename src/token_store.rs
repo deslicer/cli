@@ -19,6 +19,10 @@ pub struct StoredSession {
     pub tenant_id: String,
     pub display_name: String,
     pub observer_api_url: String,
+    /// Optional tenant slug for Path A2 environment-file stems.
+    /// Old sessions omit the field; serde defaults to `None`.
+    #[serde(default)]
+    pub tenant_slug: Option<String>,
 }
 
 impl StoredSession {
@@ -262,6 +266,7 @@ mod tests {
             tenant_id: "tenant".into(),
             display_name: "Ada".into(),
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
+            tenant_slug: None,
         };
         store.save(&session).unwrap();
         assert_eq!(store.load().unwrap(), Some(session));
@@ -277,6 +282,7 @@ mod tests {
             tenant_id: "tenant".into(),
             display_name: "Ada".into(),
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
+            tenant_slug: None,
         };
         assert!(session.is_active());
     }
@@ -289,6 +295,7 @@ mod tests {
             tenant_id: "tenant".into(),
             display_name: "Ada".into(),
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
+            tenant_slug: None,
         };
         assert!(!session.is_active());
     }

@@ -62,26 +62,29 @@ Use this when the runner can reach Observer's **management** plane and you do no
 Auto-detect (`deslicer init` without `--provider` on a `github.com` remote) still scaffolds the **OIDC/App** path. Path A2 is always explicit:
 
 ```bash
-deslicer init --provider github-token --force
-# then set GH secrets/vars and commit
+deslicer init --provider github-token --environment acme-prod --force
+# then run the printed `gh` Environment recipe (never pass tokens on argv) and commit
+# later: deslicer inventory sync
 ```
 
-### 1. Create the key and repository settings
+### 1. Create the key and GitHub Environment
 
-In the Deslicer portal: **Platform → API keys** → create a key with scope **`tools`**. Copy the plaintext once. Store it as the GitHub Actions secret `DESLICER_API_TOKEN`.
+In the Deslicer portal: **Platform → API keys** → create a key with scope **`tools`**. Copy the plaintext once. Store it as a **GitHub Environment** secret `DESLICER_API_TOKEN` on an Environment named after the tenant slug. `init` prints the `gh` commands; it does not create the Environment or write secrets.
 
-| Kind | Name | Purpose |
-|------|------|---------|
-| Secret | `DESLICER_API_TOKEN` | tools-scope Observer API key |
-| Variable (or secret) | `OBSERVER_API_URL` | Observer management URL (not the data-plane port) |
-| Variable | `TARGET_GROUP_ID` | Host group UUID |
-| Variable | `DESLICER_API_URL` | deslicer-ai portal base URL (plan UI links) |
+| Scope | Kind | Name | Purpose |
+|------|------|------|---------|
+| GitHub Environment `<slug>` | Secret | `DESLICER_API_TOKEN` | tools-scope Observer API key |
+| GitHub Environment `<slug>` | Variable | `OBSERVER_API_URL` | Observer management URL (not the data-plane port) |
+| GitHub Environment `<slug>` | Variable | `TARGET_GROUP_ID` | Host group UUID |
+| GitHub Environment `<slug>` | Variable | `DESLICER_ENVIRONMENT` | Same slug (`acme-prod` for `acme-prod.yml`) |
+| Repository | Variable | `DESLICER_ENVIRONMENT` | Name pointer so `pull_request` can select the Environment |
+| Repository | Variable | `DESLICER_API_URL` | deslicer-ai portal base URL (plan UI links) |
 
 Do not reuse the keys DAI stores on the tenant for the dashboard/CI proxy.
 
 ### 2. GitHub Actions
 
-`deslicer init --provider github-token` writes pinned workflows that use `deslicer/change-action` (no floating `main`, no `id-token: write`). They run `change plan --target-group`, print a portal link, and append a metadata-only changed-files summary. Do **not** chain `change verify` after plan — re-compile fails with `invalid_plan_state`.
+`deslicer init --provider github-token` writes pinned token-path workflows (no `id-token: write`) and `.deslicer/environments/<stem>.yml`. They run `change plan --target-group … --environment "${DESLICER_ENVIRONMENT}"`. Do **not** chain `change verify` after plan — re-compile fails with `invalid_plan_state`. Refresh groups with `deslicer inventory sync`.
 
 Minimal shape (the scaffolded files are authoritative):
 

@@ -3,32 +3,36 @@ use std::path::PathBuf;
 use clap::Args as ClapArgs;
 use uuid::Uuid;
 
-use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::errors::CliError;
 use crate::Ctx;
 
 mod bind;
+mod environment;
+mod github_env_recipe;
 mod provider;
 mod templates;
 mod write;
 
 pub use provider::InitProvider;
 
-use bind::{bind_next_step, bind_repo, BindOutcome};
+use bind::{bind_next_step, bind_repo, print_bind_outcome};
+use environment::{print_environment_write, should_write_environment, write_tenant_environment};
 use provider::{detect_provider, origin_for_dir, OriginRepo};
 use templates::load_templates;
-use write::write_templates;
+use write::{print_write_summary, write_templates};
 
 const INIT_EXAMPLES: &str = "\
 Examples:
   deslicer init
   deslicer init --provider github
-  deslicer init --provider github-token
+  deslicer init --provider github-token --environment acme-prod
   deslicer init --provider github --bind --environment prod --target-group <uuid>
 
-Path A2 (Observer token, no GitHub App) is always explicit:
-  deslicer init --provider github-token
+Path A2 (Observer token, no GitHub App) writes `.deslicer/environments/<stem>.yml`
+and prints a GitHub Environment setup recipe (not executed):
+  deslicer init --provider github-token --environment acme-prod
+  deslicer inventory sync
   deslicer docs path-a2
 ";
 
@@ -58,7 +62,7 @@ pub struct Args {
     #[arg(long)]
     pub offline: bool,
 
-    /// Overwrite existing workflow / pipeline files.
+    /// Overwrite existing workflow / pipeline files (not environment `apps:` lists).
     #[arg(long)]
     pub force: bool,
 }
@@ -98,6 +102,16 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     let files = load_templates(client.as_ref(), provider, args.offline).await?;
     let summary = write_templates(&dir, provider, &files, args.force)?;
     print_write_summary(&ctx, provider, &dir, summary.written, summary.skipped);
+    maybe_write_environment(
+        &ctx,
+        &args,
+        provider,
+        session.as_ref(),
+        client.as_ref(),
+        &dir,
+        origin.as_ref(),
+    )
+    .await?;
 
     if !args.bind {
         println!();
@@ -110,16 +124,12 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         return Ok(0);
     }
 
-    let Some(session) = session.as_ref() else {
-        return Err(CliError::Other(
-            "--bind cannot be used with --offline".into(),
-        ));
-    };
-    let Some(client) = client.as_ref() else {
-        return Err(CliError::Other(
-            "--bind cannot be used with --offline".into(),
-        ));
-    };
+    let session = session
+        .as_ref()
+        .ok_or_else(|| CliError::Other("--bind cannot be used with --offline".into()))?;
+    let client = client
+        .as_ref()
+        .ok_or_else(|| CliError::Other("--bind cannot be used with --offline".into()))?;
     let origin = origin_or_detect(origin, &dir)?;
     let environment = args.environment.as_deref().unwrap_or("");
     let target_group = parse_target_group(args.target_group.as_deref())?;
@@ -134,6 +144,31 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     .await?;
     print_bind_outcome(&ctx, &outcome);
     Ok(0)
+}
+
+async fn maybe_write_environment(
+    ctx: &Ctx,
+    args: &Args,
+    provider: InitProvider,
+    session: Option<&crate::commands::pipeline::AuthenticatedSession>,
+    client: Option<&crate::observer_client::Client>,
+    dir: &std::path::Path,
+    origin: Option<&OriginRepo>,
+) -> Result<(), CliError> {
+    if !should_write_environment(provider, session) {
+        return Ok(());
+    }
+    if args.offline {
+        println!("Skipped tenant environment file (--offline; cannot reach Observer).");
+        return Ok(());
+    }
+    let Some(client) = client else {
+        println!("Skipped tenant environment file (Observer client unavailable).");
+        return Ok(());
+    };
+    let written = write_tenant_environment(dir, client, args.environment.as_deref()).await?;
+    print_environment_write(ctx, &written, origin);
+    Ok(())
 }
 
 fn resolve_provider(
@@ -164,61 +199,4 @@ fn parse_target_group(raw: Option<&str>) -> Result<Uuid, CliError> {
         ));
     };
     Uuid::parse_str(raw.trim()).map_err(|_| CliError::Other("--target-group must be a UUID".into()))
-}
-
-fn print_write_summary(
-    ctx: &Ctx,
-    provider: InitProvider,
-    dir: &std::path::Path,
-    written: usize,
-    skipped: usize,
-) {
-    match ctx.log_format {
-        LogFormat::Json => {
-            let payload = serde_json::json!({
-                "provider": provider.as_str(),
-                "dir": dir.display().to_string(),
-                "written": written,
-                "skipped": skipped,
-            });
-            println!("{payload}");
-        }
-        LogFormat::Human => {
-            println!(
-                "Wrote {written} {} file(s) under {}.",
-                provider.as_str(),
-                dir.display()
-            );
-            if skipped > 0 {
-                println!("Skipped {skipped} existing README file(s) (IfMissing).");
-            }
-        }
-    }
-}
-
-fn print_bind_outcome(ctx: &Ctx, outcome: &BindOutcome) {
-    match outcome {
-        BindOutcome::Bound { already } => {
-            if matches!(ctx.log_format, LogFormat::Json) {
-                println!(
-                    "{}",
-                    serde_json::json!({ "bound": true, "already": already })
-                );
-                return;
-            }
-            if *already {
-                println!("Environment already bound.");
-            } else {
-                println!("Environment binding created.");
-            }
-        }
-        BindOutcome::NeedsGithubConnect => {
-            println!("No GitHub App installation covers this org.");
-            println!("Connect GitHub in the portal: Platform → GitHub → Connect");
-            println!("Files were still written.");
-        }
-        BindOutcome::PrintPortal { message } => {
-            println!("{message}");
-        }
-    }
 }
