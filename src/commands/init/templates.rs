@@ -174,11 +174,11 @@ fn write_offline_cache(
         .map_err(|err| CliError::Other(format!("serialize template cache: {err}")))?;
     std::fs::write(dir.join("bundle.json"), json)
         .map_err(|err| CliError::Other(format!("write template cache: {err}")))?;
-    std::fs::write(
-        cache_root()?.join(provider.as_str()).join("latest"),
-        bundle.tree_sha256.as_bytes(),
-    )
-    .map_err(|err| CliError::Other(format!("write template cache pointer: {err}")))?;
+    let provider_root = cache_root()?.join(provider.as_str());
+    std::fs::create_dir_all(&provider_root)
+        .map_err(|err| CliError::Other(format!("create template cache: {err}")))?;
+    std::fs::write(provider_root.join("latest"), bundle.tree_sha256.as_bytes())
+        .map_err(|err| CliError::Other(format!("write template cache pointer: {err}")))?;
     Ok(())
 }
 

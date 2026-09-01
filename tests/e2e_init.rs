@@ -5,10 +5,16 @@ use deslicer_cli::commands::init::{self, InitProvider};
 use deslicer_cli::Ctx;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::sync::{Mutex, OnceLock};
 use tempfile::tempdir;
 use url::Url;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
@@ -30,6 +36,7 @@ fn clear_init_env() {
 
 #[tokio::test]
 async fn init_github_token_writes_path_a2_workflow() {
+    let _guard = env_lock().lock().expect("env lock");
     let cache = tempdir().expect("cache");
     std::env::set_var("DESLICER_API_TOKEN", "dap_tools_ci_key");
     std::env::set_var("DESLICER_CACHE_DIR", cache.path());
@@ -96,6 +103,7 @@ jobs:
 
 #[tokio::test]
 async fn init_refuses_sha_mismatch() {
+    let _guard = env_lock().lock().expect("env lock");
     let cache = tempdir().expect("cache");
     std::env::set_var("DESLICER_API_TOKEN", "dap_tools_ci_key");
     std::env::set_var("DESLICER_CACHE_DIR", cache.path());
