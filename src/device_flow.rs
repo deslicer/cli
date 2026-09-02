@@ -3,8 +3,10 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::commands::auth::format::print_output;
 use crate::environment_name::is_valid_environment_name;
 use crate::errors::CliError;
+use crate::interactive;
 use crate::token_store::StoredSession;
 use crate::Ctx;
 
@@ -39,6 +41,13 @@ struct TokenError {
 }
 
 pub async fn login_device_session(ctx: &Ctx) -> Result<StoredSession, CliError> {
+    login_device_session_with_poll(ctx, !interactive::is_non_interactive()).await
+}
+
+pub async fn login_device_session_with_poll(
+    ctx: &Ctx,
+    poll: bool,
+) -> Result<StoredSession, CliError> {
     let start_url = join_api(&ctx.deslicer_api_url, "api/cli/device/start")?;
     crate::http::assert_url_allowed(&start_url)?;
     let http = crate::http::client();
@@ -62,6 +71,17 @@ pub async fn login_device_session(ctx: &Ctx) -> Result<StoredSession, CliError> 
         .await
         .map_err(|e| CliError::Transport(format!("invalid device start JSON: {e}")))?;
 
+    print_device_instructions(&started);
+
+    if !poll {
+        print_device_pending(ctx, &started);
+        return Err(CliError::Other(device_pending_message()));
+    }
+
+    poll_for_token(ctx, &started).await
+}
+
+fn print_device_instructions(started: &StartResponse) {
     if let Some(complete) = &started.verification_uri_complete {
         eprintln!("Open {complete} to approve this CLI.");
         eprintln!(
@@ -74,8 +94,30 @@ pub async fn login_device_session(ctx: &Ctx) -> Result<StoredSession, CliError> 
             started.verification_uri, started.user_code
         );
     }
+}
 
-    poll_for_token(ctx, &started).await
+fn print_device_pending(ctx: &Ctx, started: &StartResponse) {
+    let output = json!({
+        "user_code": started.user_code,
+        "verification_uri": started.verification_uri,
+        "logged_in": false,
+    });
+    print_output(
+        ctx.log_format,
+        &output,
+        &format!(
+            "Device code: {}\nApprove at: {}\n",
+            started.user_code, started.verification_uri
+        ),
+    );
+}
+
+fn device_pending_message() -> String {
+    format!(
+        "device login requires an interactive terminal; approve the code in the portal on a TTY, \
+         or set {dev_token_env} / use CI OIDC (--ci-platform github|gitlab|azure|bitbucket)",
+        dev_token_env = crate::ci::local::dev_token_env_var(),
+    )
 }
 
 async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSession, CliError> {
@@ -209,7 +251,7 @@ mod tests {
             ci_override: None,
             log_format: LogFormat::Human,
         };
-        let session = login_device_session(&ctx).await.unwrap();
+        let session = login_device_session_with_poll(&ctx, true).await.unwrap();
         assert_eq!(session.display_name, "Ada");
         assert_eq!(session.tenant_id, "tenant-1");
         assert_eq!(session.tenant_slug, None);
@@ -291,7 +333,7 @@ mod tests {
             ci_override: None,
             log_format: LogFormat::Human,
         };
-        let session = login_device_session(&ctx).await.unwrap();
+        let session = login_device_session_with_poll(&ctx, true).await.unwrap();
         assert_eq!(session.tenant_slug.as_deref(), Some("dap-102"));
         assert_eq!(session.tenant_id, "2fb5ef22-12ad-4d20-9e0f-4736f47953bb");
         assert_eq!(
