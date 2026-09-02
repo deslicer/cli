@@ -9,6 +9,7 @@ pub mod environment_name;
 pub mod environment_paths;
 pub mod environment_yaml;
 pub mod errors;
+pub mod github_release;
 pub mod http;
 pub mod interactive;
 pub mod observer_client;
