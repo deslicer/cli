@@ -158,7 +158,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: shellcheck
-        run: shellcheck --severity=warning scripts/install.sh
+        run: shellcheck --severity=warning scripts/install.sh scripts/test_install.sh
+
+      - name: Installer shell tests
+        run: bash scripts/test_install.sh
 
   deny:
     name: Dependency audit (non-blocking)
