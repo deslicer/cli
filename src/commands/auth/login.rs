@@ -34,7 +34,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let platform = crate::ci::detect_platform(ctx.ci_override);
     if platform == CiPlatform::Local && std::env::var("DESLICER_DEV_TOKEN").is_err() {
         if interactive::is_non_interactive() {
-            return map_cli_error(local_ci_login_error());
+            return map_cli_error(ctx.log_format, local_ci_login_error());
         }
         return device_login(ctx).await;
     }

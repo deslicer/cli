@@ -46,7 +46,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             emit_report(&ctx, &report);
             1
         }
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
 
