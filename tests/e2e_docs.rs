@@ -64,6 +64,19 @@ fn docs_json_lists_topics() {
 }
 
 #[test]
+fn docs_api_keys_is_a_known_topic() {
+    let code = docs::run(
+        ctx(LogFormat::Human),
+        Args {
+            topic: Some("api-keys".into()),
+            print: true,
+            open: false,
+        },
+    );
+    assert_eq!(code, 0);
+}
+
+#[test]
 fn cli_help_includes_docs_and_init_path_a2() {
     let mut cmd = Cli::command();
     let mut buf = Vec::new();

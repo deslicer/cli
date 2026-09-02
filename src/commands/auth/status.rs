@@ -105,6 +105,7 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
         "platform": "device",
         "logged_in": session.is_active(),
         "tenant_id": session.tenant_id,
+        "tenant_slug": session.tenant_slug,
         "display_name": session.display_name,
         "expires_at": session.expires_at,
         "observer_api_url": session.observer_api_url,
@@ -119,6 +120,7 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
             &session.display_name,
             &session.expires_at,
             &session.observer_api_url,
+            session.tenant_slug.as_deref(),
         ),
     );
     0

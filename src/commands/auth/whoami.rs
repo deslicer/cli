@@ -13,13 +13,7 @@ pub struct Args {}
 
 pub async fn run(ctx: Ctx, _args: Args) -> i32 {
     if let Ok(Some(session)) = load_stored_session() {
-        let output = json!({
-            "logged_in": session.is_active(),
-            "identity": "device",
-            "tenant_id": session.tenant_id,
-            "display_name": session.display_name,
-            "expires_at": session.expires_at,
-        });
+        let output = device_whoami_json(&session);
         print_output(
             ctx.log_format,
             &output,
@@ -28,6 +22,7 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
                 &session.display_name,
                 &session.tenant_id,
                 &session.expires_at,
+                session.tenant_slug.as_deref(),
             ),
         );
         return if session.is_active() { 0 } else { 1 };
@@ -71,4 +66,46 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         &whoami_ci_human(platform.header_value()),
     );
     0
+}
+
+fn device_whoami_json(session: &crate::token_store::StoredSession) -> serde_json::Value {
+    json!({
+        "logged_in": session.is_active(),
+        "identity": "device",
+        "tenant_id": session.tenant_id,
+        "tenant_slug": session.tenant_slug,
+        "display_name": session.display_name,
+        "expires_at": session.expires_at,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::token_store::StoredSession;
+
+    fn session(slug: Option<&str>) -> StoredSession {
+        StoredSession {
+            cli_session_token: "dslcli_x".into(),
+            expires_at: "2099-01-01T00:00:00.000Z".into(),
+            tenant_id: "2fb5ef22-12ad-4d20-9e0f-4736f47953bb".into(),
+            display_name: "Ada".into(),
+            observer_api_url: "https://ops.deslicer.show/api/cli/observer/".into(),
+            tenant_slug: slug.map(str::to_string),
+            deslicer_api_url: None,
+        }
+    }
+
+    #[test]
+    fn whoami_json_includes_tenant_slug() {
+        let with_slug = device_whoami_json(&session(Some("dap-102")));
+        assert_eq!(with_slug["tenant_slug"], "dap-102");
+        assert_eq!(
+            with_slug["tenant_id"],
+            "2fb5ef22-12ad-4d20-9e0f-4736f47953bb"
+        );
+
+        let without = device_whoami_json(&session(None));
+        assert!(without["tenant_slug"].is_null());
+    }
 }
