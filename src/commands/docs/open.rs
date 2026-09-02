@@ -1,11 +1,24 @@
+use std::io::IsTerminal;
+
 use url::Url;
 
 use super::catalog::{DAP_PLATFORM_API_KEYS_PATH, DOCS_BASE_URL_ENV};
+
+/// True when the CLI must not launch a GUI browser or block on user input.
+pub fn is_non_interactive() -> bool {
+    if std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "0") {
+        return true;
+    }
+    !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal()
+}
 
 /// Open a catalog URL in the default browser. The URL is built from our
 /// topic table (+ optional `DESLICER_DOCS_BASE_URL` or the logged-in portal
 /// origin), not from free-form operator paths (REQ-SEC-006).
 pub fn open_url(url: &str, portal_base: Option<&Url>) -> Result<(), String> {
+    if is_non_interactive() {
+        return Ok(());
+    }
     if !allowed_open_url(url, portal_base) {
         return Err("refusing to open a URL outside allowed docs hosts".into());
     }
@@ -79,9 +92,20 @@ fn configured_docs_host() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn portal() -> Url {
         Url::parse("https://ops.deslicer.show/").expect("url")
+    }
+
+    #[test]
+    fn ci_env_forces_non_interactive() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        std::env::set_var("CI", "1");
+        assert!(is_non_interactive());
+        std::env::remove_var("CI");
     }
 
     #[test]

@@ -30,7 +30,7 @@ pub struct Args {
     #[arg(long)]
     pub print: bool,
 
-    /// Open the topic in a browser (skipped in CI unless you pass this).
+    /// Open the topic in a browser (no-op in CI or without a TTY; URL is still printed).
     #[arg(long)]
     pub open: bool,
 }
