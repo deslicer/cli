@@ -4,6 +4,7 @@ use crate::Ctx;
 
 pub mod list;
 pub mod sync;
+pub mod validate;
 
 #[derive(Subcommand)]
 pub enum InventoryCmd {
@@ -11,12 +12,15 @@ pub enum InventoryCmd {
     List(list::Args),
     /// Refresh `.deslicer/environments/<tenant-slug>.yml` from Observer host groups
     Sync(sync::Args),
+    /// Validate `.deslicer/environments/<stem>.yml` (shape + live host groups)
+    Validate(validate::Args),
 }
 
 pub async fn dispatch(ctx: Ctx, cmd: InventoryCmd) -> i32 {
     match cmd {
         InventoryCmd::List(args) => list::run(ctx, args).await,
         InventoryCmd::Sync(args) => sync::run(ctx, args).await,
+        InventoryCmd::Validate(args) => validate::run(ctx, args).await,
     }
 }
 
@@ -30,5 +34,6 @@ mod tests {
         let inventory = cmd.find_subcommand_mut("inventory").expect("inventory");
         assert!(inventory.find_subcommand("sync").is_some());
         assert!(inventory.find_subcommand("list").is_some());
+        assert!(inventory.find_subcommand("validate").is_some());
     }
 }

@@ -78,6 +78,16 @@ deslicer inventory sync
 
 Merge rules: new groups are appended (existing `apps:` lists stay intact); removed groups with empty `apps:` are dropped; removed groups that still list `source_path` apps are kept and the command exits 2 until you delete those apps from the file (and the repo) and re-run.
 
+Validate before merge (PR checks / local):
+
+```bash
+deslicer inventory validate --environment acme-prod
+# JSON for CI parsers:
+deslicer inventory validate --environment acme-prod --log-format json
+```
+
+Checks (fail closed): YAML shape and required `inventory_group`; no duplicate groups; no duplicate `source_path`+`dest_dir`; `source_path` exists on disk unless `state: absent`; `dest_dir` allowlist; live host-group allowlist via auth → Observer `GET /api/v1/groups` (not a hardcoded list).
+
 `--force` on `init` overwrites workflow templates only — it does not wipe operator `apps:` lists.
 
 `init` prints a `gh` recipe to create the GitHub Environment and pipe secrets via stdin. The CLI never creates Environments or writes secrets. A second Observer backend is a second Environment plus a workflow matrix row, not a second repo-level token.
