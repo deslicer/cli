@@ -341,5 +341,4 @@ mod tests {
             Some(ctx.deslicer_api_url.as_str())
         );
     }
-
 }

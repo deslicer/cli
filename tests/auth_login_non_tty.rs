@@ -20,7 +20,10 @@ fn dev_token_env() -> String {
 }
 
 fn api_url_flag() -> String {
-    format!("--{}-api-url", env!("CARGO_PKG_NAME").split('-').next().unwrap())
+    format!(
+        "--{}-api-url",
+        env!("CARGO_PKG_NAME").split('-').next().unwrap()
+    )
 }
 
 #[test]
@@ -34,7 +37,7 @@ fn auth_login_ci_local_without_token_fails_fast() {
         .arg("local")
         .arg(api_url_flag())
         .arg("http://127.0.0.1:9/")
-        .env_remove(&dev_token_env())
+        .env_remove(dev_token_env())
         .env("CI", "1")
         .env("TERM", "dumb")
         .output()
