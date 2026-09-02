@@ -26,7 +26,7 @@ Path A2 also writes `.deslicer/environments/<tenant-slug>.yml` (this tenant's ho
 | --- | --- | --- |
 | GitHub Environment `<slug>` | `DESLICER_API_TOKEN` (secret) | tools-scope Observer key |
 | GitHub Environment `<slug>` | `OBSERVER_API_URL` (var) | Observer management URL |
-| GitHub Environment `<slug>` | `TARGET_GROUP_ID` (var) | Host group UUID |
+| GitHub Environment `<slug>` | `TARGET_GROUP_ID` (var) | Optional UUID; prefer `--target-group <inventory_group name>` |
 | GitHub Environment `<slug>` | `DESLICER_ENVIRONMENT` (var) | Same slug as the YAML stem |
 | Repository | `DESLICER_ENVIRONMENT` (var) | Name pointer for `pull_request` |
 | Repository | `DESLICER_API_URL` (var) | Portal base for plan links |

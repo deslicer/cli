@@ -20,6 +20,7 @@ pub mod reporting;
 pub mod resolver;
 pub mod session_portal;
 pub mod sse;
+pub mod target_group;
 pub mod token_source;
 pub mod token_store;
 pub mod tool_download;

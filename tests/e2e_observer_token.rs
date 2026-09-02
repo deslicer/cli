@@ -47,6 +47,56 @@ async fn create_plan_from_git_posts_observer_fields() {
 }
 
 #[tokio::test]
+async fn resolve_target_group_name_then_create_plan_from_git() {
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/groups"))
+        .and(header("Authorization", "Bearer dap_tools_ci_key"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+            "id": GROUP_ID,
+            "name": "search-heads",
+            "display_name": "Search Heads",
+            "member_count": 2
+        }])))
+        .mount(&observer)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plans"))
+        .and(header("Authorization", "Bearer dap_tools_ci_key"))
+        .and(body_json(json!({
+            "source_type": "git",
+            "repository_url": REPO,
+            "commit_sha": SHA,
+            "target_group_id": GROUP_ID
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "success": true,
+            "message": "ok",
+            "plan": {
+                "id": PLAN_ROW_ID,
+                "plan_id": PLAN_ID,
+                "status": "pending_approval"
+            }
+        })))
+        .mount(&observer)
+        .await;
+
+    let base = Url::parse(&format!("{}/", observer.uri())).expect("url");
+    let client = Client::new(base, TokenSource::static_token("dap_tools_ci_key".into()));
+    let groups = client.list_groups().await.expect("groups");
+    let target_group_id =
+        deslicer_cli::target_group::resolve_target_group_id("search-heads", &groups)
+            .expect("resolve");
+    assert_eq!(target_group_id, GROUP_ID);
+    let plan = client
+        .create_plan_from_git(REPO, SHA, &target_group_id, None)
+        .await
+        .expect("create");
+    assert_eq!(plan.id, PLAN_ROW_ID);
+    assert_eq!(plan.status, "pending_approval");
+}
+
+#[tokio::test]
 async fn create_plan_from_git_reuses_existing_plan_on_duplicate_plan_409() {
     let observer = MockServer::start().await;
     Mock::given(method("POST"))

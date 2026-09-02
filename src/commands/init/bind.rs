@@ -181,7 +181,9 @@ fn path_a2_next_step() -> String {
      then commit the scaffolded workflows:\n\
      - GitHub Environment named after the tenant slug (same as the YAML stem)\n\
      - Environment secret: DESLICER_API_TOKEN (tools-scope Observer key)\n\
-     - Environment variable: OBSERVER_API_URL, TARGET_GROUP_ID, DESLICER_ENVIRONMENT\n\
+     - Environment variable: OBSERVER_API_URL, DESLICER_ENVIRONMENT\n\
+     - Optional: TARGET_GROUP_ID only if workflows still pass a UUID; prefer\n\
+       `deslicer change plan --target-group <inventory_group name>`\n\
      - Repo-level variable DESLICER_ENVIRONMENT: name pointer so pull_request can select the Environment\n\
      - Repo-level variable DESLICER_API_URL: portal base for plan links\n\
      A second Observer backend is a second Environment plus a matrix row — not a second repo secret.\n\
