@@ -8,6 +8,7 @@
 # Environment overrides:
 #   DESLICER_VERSION      release tag to install (default: latest stable, e.g. v1.2.3)
 #   DESLICER_INSTALL_DIR  destination directory (default: /usr/local/bin)
+#   GITHUB_TOKEN / GH_TOKEN  optional GitHub API token for latest-tag resolution
 #
 # Re-running the script updates an existing installation in place. Every
 # download is verified against the release's .sha256 sidecar before install.
@@ -17,9 +18,30 @@ set -euo pipefail
 REPO="deslicer/cli"
 BINARY="deslicer"
 INSTALL_DIR="${DESLICER_INSTALL_DIR:-/usr/local/bin}"
+TMP_DIR=""
+PINNED_VERSION_ENV="DESLICER_VERSION" # pragma: allowlist secret
+INSTALL_DIR_ENV="DESLICER_INSTALL_DIR" # pragma: allowlist secret
 
 log() { printf '\033[0;34m[deslicer-install]\033[0m %s\n' "$1"; }
 fail() { printf '\033[0;31m[deslicer-install]\033[0m %s\n' "$1" >&2; exit 1; }
+
+cleanup_tmp_dir() {
+  rm -rf "${TMP_DIR:-}"
+}
+
+validate_tag() {
+  local tag="$1"
+  case "${tag}" in
+    v[0-9]*)
+      case "${tag}" in
+        *[!a-zA-Z0-9.v-]*) return 1 ;;
+        */* | *\\* | *" "* | *"?"*) return 1 ;;
+      esac
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
 
 detect_target() {
   local os arch
@@ -46,17 +68,51 @@ detect_target() {
   esac
 }
 
+resolve_version_from_api() {
+  local response tag token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  local -a curl_args=(-fsSL)
+
+  if [ -n "${token}" ]; then
+    curl_args+=(-H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github+json")
+  fi
+
+  response="$(curl "${curl_args[@]}" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null)" || true
+  tag="$(printf '%s' "${response}" | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+  if [ -n "${tag}" ] && validate_tag "${tag}"; then
+    echo "${tag}"
+  fi
+}
+
+resolve_version_from_html() {
+  local location tag
+  location="$(curl -fsSI "https://github.com/${REPO}/releases/latest" 2>/dev/null \
+    | awk -F': ' 'tolower($1)=="location" {gsub(/\r/,"",$2); print $2}' | tail -1)" || true
+  tag="${location##*/}"
+  if [ -n "${tag}" ] && validate_tag "${tag}"; then
+    echo "${tag}"
+  fi
+}
+
 resolve_version() {
+  local tag
+
   if [ -n "${DESLICER_VERSION:-}" ]; then
     echo "${DESLICER_VERSION}"
     return
   fi
+
   # GitHub's "latest" release excludes prereleases by definition.
-  local tag
-  tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)" || true
-  [ -n "${tag}" ] || fail "could not resolve latest release tag from GitHub API"
-  echo "${tag}"
+  tag="$(resolve_version_from_api)"
+  if [ -z "${tag}" ]; then
+    tag="$(resolve_version_from_html)"
+  fi
+
+  if [ -n "${tag}" ]; then
+    echo "${tag}"
+    return
+  fi
+
+  fail "could not resolve latest release tag (GitHub API rate-limited or unavailable); set ${PINNED_VERSION_ENV}=vX.Y.Z to install a specific release"
 }
 
 sha256_check() {
@@ -74,7 +130,7 @@ sha256_check() {
 }
 
 main() {
-  local target version artifact base_url tmp_dir current_version=""
+  local target version artifact base_url current_version=""
   target="$(detect_target)"
   version="$(resolve_version)"
   artifact="${BINARY}-${target}.tar.gz"
@@ -91,26 +147,31 @@ main() {
     log "installing ${BINARY} ${version} (${target})"
   fi
 
-  tmp_dir="$(umask 077; mktemp -d)"
-  trap 'rm -rf "${tmp_dir}"' EXIT
+  TMP_DIR="$(umask 077; mktemp -d)"
+  trap cleanup_tmp_dir EXIT
 
   log "downloading ${artifact}"
-  curl -fsSL -o "${tmp_dir}/${artifact}" "${base_url}/${artifact}"
-  curl -fsSL -o "${tmp_dir}/${artifact}.sha256" "${base_url}/${artifact}.sha256"
-  sha256_check "${tmp_dir}/${artifact}" "${tmp_dir}/${artifact}.sha256"
+  curl -fsSL -o "${TMP_DIR}/${artifact}" "${base_url}/${artifact}"
+  curl -fsSL -o "${TMP_DIR}/${artifact}.sha256" "${base_url}/${artifact}.sha256"
+  sha256_check "${TMP_DIR}/${artifact}" "${TMP_DIR}/${artifact}.sha256"
   log "checksum verified"
 
-  tar -C "${tmp_dir}" -xzf "${tmp_dir}/${artifact}"
-  [ -f "${tmp_dir}/${BINARY}" ] || fail "archive did not contain the ${BINARY} binary"
+  tar -C "${TMP_DIR}" -xzf "${TMP_DIR}/${artifact}"
+  [ -f "${TMP_DIR}/${BINARY}" ] || fail "archive did not contain the ${BINARY} binary"
 
   if [ -w "${INSTALL_DIR}" ]; then
-    install -m 0755 "${tmp_dir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    install -m 0755 "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
   else
     log "escalating with sudo to write ${INSTALL_DIR}"
-    sudo install -m 0755 "${tmp_dir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    sudo install -m 0755 "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
   fi
 
   log "installed $("${INSTALL_DIR}/${BINARY}" --version) to ${INSTALL_DIR}/${BINARY}"
+  trap - EXIT
+  cleanup_tmp_dir
+  TMP_DIR=""
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
+  main "$@"
+fi
