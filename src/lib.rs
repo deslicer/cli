@@ -10,6 +10,7 @@ pub mod environment_paths;
 pub mod environment_yaml;
 pub mod errors;
 pub mod http;
+pub mod interactive;
 pub mod observer_client;
 pub mod observer_token;
 pub mod oidc_exchange;

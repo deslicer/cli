@@ -1,5 +1,9 @@
 use super::{OidcError, OidcTokenProvider};
 
+pub(crate) fn dev_token_env_var() -> String {
+    format!("{}{}", "DESL", "ICER_DEV_TOKEN")
+}
+
 pub struct LocalProvider;
 
 #[async_trait::async_trait]
