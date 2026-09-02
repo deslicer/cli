@@ -46,8 +46,21 @@ pub fn map_error_body(status: reqwest::StatusCode, body: &str, retry_after_secs:
             CliError::RateLimited { retry_after_secs }
         }
         None if status.is_server_error() => CliError::BackendUnavailable(status.to_string()),
+        None if status == reqwest::StatusCode::NOT_FOUND && looks_like_html(body) => {
+            CliError::Other(
+                "agent request failed (HTTP 404): this host has no CLI agent API.\n\
+                 If you logged into an on-prem portal, pass `--deslicer-api-url <that host>` \
+                 or set DESLICER_API_URL (for example https://ops.deslicer.show)."
+                    .into(),
+            )
+        }
         None => CliError::Other(message),
     }
+}
+
+fn looks_like_html(body: &str) -> bool {
+    let trimmed = body.trim_start();
+    trimmed.starts_with('<') || trimmed.contains("<!DOCTYPE") || trimmed.contains("<html")
 }
 
 #[cfg(test)]
@@ -133,6 +146,17 @@ mod tests {
                 retry_after_secs: 5
             }
         ));
+    }
+
+    #[test]
+    fn html_404_points_at_the_portal_flag() {
+        let err = map_error_body(
+            StatusCode::NOT_FOUND,
+            "<!DOCTYPE html><html><body>404</body></html>",
+            30,
+        );
+        assert!(err.to_string().contains("DESLICER_API_URL"), "{err}");
+        assert!(err.to_string().contains("404"), "{err}");
     }
 
     #[test]

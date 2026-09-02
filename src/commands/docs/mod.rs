@@ -4,8 +4,11 @@
 //! can run `deslicer docs path-a2` after `init` without hunting GitHub.
 
 use clap::Args as ClapArgs;
+use url::Url;
 
 use crate::cli::LogFormat;
+use crate::session_portal::resolve_deslicer_api_url;
+use crate::token_store::load_active_session;
 use crate::Ctx;
 
 mod catalog;
@@ -61,8 +64,16 @@ fn run_inner(ctx: &Ctx, args: Args) -> Result<(), String> {
     }
 }
 
+fn portal_base(ctx: &Ctx) -> Url {
+    match load_active_session() {
+        Ok(Some(session)) => resolve_deslicer_api_url(ctx, &session),
+        _ => ctx.deslicer_api_url.clone(),
+    }
+}
+
 fn print_list(ctx: &Ctx, url_only: bool) -> Result<(), String> {
     let base = docs_base_for_list();
+    let portal = portal_base(ctx);
     match ctx.log_format {
         LogFormat::Json => {
             let topics: Vec<serde_json::Value> = TOPICS
@@ -73,7 +84,7 @@ fn print_list(ctx: &Ctx, url_only: bool) -> Result<(), String> {
                         "aliases": topic.aliases,
                         "title": topic.title,
                         "summary": topic.summary,
-                        "url": topic_url(topic, &ctx.deslicer_api_url),
+                        "url": topic_url(topic, &portal),
                         "sync": topic.sync,
                     })
                 })
@@ -89,7 +100,7 @@ fn print_list(ctx: &Ctx, url_only: bool) -> Result<(), String> {
         }
         LogFormat::Human if url_only => {
             for topic in TOPICS {
-                println!("{}", topic_url(topic, &ctx.deslicer_api_url));
+                println!("{}", topic_url(topic, &portal));
             }
         }
         LogFormat::Human => {
@@ -114,7 +125,8 @@ fn print_topic(ctx: &Ctx, name: &str, url_only: bool, open_browser: bool) -> Res
             known_topic_ids().join(", ")
         ));
     };
-    let url = topic_url(topic, &ctx.deslicer_api_url);
+    let portal = portal_base(ctx);
+    let url = topic_url(topic, &portal);
     match ctx.log_format {
         LogFormat::Json => {
             let payload = serde_json::json!({
@@ -135,7 +147,7 @@ fn print_topic(ctx: &Ctx, name: &str, url_only: bool, open_browser: bool) -> Res
         }
     }
     if open_browser {
-        open::open_url(&url, Some(&ctx.deslicer_api_url))?;
+        open::open_url(&url, Some(&portal))?;
     }
     Ok(())
 }

@@ -92,6 +92,7 @@ mod tests {
             display_name: "Ada".into(),
             observer_api_url: "https://ops.deslicer.show/api/cli/observer/".into(),
             tenant_slug: slug.map(str::to_string),
+            deslicer_api_url: None,
         }
     }
 

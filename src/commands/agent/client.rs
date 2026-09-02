@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::device_flow::join_api;
 use crate::errors::CliError;
 use crate::http::{assert_url_allowed, try_client, try_streaming_client};
+use crate::session_portal::resolve_deslicer_api_url;
 use crate::token_store::load_active_session;
 use crate::Ctx;
 
@@ -56,7 +57,7 @@ impl AgentClient {
             )
         })?;
         Ok(Self {
-            base: ctx.deslicer_api_url.clone(),
+            base: resolve_deslicer_api_url(ctx, &session),
             token: session.cli_session_token,
             json: try_client()?,
             streaming: try_streaming_client()?,

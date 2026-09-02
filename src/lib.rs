@@ -15,6 +15,7 @@ pub mod observer_token;
 pub mod oidc_exchange;
 pub mod output;
 pub mod resolver;
+pub mod session_portal;
 pub mod sse;
 pub mod token_source;
 pub mod token_store;
