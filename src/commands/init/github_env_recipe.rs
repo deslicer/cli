@@ -58,6 +58,8 @@ mod tests {
         assert!(text.contains("printf '%s' \"$DESLICER_API_TOKEN\""));
         assert!(!text.contains("dslk_"));
         assert!(text.contains("workflow matrix"));
+        assert!(text.contains("Prefer: deslicer change plan --target-group"));
+        assert!(text.contains("# printf '%s' \"$TARGET_GROUP_ID\""));
     }
 
     #[test]

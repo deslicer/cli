@@ -6,7 +6,7 @@ pub mod list;
 
 #[derive(Subcommand)]
 pub enum GroupsCmd {
-    /// List host groups (`id` is the value for `change plan --target-group`)
+    /// List host groups (`id` or exact `name` for `change plan --target-group`)
     List(list::Args),
 }
 
