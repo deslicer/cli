@@ -7,6 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/install.sh
 source "${ROOT}/scripts/install.sh"
 
+INSTALL_DIR_ENV="DESLICER_INSTALL_DIR" # pragma: allowlist secret
+
 TEST_ROOT="$(mktemp -d)"
 MOCK_BIN="${TEST_ROOT}/mock-bin"
 INSTALL_DIR="${TEST_ROOT}/install"

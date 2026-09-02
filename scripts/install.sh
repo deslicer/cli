@@ -20,7 +20,6 @@ BINARY="deslicer"
 INSTALL_DIR="${DESLICER_INSTALL_DIR:-/usr/local/bin}"
 TMP_DIR=""
 PINNED_VERSION_ENV="DESLICER_VERSION" # pragma: allowlist secret
-INSTALL_DIR_ENV="DESLICER_INSTALL_DIR" # pragma: allowlist secret
 
 log() { printf '\033[0;34m[deslicer-install]\033[0m %s\n' "$1"; }
 fail() { printf '\033[0;31m[deslicer-install]\033[0m %s\n' "$1" >&2; exit 1; }
