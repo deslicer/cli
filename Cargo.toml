@@ -46,6 +46,7 @@ flate2 = "1"
 # that accepts writes and then disappears (the auth-login keychain warning).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 toml = "1.1"
+serde_yml = "0.0.13"
 
 [dev-dependencies]
 wiremock = "0.6"
