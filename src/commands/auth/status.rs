@@ -83,6 +83,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             .and_then(Value::as_str)
             .is_some();
 
+    #[rustfmt::skip]
     let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() { // pragma: allowlist secret
         json!({ "dev_token": "set" })
     } else {
@@ -115,11 +116,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if ok {
         0
     } else {
-        token_result
-            .as_ref()
-            .err()
-            .map(oidc_exit_code)
-            .unwrap_or(1)
+        token_result.as_ref().err().map(oidc_exit_code).unwrap_or(1)
     }
 }
 
@@ -149,7 +146,11 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
             session.tenant_slug.as_deref(),
         ),
     );
-    if logged_in { 0 } else { 1 }
+    if logged_in {
+        0
+    } else {
+        1
+    }
 }
 
 fn decode_jwt_parts(jwt: &str) -> (Value, Value) {
@@ -210,6 +211,7 @@ mod tests {
     fn audit_never_includes_raw_dev_token() {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("DESLICER_DEV_TOKEN", "secret-token-value-12345"); // pragma: allowlist secret
+        #[rustfmt::skip]
         let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() { // pragma: allowlist secret
             json!({ "dev_token": "set" })
         } else {

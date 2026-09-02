@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-fn cli_bin() // pragma: allowlist secret -> Command {
+fn cli_bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_deslicer")) // pragma: allowlist secret
 }
 

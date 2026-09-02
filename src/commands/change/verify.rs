@@ -48,10 +48,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             return map_cli_error(
                 ctx.log_format,
                 CliError::Other(
-                "`change verify --git-ref` requires CI OIDC. Device sessions \
+                    "`change verify --git-ref` requires CI OIDC. Device sessions \
                  can only re-compile bundle-sourced plans."
-                    .into(),
-            ));
+                        .into(),
+                ),
+            );
         }
         if let Err(err) = client.trigger_compile(&plan.id, "bundle").await {
             eprintln!("verification failed: {err}");

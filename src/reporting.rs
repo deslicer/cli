@@ -23,7 +23,9 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut args = args.into_iter().map(|s| s.as_ref().to_string_lossy().into_owned());
+    let mut args = args
+        .into_iter()
+        .map(|s| s.as_ref().to_string_lossy().into_owned());
     while let Some(arg) = args.next() {
         if arg == "--log-format" {
             if let Some(value) = args.next() {
@@ -129,7 +131,10 @@ pub fn emit_cli_error(format: LogFormat, err: &CliError) -> i32 {
     let code = err.exit_code();
     match format {
         LogFormat::Json => {
-            eprintln!("{}", serde_json::to_string(&cli_error_json(err)).unwrap_or_default());
+            eprintln!(
+                "{}",
+                serde_json::to_string(&cli_error_json(err)).unwrap_or_default()
+            );
         }
         LogFormat::Human => {
             eprintln!("{}", redact_secrets(&err.to_string()));

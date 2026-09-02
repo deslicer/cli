@@ -175,11 +175,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return map_cli_error(
             ctx.log_format,
             CliError::Other(
-            "`change plan` without --source-dir starts a git-sourced compile. \
+                "`change plan` without --source-dir starts a git-sourced compile. \
              Device sessions have no repository credentials. Re-run with \
              --source-dir <path> --target-group <id>."
-                .into(),
-        ));
+                    .into(),
+            ),
+        );
     }
 
     // Direct mode: talking to Observer with a tools-scope key rather than through
