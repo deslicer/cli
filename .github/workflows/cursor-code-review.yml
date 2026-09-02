@@ -20,7 +20,7 @@ jobs:
     if: github.event.pull_request.draft == false
     uses: deslicer/deslicer-code-harness/.github/workflows/core_cursor_code_review.yml@v1
     with:
-      model: gpt-5.3-codex
+      model: ${{ vars.CURSOR_MODEL || 'auto' }}
     secrets:
       cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
       openai_api_key: ${{ secrets.OPENAI_API_KEY }}
