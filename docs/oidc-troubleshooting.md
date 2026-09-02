@@ -64,6 +64,18 @@ Run it **before** `deslicer auth login` when debugging token or binding failures
 
 ## Common failure patterns
 
+### `auth status` exits 0 without OIDC on `--ci-platform github|gitlab`
+
+When OIDC environment variables are missing, `auth status` exits **4** (OIDC unavailable) with `"ok": false` in JSON output. The same applies to `auth whoami`, which reports `"logged_in": false` instead of claiming a CI identity.
+
+```bash
+env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+  [REDACTED] auth status --ci-platform github --log-format json
+# stdout: { "ok": false, "platform": "github", ... }
+# stderr: { "error": { "kind": "oidc", "message": "..." } }
+# exit code: 4
+```
+
 ### `auth status` shows platform `auto` but exits 8
 
 The runner environment lacks recognizable CI variables. Set `--ci-platform` explicitly:

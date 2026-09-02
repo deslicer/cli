@@ -158,26 +158,29 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if args.source_dir.is_some() {
         return match run_bundle_flow(&ctx, &args).await {
             Ok(plan) => emit_change_plan(&plan),
-            Err(err) => map_cli_error(err),
+            Err(err) => map_cli_error(ctx.log_format, err),
         };
     }
 
     let environment = match resolve_plan_environment(&ctx, args.environment.as_deref()) {
         Ok(value) => value,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
     let (session, client) = match authenticate(&ctx, environment.as_deref(), None).await {
         Ok(pair) => pair,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     if session.is_device_session() {
-        return map_cli_error(CliError::Other(
-            "`change plan` without --source-dir starts a git-sourced compile. \
+        return map_cli_error(
+            ctx.log_format,
+            CliError::Other(
+                "`change plan` without --source-dir starts a git-sourced compile. \
              Device sessions have no repository credentials. Re-run with \
              --source-dir <path> --target-group <id>."
-                .into(),
-        ));
+                    .into(),
+            ),
+        );
     }
 
     // Direct mode: talking to Observer with a tools-scope key rather than through
@@ -186,17 +189,17 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if session.is_observer_api_token() {
         return match run_direct_git_plan(&session, &client, &args).await {
             Ok(plan) => emit_change_plan(&plan),
-            Err(err) => map_cli_error(err),
+            Err(err) => map_cli_error(ctx.log_format, err),
         };
     }
 
     if let Err(err) = require_proxy_mode(&session, "change plan") {
-        return map_cli_error(err);
+        return map_cli_error(ctx.log_format, err);
     }
 
     match run_git_plans(&ctx, &session, &client, &args, environment.as_deref()).await {
         Ok(code) => code,
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
 

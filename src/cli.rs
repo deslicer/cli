@@ -127,7 +127,7 @@ impl Cli {
             Command::Worker(cmd) => crate::commands::worker::dispatch(ctx, cmd).await,
             Command::Repo(cmd) => crate::commands::repo::dispatch(ctx, cmd).await,
             Command::Completion(args) => crate::commands::completion::run(args),
-            Command::Update(args) => crate::commands::update::run(args).await,
+            Command::Update(args) => crate::commands::update::run(ctx, args).await,
         }
     }
 }

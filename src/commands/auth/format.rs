@@ -87,8 +87,13 @@ pub fn status_ci_human(
     platform: &str,
     observer_api_url: Option<&str>,
     resolution_path: Option<&str>,
+    ok: bool,
 ) -> String {
-    let mut lines = vec!["Identity: ci".to_string(), format!("Platform: {platform}")];
+    let state = if ok { "ready" } else { "not ready" };
+    let mut lines = vec![
+        format!("Identity: ci ({state})"),
+        format!("Platform: {platform}"),
+    ];
     if let Some(url) = observer_api_url {
         lines.push(format!("Backend: {url}"));
     }

@@ -28,7 +28,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 );
                 0
             }
-            Err(err) => map_cli_error(err),
+            Err(err) => map_cli_error(ctx.log_format, err),
         };
     }
     let platform = crate::ci::detect_platform(ctx.ci_override);
@@ -49,7 +49,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             );
             0
         }
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
 
@@ -59,7 +59,7 @@ async fn device_login(ctx: Ctx) -> i32 {
             if let Err(err) =
                 CompositeTokenStore::default_store().and_then(|store| store.save(&session))
             {
-                return map_cli_error(err);
+                return map_cli_error(ctx.log_format, err);
             }
             print_login(
                 ctx,
@@ -70,7 +70,7 @@ async fn device_login(ctx: Ctx) -> i32 {
             );
             0
         }
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
 

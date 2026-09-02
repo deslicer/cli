@@ -16,20 +16,20 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
         Ok(pair) => pair,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     if let Some(plan_id) = args.plan_id {
         let plan = match client.get_plan(&plan_id).await {
             Ok(plan) => plan,
-            Err(err) => return map_cli_error(err),
+            Err(err) => return map_cli_error(ctx.log_format, err),
         };
         return emit_change_plan(&plan);
     }
 
     let plans = match client.list_plans(args.environment.as_deref()).await {
         Ok(plans) => plans,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     match serde_json::to_string(&plans) {
