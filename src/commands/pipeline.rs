@@ -1,4 +1,5 @@
 use crate::ci::{self, CiPlatform, AUDIENCE};
+use crate::cli::LogFormat;
 use crate::errors::CliError;
 use crate::observer_client::Client;
 use crate::observer_token;
@@ -116,9 +117,8 @@ fn client_from_device_session(
     ))
 }
 
-pub fn map_cli_error(err: CliError) -> i32 {
-    eprintln!("{err}");
-    err.exit_code()
+pub fn map_cli_error(log_format: LogFormat, err: CliError) -> i32 {
+    crate::reporting::emit_cli_error(log_format, &err)
 }
 
 /// Standard rejection for commands that require the deslicer-ai CI proxy.

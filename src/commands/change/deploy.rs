@@ -47,12 +47,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let (_session, client) =
         match authenticate(&ctx, args.environment.as_deref(), Some(&args.plan_id)).await {
             Ok(pair) => pair,
-            Err(err) => return map_cli_error(err),
+            Err(err) => return map_cli_error(ctx.log_format, err),
         };
 
     let queued = match client.execute(&args.plan_id).await {
         Ok(queued) => queued,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     if args.no_wait {

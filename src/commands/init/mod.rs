@@ -68,9 +68,10 @@ pub struct Args {
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
+    let log_format = ctx.log_format;
     match run_inner(ctx, args).await {
         Ok(code) => code,
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(log_format, err),
     }
 }
 

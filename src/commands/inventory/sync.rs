@@ -33,7 +33,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     match run_inner(&ctx, args).await {
         Ok(blocked) if blocked => 2,
         Ok(_) => 0,
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
 

@@ -43,9 +43,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
 /// Same loop as `run`, with a run that is already in flight on this thread.
 pub async fn run_with(ctx: Ctx, args: Args, detached_run: Option<String>) -> i32 {
+    let log_format = ctx.log_format;
     match run_with_inner(ctx, args, detached_run).await {
         Ok(code) => code,
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(log_format, err),
     }
 }
 

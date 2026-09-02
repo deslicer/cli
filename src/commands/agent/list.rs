@@ -11,9 +11,10 @@ use super::client::{AgentClient, AgentSummary};
 pub struct Args {}
 
 pub async fn run(ctx: Ctx, _args: Args) -> i32 {
+    let log_format = ctx.log_format;
     match run_inner(ctx).await {
         Ok(code) => code,
-        Err(err) => map_cli_error(err),
+        Err(err) => map_cli_error(log_format, err),
     }
 }
 

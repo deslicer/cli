@@ -1,10 +1,11 @@
 use clap::Args as ClapArgs;
 use serde_json::json;
 
-use crate::ci::{self, CiPlatform};
+use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::commands::auth::format::{
     print_output, whoami_ci_human, whoami_device_human, whoami_none_human, whoami_token_human,
 };
+use crate::reporting::{emit_oidc_error, oidc_exit_code};
 use crate::token_store::load_stored_session;
 use crate::Ctx;
 
@@ -13,19 +14,20 @@ pub struct Args {}
 
 pub async fn run(ctx: Ctx, _args: Args) -> i32 {
     if let Ok(Some(session)) = load_stored_session() {
+        let logged_in = session.is_active();
         let output = device_whoami_json(&session);
         print_output(
             ctx.log_format,
             &output,
             &whoami_device_human(
-                session.is_active(),
+                logged_in,
                 &session.display_name,
                 &session.tenant_id,
                 &session.expires_at,
                 session.tenant_slug.as_deref(),
             ),
         );
-        return if session.is_active() { 0 } else { 1 };
+        return if logged_in { 0 } else { 1 };
     }
 
     if crate::observer_token::direct_auth_ready(&ctx) {
@@ -33,6 +35,7 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         print_output(
             ctx.log_format,
             &json!({
+                "ok": true,
                 "logged_in": true,
                 "identity": "observer_api_token",
                 "observer_api_url": url,
@@ -47,29 +50,50 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         print_output(
             ctx.log_format,
             &json!({
+                "ok": false,
                 "logged_in": false,
                 "identity": "none",
-                "hint": "run `deslicer auth login` and approve the code in the portal",
+                "hint": "run auth login and approve the code in the portal",
             }),
             &whoami_none_human(),
         );
         return 1;
     }
 
-    print_output(
-        ctx.log_format,
-        &json!({
-            "logged_in": true,
-            "identity": "ci",
-            "platform": platform.header_value(),
-        }),
-        &whoami_ci_human(platform.header_value()),
-    );
-    0
+    match ci::provider_for(platform).fetch_token(AUDIENCE).await {
+        Ok(_) => {
+            print_output(
+                ctx.log_format,
+                &json!({
+                    "ok": true,
+                    "logged_in": true,
+                    "identity": "ci",
+                    "platform": platform.header_value(),
+                }),
+                &whoami_ci_human(platform.header_value()),
+            );
+            0
+        }
+        Err(err) => {
+            emit_oidc_error(ctx.log_format, &err);
+            print_output(
+                ctx.log_format,
+                &json!({
+                    "ok": false,
+                    "logged_in": false,
+                    "identity": "none",
+                    "platform": platform.header_value(),
+                }),
+                &whoami_none_human(),
+            );
+            oidc_exit_code(&err)
+        }
+    }
 }
 
 fn device_whoami_json(session: &crate::token_store::StoredSession) -> serde_json::Value {
     json!({
+        "ok": session.is_active(),
         "logged_in": session.is_active(),
         "identity": "device",
         "tenant_id": session.tenant_id,

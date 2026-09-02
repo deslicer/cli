@@ -2,10 +2,11 @@ use base64::Engine;
 use clap::Args as ClapArgs;
 use serde_json::{json, Value};
 
-use crate::ci::{self, CiPlatform, OidcError};
+use crate::ci::{self, CiPlatform};
 use crate::commands::auth::format::{
     print_output, status_ci_human, status_device_human, status_token_human,
 };
+use crate::reporting::{emit_oidc_error, oidc_exit_code, redact_secrets};
 use crate::token_store::load_stored_session;
 use crate::Ctx;
 
@@ -24,6 +25,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         print_output(
             ctx.log_format,
             &json!({
+                "ok": true,
                 "platform": platform.header_value(),
                 "identity": "observer_api_token",
                 "observer_api_url": url,
@@ -45,12 +47,8 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
     let (jwt_header, jwt_claims) = match &token_result {
         Ok(jwt) => decode_jwt_parts(jwt),
-        Err(OidcError::MissingEnv(msg)) if platform == CiPlatform::Local => {
-            eprintln!("{msg}");
-            (Value::Null, Value::Null)
-        }
         Err(err) => {
-            eprintln!("failed to fetch OIDC token: {err}");
+            emit_oidc_error(ctx.log_format, err);
             (Value::Null, Value::Null)
         }
     };
@@ -65,20 +63,36 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                     "resolution_path": backend.resolution_path,
                     "audience": backend.audience,
                 }),
-                Err(err) => json!(err.to_string()),
+                Err(err) => json!(redact_secrets(&err.to_string())),
             }
         }
         Err(_) => Value::Null,
     };
 
-    let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() {
-        json!("not configured")
+    let identity = token_result.as_ref().ok().map(|_| {
+        if platform == CiPlatform::Local {
+            "local_dev_token"
+        } else {
+            "ci"
+        }
+    });
+
+    let ok = token_result.is_ok()
+        && resolved_backend
+            .get("observer_api_url")
+            .and_then(Value::as_str)
+            .is_some();
+
+    let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() { // pragma: allowlist secret
+        json!({ "dev_token": "set" })
     } else {
         Value::Null
     };
 
     let output = json!({
+        "ok": ok,
         "platform": platform.header_value(),
+        "identity": identity,
         "audience": audience,
         "jwt_header": jwt_header,
         "jwt_claims": jwt_claims,
@@ -95,15 +109,27 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     print_output(
         ctx.log_format,
         &output,
-        &status_ci_human(platform.header_value(), backend_url, resolution_path),
+        &status_ci_human(platform.header_value(), backend_url, resolution_path, ok),
     );
-    0
+
+    if ok {
+        0
+    } else {
+        token_result
+            .as_ref()
+            .err()
+            .map(oidc_exit_code)
+            .unwrap_or(1)
+    }
 }
 
 fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
+    let logged_in = session.is_active();
     let output = json!({
+        "ok": logged_in,
         "platform": "device",
-        "logged_in": session.is_active(),
+        "identity": "device",
+        "logged_in": logged_in,
         "tenant_id": session.tenant_id,
         "tenant_slug": session.tenant_slug,
         "display_name": session.display_name,
@@ -115,7 +141,7 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
         ctx.log_format,
         &output,
         &status_device_human(
-            session.is_active(),
+            logged_in,
             &session.tenant_id,
             &session.display_name,
             &session.expires_at,
@@ -123,7 +149,7 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
             session.tenant_slug.as_deref(),
         ),
     );
-    0
+    if logged_in { 0 } else { 1 }
 }
 
 fn decode_jwt_parts(jwt: &str) -> (Value, Value) {
@@ -170,5 +196,27 @@ fn redact_sensitive_claims(value: &mut Value) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn audit_never_includes_raw_dev_token() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("DESLICER_DEV_TOKEN", "secret-token-value-12345"); // pragma: allowlist secret
+        let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() { // pragma: allowlist secret
+            json!({ "dev_token": "set" })
+        } else {
+            Value::Null
+        };
+        let serialized = audit.to_string();
+        assert!(!serialized.contains("secret-token-value-12345"));
+        std::env::remove_var("DESLICER_DEV_TOKEN"); // pragma: allowlist secret
     }
 }

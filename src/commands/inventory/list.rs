@@ -14,12 +14,12 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
         Ok(pair) => pair,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     let groups = match client.list_inventory().await {
         Ok(groups) => groups,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     match ctx.log_format {

@@ -18,7 +18,7 @@ const INITIAL_DELAY_MS: u64 = 500;
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let (_session, client) = match authenticate(&ctx, None, Some(&args.plan_id)).await {
         Ok(pair) => pair,
-        Err(err) => return map_cli_error(err),
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     let plan = match client.get_plan(&args.plan_id).await {
@@ -45,7 +45,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     for attempt in 0..MAX_ATTEMPTS {
         let progress = match client.progress(&args.plan_id).await {
             Ok(progress) => progress,
-            Err(err) => return map_cli_error(err),
+            Err(err) => return map_cli_error(ctx.log_format, err),
         };
 
         if progress.is_terminal() {
