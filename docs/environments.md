@@ -127,13 +127,49 @@ Monorepos may define many files:
 └── dr-failover.yml
 ```
 
-Select per job:
+Keep workflows thin: one matrix row (or job) per stem. Resolve groups by **name** from
+each YAML (`inventory_group`) — do not hard-code a single repo-level `TARGET_GROUP_ID`
+when stems map different host groups.
 
 ```yaml
-- run: deslicer change deploy --environment staging
-- run: deslicer change deploy --environment production
+strategy:
+  fail-fast: false
+  matrix:
+    target: [staging, production]
+steps:
+  - run: deslicer inventory validate --environment ${{ matrix.target }}
+  - run: deslicer change plan --environment ${{ matrix.target }}
+    # omit --target-group when the stem YAML has exactly one destination with apps;
+    # otherwise pass --target-group <inventory_group-name>
+```
+
+Select deploy per job:
+
+```yaml
+- run: deslicer change deploy --environment staging --plan-id ...
+- run: deslicer change deploy --environment production --plan-id ...
   if: github.ref == 'refs/heads/main'
 ```
+
+**Multi-group, same SHA:** Observer migration `206` scopes the idempotent
+index by `target_group_id` (plus an unscoped index when the group is null), so
+matrix/fan-out across inventory groups on one commit is supported on Observer
+builds that include that migration. Older Observer builds still collide on
+`(tenant, repo, commit)` alone.
+
+## Lifecycle gates (Path A2)
+
+Suggested thin CI shape (logic stays in the CLI — no reusable workflow core):
+
+| Event | Suggested steps | Notes |
+|-------|-----------------|-------|
+| `pull_request` | `inventory validate` → `change plan` (draft / pending_approval) | Preview only; approve in portal when ready |
+| `push` to default branch / manual full run | `change plan` (full reconcile) → approve → deploy | Same reconcile semantics as PR — packs all drifted mapped apps |
+| Nothing mapped | Skip plan | Exit early when the stem has no `source_path` apps |
+
+PR jobs may pass changed paths (or rely on GitHub PR detection) so CI outputs
+label **this PR touches** vs **also still drifted** without filtering execute.
+See [ci-outputs.md](ci-outputs.md).
 
 ## Air-gapped override
 

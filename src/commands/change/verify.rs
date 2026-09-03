@@ -98,11 +98,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             if let Some(ref counts) = counts {
                 emit_message(&crate::output::diff_count_pairs(counts));
             }
-            emit_change_plan_with_diff(&plan, counts.as_ref())
+            emit_change_plan_with_diff(&plan, counts.as_ref(), None)
         }
         Err(err) => {
             eprintln!("dry-run accepted, but the diff could not be fetched: {err}");
-            emit_change_plan_with_diff(&plan, None)
+            emit_change_plan_with_diff(&plan, None, None)
         }
     }
 }

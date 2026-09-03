@@ -1,6 +1,7 @@
 use crate::ci::{detect_platform, CiPlatform};
 use crate::diff_summary::DiffCounts;
 use crate::observer_client::{ChangePlan, ExecutionQueued, ExecutionSummary, PlanProgress};
+use crate::pr_preview::PrPreviewLabels;
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
@@ -113,7 +114,12 @@ pub fn emit_diff_counts(counts: &DiffCounts) -> i32 {
     emit_to_sink(&diff_count_pairs(counts))
 }
 
-fn plan_summary_markdown(title: &str, plan: &ChangePlan, diff: Option<&DiffCounts>) -> String {
+fn plan_summary_markdown(
+    title: &str,
+    plan: &ChangePlan,
+    diff: Option<&DiffCounts>,
+    preview: Option<&PrPreviewLabels>,
+) -> String {
     let mut lines = vec![
         format!("## {title}"),
         String::new(),
@@ -136,16 +142,47 @@ fn plan_summary_markdown(title: &str, plan: &ChangePlan, diff: Option<&DiffCount
             lines.push("| Destructive | yes |".to_string());
         }
     }
-    lines.join("\n")
+    let mut body = lines.join("\n");
+    if let Some(labels) = preview {
+        body.push_str("\n\n");
+        body.push_str(&labels.markdown_section());
+    }
+    body
+}
+
+pub fn pr_preview_pairs(labels: &PrPreviewLabels) -> Vec<(&'static str, String)> {
+    vec![
+        ("pr_touched_apps", labels.pr_touched_apps.join(",")),
+        (
+            "also_still_drifted_apps",
+            labels.also_still_drifted_apps.join(","),
+        ),
+        ("pr_preview_summary", labels.human_summary()),
+    ]
 }
 
 pub fn emit_change_plan(plan: &ChangePlan) -> i32 {
-    emit_change_plan_with_diff(plan, None)
+    emit_change_plan_with_diff(plan, None, None)
 }
 
-pub fn emit_change_plan_with_diff(plan: &ChangePlan, diff: Option<&DiffCounts>) -> i32 {
+pub fn emit_change_plan_with_diff(
+    plan: &ChangePlan,
+    diff: Option<&DiffCounts>,
+    preview: Option<&PrPreviewLabels>,
+) -> i32 {
     println!("{}", serde_json::to_string(plan).unwrap_or_default());
-    let summary = if let Some(counts) = diff {
+    let summary = if let Some(labels) = preview.filter(|value| !value.is_empty()) {
+        let base = if let Some(counts) = diff {
+            counts.human_summary()
+        } else {
+            plan.display_summary()
+        };
+        if base.is_empty() {
+            labels.human_summary()
+        } else {
+            format!("{base}; {}", labels.human_summary())
+        }
+    } else if let Some(counts) = diff {
         counts.human_summary()
     } else {
         plan.display_summary()
@@ -159,7 +196,11 @@ pub fn emit_change_plan_with_diff(plan: &ChangePlan, diff: Option<&DiffCounts>) 
     if let Some(counts) = diff {
         pairs.extend(diff_count_pairs(counts));
     }
-    let _ = append_github_step_summary(&plan_summary_markdown("Deslicer plan", plan, diff));
+    if let Some(labels) = preview {
+        pairs.extend(pr_preview_pairs(labels));
+    }
+    let _ =
+        append_github_step_summary(&plan_summary_markdown("Deslicer plan", plan, diff, preview));
     emit_to_sink(&pairs)
 }
 
@@ -236,8 +277,12 @@ pub fn emit_plan_status(
         pairs.extend(diff_count_pairs(counts));
     }
     if let Some(plan) = plan {
-        let _ =
-            append_github_step_summary(&plan_summary_markdown("Deslicer plan status", plan, diff));
+        let _ = append_github_step_summary(&plan_summary_markdown(
+            "Deslicer plan status",
+            plan,
+            diff,
+            None,
+        ));
     }
     emit_to_sink(&pairs)
 }
@@ -338,11 +383,31 @@ mod tests {
             name: None,
             summary: None,
         };
-        let _ = append_github_step_summary(&plan_summary_markdown("Test", &plan, None));
+        let _ = append_github_step_summary(&plan_summary_markdown("Test", &plan, None, None));
         std::env::remove_var("GITHUB_STEP_SUMMARY");
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("pending_approval"));
         assert!(content.contains("ext"));
+    }
+
+    #[test]
+    fn step_summary_includes_pr_preview_labels() {
+        let labels = PrPreviewLabels {
+            pr_touched_apps: vec!["demo_ci_app".into()],
+            also_still_drifted_apps: vec!["TA-linux".into()],
+        };
+        let plan = ChangePlan {
+            id: "row".into(),
+            plan_id: Some("ext".into()),
+            status: "pending_approval".into(),
+            name: None,
+            summary: None,
+        };
+        let markdown = plan_summary_markdown("Test", &plan, None, Some(&labels));
+        assert!(markdown.contains("This PR touches"));
+        assert!(markdown.contains("demo_ci_app"));
+        assert!(markdown.contains("Also still drifted"));
+        assert!(markdown.contains("TA-linux"));
     }
 
     #[test]
