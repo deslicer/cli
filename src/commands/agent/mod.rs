@@ -16,6 +16,7 @@ mod resume;
 mod run;
 mod session;
 mod stream;
+mod tool_display;
 mod types;
 
 pub use argv::rewrite_agent_argv;
