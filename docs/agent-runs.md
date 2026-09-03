@@ -34,8 +34,8 @@ accepts either the id or the name.
 ## Conversation (REPL)
 
 On a terminal, `deslicer agent` starts a line-oriented conversation. Each
-prompt is one server run. The first prompt creates a conversation; later
-prompts reuse it. Status and tools go to stderr; the answer goes to stdout.
+prompt is one server run. The first prompt creates a conversation and prints its id once; later
+prompts reuse it. Tool progress goes to stderr; the answer goes to stdout.
 
 ```bash
 deslicer agent
@@ -90,9 +90,11 @@ To pick a different agent, pass a name or id:
 deslicer agent run --agent slicer "Which indexers are missing the latest bundle?"
 ```
 
-The answer streams to **stdout** as it arrives; the conversation id, each tool
-the agent reaches for, and any diagnostics go to **stderr**, so `> answer.txt`
-captures the answer and nothing else.
+The answer streams to **stdout** as it arrives; tool progress and diagnostics
+go to **stderr**, so `> answer.txt` captures the answer and nothing else.
+Orchestrator bookkeeping (`declare_intent`, task-list updates) stays hidden
+unless `--verbose`. A tool result larger than 8 MiB is skipped in the
+terminal — the agent still has it — so the conversation can continue.
 
 Omit the prompt to read it from stdin, which avoids the shell quoting and
 argument-length limits of a long prompt:

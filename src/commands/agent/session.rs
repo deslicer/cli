@@ -36,19 +36,50 @@ pub async fn start_and_stream(
         .await?;
 
     let run_id = started.run_id.clone();
-    let conversation_id = started.conversation_id.clone();
+    let started_conversation = started.conversation_id.clone();
+    announce_turn(
+        ctx,
+        conversation_id.is_none(),
+        started_conversation.as_deref(),
+        run_id.as_deref(),
+        verbose,
+    );
 
-    if ctx.log_format == LogFormat::Human {
-        if let Some(id) = conversation_id.as_deref() {
-            eprintln!("Conversation {id}");
-        }
-        if verbose {
-            if let Some(id) = run_id.as_deref() {
-                eprintln!("Run {id}");
-            }
+    let (end, failure) = drain_turn(ctx, started.response, verbose).await?;
+
+    Ok(Turn {
+        run_id,
+        conversation_id: started_conversation,
+        end,
+        failure,
+    })
+}
+
+fn announce_turn(
+    ctx: &Ctx,
+    is_new_conversation: bool,
+    conversation_id: Option<&str>,
+    run_id: Option<&str>,
+    verbose: bool,
+) {
+    if ctx.log_format != LogFormat::Human {
+        return;
+    }
+    if let Some(notice) = conversation_notice(is_new_conversation, conversation_id) {
+        eprintln!("{notice}");
+    }
+    if verbose {
+        if let Some(id) = run_id {
+            eprintln!("Run {id}");
         }
     }
+}
 
+async fn drain_turn(
+    ctx: &Ctx,
+    response: reqwest::Response,
+    verbose: bool,
+) -> Result<(StreamEnd, Option<String>), CliError> {
     let mode = match ctx.log_format {
         LogFormat::Human => RenderMode::Human,
         LogFormat::Json => RenderMode::Json,
@@ -57,18 +88,34 @@ pub async fn start_and_stream(
     let stderr = std::io::stderr();
     let mut renderer = Renderer::new(stdout.lock(), stderr.lock(), mode, verbose);
 
-    let end = consume_stream(started.response, &mut renderer, interrupted()).await;
+    let streamed = consume_stream(response, &mut renderer, interrupted()).await;
     let finish = renderer.finish();
-    let failure = renderer.failure().map(str::to_string);
-    let end = end?;
+    let renderer_failure = renderer.failure().map(str::to_string);
     finish?;
 
-    Ok(Turn {
-        run_id,
-        conversation_id,
-        end,
-        failure,
+    // A read failure must not kill a conversation that already started.
+    // The run continues server-side; the REPL can ask another question.
+    Ok(match streamed {
+        Ok(end) => (end, renderer_failure),
+        Err(err) => (
+            StreamEnd::Truncated,
+            renderer_failure.or_else(|| Some(stream_failure_message(&err))),
+        ),
     })
+}
+
+fn conversation_notice(is_new: bool, conversation_id: Option<&str>) -> Option<String> {
+    if !is_new {
+        return None;
+    }
+    conversation_id.map(|id| format!("Started conversation {id}"))
+}
+
+fn stream_failure_message(err: &CliError) -> String {
+    match err {
+        CliError::Transport(msg) => msg.clone(),
+        other => other.to_string(),
+    }
 }
 
 pub async fn interrupted() {
@@ -149,5 +196,24 @@ mod tests {
     fn truncated_message_points_at_the_run() {
         let text = truncated_message(Some("r-9"), Some("c-9"));
         assert!(text.contains("deslicer agent logs r-9"), "{text}");
+    }
+
+    #[test]
+    fn conversation_notice_prints_only_on_the_first_turn() {
+        assert_eq!(
+            conversation_notice(true, Some("c-1")).as_deref(),
+            Some("Started conversation c-1")
+        );
+        assert_eq!(conversation_notice(false, Some("c-1")), None);
+        assert_eq!(conversation_notice(true, None), None);
+    }
+
+    #[test]
+    fn stream_failure_drops_the_transport_prefix() {
+        let err = CliError::Transport("read agent stream: connection reset".into());
+        assert_eq!(
+            stream_failure_message(&err),
+            "read agent stream: connection reset"
+        );
     }
 }

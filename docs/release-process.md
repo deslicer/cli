@@ -5,8 +5,12 @@ This document describes how `deslicer-cli` versions move from a git tag to insta
 ## Overview
 
 ```
-git tag vX.Y.Z
+push to main ──► Quality Gate
        │
+       ▼ (success, and there is something to ship)
+  cut-release.yml ──► plan bump from conventional commits
+       │               or use Cargo.toml if it is already ahead
+       │               tag vX.Y.Z
        ▼
   release.yml ──► build 5 targets + SHA256 sidecars
        │          cosign keyless signatures (Sigstore OIDC)
@@ -21,6 +25,19 @@ git tag vX.Y.Z
                  └── cargo publish -p deslicer-cli (OIDC Trusted Publishing)
 ```
 
+A merge that is only `docs` / `chore` / `ci` / `test` does not cut a release.
+`feat` → minor, `fix`/`perf` → patch, `BREAKING CHANGE` or `type!:` → major.
+If `Cargo.toml` is already ahead of the last tag (as in a version-bump PR),
+that version is tagged as-is.
+
+Manual cuts still work:
+
+```bash
+gh workflow run "Cut release" -f bump=minor
+# or
+git tag v1.4.0 && git push origin v1.4.0
+```
+
 ## Prerequisites
 
 1. **Cargo.toml version** matches the tag (tag `v1.2.3` → `version = "1.2.3"`).
@@ -28,18 +45,30 @@ git tag vX.Y.Z
 3. **`HOMEBREW_TAP_TOKEN`** secret on the repo — PAT or GitHub App token with write access to `deslicer/homebrew-tap`.
 4. Changelog / release notes prepared (GitHub auto-generates notes; edit after publish if needed).
 
-## Step 1 — Tag and push
+## Step 1 — Cut a release
+
+**Automatic:** merge to `main` with a releasable conventional commit (or with
+`Cargo.toml` already bumped). After Quality Gate passes, `cut-release.yml`
+tags and calls `release.yml`.
+
+**Dispatch:** Actions → **Cut release** → `auto` / `patch` / `minor` / `major`.
+
+**Manual tag** (same as before):
 
 ```bash
-# Ensure main is clean and version bumped in Cargo.toml
 git checkout main
 git pull
-
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
-Tag pattern **`v*.*.*`** triggers `.github/workflows/release.yml`.
+Tag pattern **`v*.*.*`** still triggers `.github/workflows/release.yml`.
+`GITHUB_TOKEN` tag pushes from `cut-release.yml` do not retrigger it; that
+path calls `release.yml` via `workflow_call`.
+
+If main is protected and the bot cannot push a version-bump commit, the job
+opens a `release/vX.Y.Z` PR instead. Merging that PR makes the next Cut
+release run tag the already-bumped version.
 
 ## Step 2 — release.yml (automatic)
 

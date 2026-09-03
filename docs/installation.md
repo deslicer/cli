@@ -40,15 +40,41 @@ The script detects your OS/arch, downloads the matching release archive from [Gi
 
 Re-running the script updates an existing installation in place. It will be mirrored at `https://get.deslicer.ai/cli/install.sh` once that host is live.
 
+## From source
+
+Use this when you need a commit that is on `main` but not in a GitHub Release yet (or to install a local checkout, including uncommitted fixes):
+
+```bash
+git clone https://github.com/deslicer/cli.git
+cd cli
+./scripts/install-from-source.sh
+```
+
+Without a clone, the same script clones `main` into a temp directory, builds, and installs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/deslicer/cli/main/scripts/install-from-source.sh | bash
+```
+
+Requires Rust (rustup honors `rust-toolchain.toml`). Overrides:
+
+| Variable | Effect |
+|----------|--------|
+| `DESLICER_INSTALL_DIR` | Install destination (default: directory of an existing `deslicer`, otherwise `~/.local/bin`) |
+| `DESLICER_REF` | Git ref to clone when not already in the repo (default `main`) |
+
+This overwrites an existing `deslicer` on `PATH` so you are not stuck on the last tagged release.
+
 ## Updating
 
 Pick the channel you installed with:
 
 ```bash
-deslicer update            # self-update from GitHub Releases (Linux/macOS)
-deslicer update --check    # report whether a newer release exists
-brew upgrade deslicer      # Homebrew installs
-cargo install deslicer-cli # crates.io installs (add --force to reinstall)
+deslicer update                 # self-update from GitHub Releases (Linux/macOS)
+deslicer update --check         # report whether a newer release exists
+brew upgrade deslicer           # Homebrew installs
+cargo install deslicer-cli --force
+./scripts/install-from-source.sh  # rebuild current main or this checkout
 ```
 
 `deslicer update` downloads the release archive for your platform, verifies the SHA-256 sidecar, and atomically replaces the running binary. It never installs prereleases unless you pass `--version vX.Y.Z-rc.N` explicitly. On Windows, download the new `.zip` from the releases page instead — in-place replacement of a running `.exe` is blocked by the OS.
