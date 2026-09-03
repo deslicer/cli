@@ -36,7 +36,7 @@ The script detects your OS/arch, downloads the matching release archive from [Gi
 | Variable | Effect |
 |----------|--------|
 | `DESLICER_INSTALL_DIR` | Install destination (default `/usr/local/bin`) |
-| `DESLICER_VERSION` | Pin a specific tag, e.g. `v1.0.0` (default: latest stable) |
+| `DESLICER_VERSION` | Pin a specific tag, e.g. `v1.3.2` (default: latest stable) |
 
 Re-running the script updates an existing installation in place. It will be mirrored at `https://get.deslicer.ai/cli/install.sh` once that host is live.
 
@@ -92,7 +92,7 @@ jobs:
 
       - name: Install deslicer
         run: |
-          curl -fsSL https://github.com/deslicer/cli/releases/download/v1.0.0/deslicer-x86_64-unknown-linux-musl.tar.gz \
+          curl -fsSL https://github.com/deslicer/cli/releases/download/v1.3.2/deslicer-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz
           sudo install deslicer /usr/local/bin/deslicer
 
