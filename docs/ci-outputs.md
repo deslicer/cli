@@ -31,6 +31,18 @@ If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), th
 | `diff_has_destructive` | `true` when the diff includes deletions |
 | `plan_ids` | Comma-separated external plan ids when `change plan` fans out across environments |
 | `plan_count` | Number of plans created by environment fan-out (`1` when `--environment` is set) |
+| `pr_touched_apps` | Comma-separated app names in the plan that overlap PR/changed paths (labeling only) |
+| `also_still_drifted_apps` | Comma-separated plan apps that are still drifted but not touched by this PR |
+| `pr_preview_summary` | Human line: `this PR touches: …; also still drifted: …` |
+
+`pr_*` keys are emitted only when changed paths are available (`--changed-paths`,
+`--changed-paths-file`, `DESLICER_CHANGED_PATHS`, or a GitHub `pull_request` git
+range) **and** a dry-run diff with change items exists. They never filter which
+apps the plan packs or executes — full desired-vs-observed reconcile remains the
+execute semantics.
+
+GitHub Actions also receives a **job step summary** (markdown table, plus a PR
+preview section when labels are present) when `GITHUB_STEP_SUMMARY` is set.
 
 ### `change status`
 
@@ -43,8 +55,6 @@ If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), th
 | `total_items` | Change items in the plan |
 | `fully_completed_items` | Items applied on every target host |
 | `diff_*` | Same keys as verify when a persisted dry-run diff exists |
-
-GitHub Actions also receives a **job step summary** (markdown table) when `GITHUB_STEP_SUMMARY` is set.
 
 ### `change deploy` (queued, with `--no-wait`)
 

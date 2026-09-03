@@ -8,6 +8,7 @@ use crate::commands::pipeline::{
 use crate::errors::CliError;
 use crate::observer_client::{ChangePlan, Client, OrchestratedPlan};
 use crate::output::{emit_change_plan, emit_change_plan_with_diff, emit_change_plans};
+use crate::pr_preview::{labels_for_plan_context, resolve_changed_paths, PrPreviewLabels};
 use crate::token_source::TokenSource;
 use crate::Ctx;
 
@@ -42,6 +43,17 @@ pub struct Args {
     /// Optional plan name for the bundle-sourced plan.
     #[arg(long)]
     pub name: Option<String>,
+
+    /// Optional file of changed repo paths (one per line) for PR preview labeling.
+    /// Clarity only — does not filter which apps the plan packs. When omitted,
+    /// the CLI uses `DESLICER_CHANGED_PATHS` or a GitHub pull_request git range.
+    #[arg(long, value_name = "FILE")]
+    pub changed_paths_file: Option<std::path::PathBuf>,
+
+    /// Comma/newline-separated changed paths (same labeling semantics as
+    /// `--changed-paths-file`).
+    #[arg(long, value_name = "PATHS")]
+    pub changed_paths: Option<String>,
 }
 
 /// Compile polling: the ephemeral compile-runner takes seconds to a few
@@ -219,7 +231,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     // or environment discovery. Handle it before the proxy-mode gate.
     if session.is_observer_api_token() {
         return match run_direct_git_plan(&session, &client, &args, environment.as_deref()).await {
-            Ok(plan) => emit_change_plan(&plan),
+            Ok(plan) => emit_ready_plan(&client, &args, environment.as_deref(), plan).await,
             Err(err) => map_cli_error(ctx.log_format, err),
         };
     }
@@ -364,13 +376,8 @@ async fn run_git_plans(
     }
 
     let emit_code = if plans.len() == 1 {
-        if let Some(ready) = last_ready.as_ref() {
-            let diff = client
-                .get_dry_run_diff(&ready.id)
-                .await
-                .ok()
-                .and_then(|body| crate::diff_summary::diff_counts_from_observer_value(&body));
-            emit_change_plan_with_diff(ready, diff.as_ref())
+        if let Some(ready) = last_ready {
+            emit_ready_plan(client, args, environment, ready).await
         } else {
             emit_change_plan(&plans[0])
         }
@@ -383,6 +390,40 @@ async fn run_git_plans(
     } else {
         Ok(emit_code)
     }
+}
+
+fn preview_labels_for(
+    args: &Args,
+    environment: Option<&str>,
+    diff_body: Option<&serde_json::Value>,
+) -> Option<PrPreviewLabels> {
+    let changed = resolve_changed_paths(
+        args.changed_paths_file.as_deref(),
+        args.changed_paths.as_deref(),
+    )?;
+    let env_yaml = environment.and_then(|stem| {
+        crate::target_group::read_environment_yaml(stem)
+            .ok()
+            .flatten()
+    });
+    labels_for_plan_context(diff_body, env_yaml.as_deref(), &changed)
+}
+
+async fn emit_ready_plan(
+    client: &Client,
+    args: &Args,
+    environment: Option<&str>,
+    plan: ChangePlan,
+) -> i32 {
+    let diff_body = client.get_dry_run_diff(&plan.id).await.ok();
+    let counts = diff_body
+        .as_ref()
+        .and_then(crate::diff_summary::diff_counts_from_observer_value);
+    let preview = preview_labels_for(args, environment, diff_body.as_ref());
+    if let Some(ref labels) = preview {
+        eprintln!("{}", labels.human_summary());
+    }
+    emit_change_plan_with_diff(&plan, counts.as_ref(), preview.as_ref())
 }
 
 #[cfg(test)]

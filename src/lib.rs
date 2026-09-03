@@ -16,6 +16,7 @@ pub mod observer_client;
 pub mod observer_token;
 pub mod oidc_exchange;
 pub mod output;
+pub mod pr_preview;
 pub mod reporting;
 pub mod resolver;
 pub mod session_portal;
