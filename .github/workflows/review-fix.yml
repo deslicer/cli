@@ -27,7 +27,7 @@ jobs:
        contains(github.event.review.body, '@slicer-fix'))
     uses: deslicer/deslicer-code-harness/.github/workflows/core_review_fix.yml@v1
     with:
-      model: gpt-5.2
+      model: ${{ vars.CURSOR_MODEL || 'auto' }}
       trigger_keyword: "@slicer-fix"
     secrets:
       cursor_api_key: ${{ secrets.CURSOR_API_KEY }}

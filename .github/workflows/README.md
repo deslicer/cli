@@ -25,6 +25,12 @@ Review and auto-fix workflows are the same `deslicer-code-harness` `@v1` reuseab
 
 Add **Quality Gate**, **Secret Scanning (Lightweight)**, and **Cursor Code Review** as required status checks on `main` once they have run once.
 
+## Variables
+
+| Variable | Scope | Used by |
+| --- | --- | --- |
+| `CURSOR_MODEL` | Org Actions variable (`vars.CURSOR_MODEL`) | `cursor-code-review.yml`, `review-fix.yml` — Cursor agent model id; defaults to `auto` when unset |
+
 ## Secrets
 
 Copy these from deslicer-ai / DAP (org inherit is enough if the org already shares them):
