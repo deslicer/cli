@@ -17,7 +17,9 @@ pub fn github_environment_recipe(stem: &str, repo: Option<&str>) -> String {
          printf '%s' \"$DESLICER_API_TOKEN\" | gh secret set DESLICER_API_TOKEN --env {stem} --repo {repo}\n\
          printf '%s' \"$OBSERVER_API_URL\" | gh variable set OBSERVER_API_URL --env {stem} --repo {repo}\n\
          printf '%s' \"{stem}\" | gh variable set DESLICER_ENVIRONMENT --env {stem} --repo {repo}\n\
-         printf '%s' \"$TARGET_GROUP_ID\" | gh variable set TARGET_GROUP_ID --env {stem} --repo {repo}\n\
+         # Optional: only needed for single-group tenants that still pass a UUID.\n\
+         # Prefer: deslicer change plan --target-group <inventory_group name>\n\
+         # printf '%s' \"$TARGET_GROUP_ID\" | gh variable set TARGET_GROUP_ID --env {stem} --repo {repo}\n\
          printf '%s' \"{stem}\" | gh variable set DESLICER_ENVIRONMENT --repo {repo}\n\
          \n\
          The last line is the repo-level name so pull_request jobs can select this\n\
@@ -56,6 +58,8 @@ mod tests {
         assert!(text.contains("printf '%s' \"$DESLICER_API_TOKEN\""));
         assert!(!text.contains("dslk_"));
         assert!(text.contains("workflow matrix"));
+        assert!(text.contains("Prefer: deslicer change plan --target-group"));
+        assert!(text.contains("# printf '%s' \"$TARGET_GROUP_ID\""));
     }
 
     #[test]

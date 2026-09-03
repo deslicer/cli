@@ -75,7 +75,7 @@ In the Deslicer portal: **Platform → API keys** → create a key with scope **
 |------|------|------|---------|
 | GitHub Environment `<slug>` | Secret | `DESLICER_API_TOKEN` | tools-scope Observer API key |
 | GitHub Environment `<slug>` | Variable | `OBSERVER_API_URL` | Observer management URL (not the data-plane port) |
-| GitHub Environment `<slug>` | Variable | `TARGET_GROUP_ID` | Host group UUID |
+| GitHub Environment `<slug>` | Variable | `TARGET_GROUP_ID` | Optional host group UUID (prefer `--target-group <inventory_group name>`) |
 | GitHub Environment `<slug>` | Variable | `DESLICER_ENVIRONMENT` | Same slug (`acme-prod` for `acme-prod.yml`) |
 | Repository | Variable | `DESLICER_ENVIRONMENT` | Name pointer so `pull_request` can select the Environment |
 | Repository | Variable | `DESLICER_API_URL` | deslicer-ai portal base URL (plan UI links) |
@@ -84,7 +84,7 @@ Do not reuse the keys DAI stores on the tenant for the dashboard/CI proxy.
 
 ### 2. GitHub Actions
 
-`deslicer init --provider github-token` writes pinned token-path workflows (no `id-token: write`) and `.deslicer/environments/<stem>.yml`. They run `change plan --target-group … --environment "${DESLICER_ENVIRONMENT}"`. Do **not** chain `change verify` after plan — re-compile fails with `invalid_plan_state`. Refresh groups with `deslicer inventory sync`.
+`deslicer init --provider github-token` writes pinned token-path workflows (no `id-token: write`) and `.deslicer/environments/<stem>.yml`. They run `change plan --target-group … --environment "${DESLICER_ENVIRONMENT}"`. Prefer the matrix `inventory_group` **name** (exact `HostGroup.name`); the CLI resolves it to a UUID via `GET /api/v1/groups`. A static `TARGET_GROUP_ID` variable is optional for single-group tenants. Do **not** chain `change verify` after plan — re-compile fails with `invalid_plan_state`. Refresh groups with `deslicer inventory sync`.
 
 Minimal shape (the scaffolded files are authoritative):
 
@@ -105,7 +105,8 @@ jobs:
           DESLICER_API_TOKEN: ${{ secrets.DESLICER_API_TOKEN }}
           # Forwarded to Observer for one clone of this commit. Never stored.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: deslicer change plan --target-group ${{ vars.TARGET_GROUP_ID }}
+        # inventory_group name from the env YAML / plan matrix (or a UUID)
+        run: deslicer change plan --target-group ${{ matrix.inventory_group }} --environment ${{ matrix.environment }}
 ```
 
 The CLI reads `GITHUB_REPOSITORY` and `GITHUB_SHA` from the runner (no `id-token: write` needed) and registers them on the plan. Observer's ephemeral compile-runner then clones that exact commit, so **git-lfs pointers are resolved to their contents** — something a bundle upload cannot do.

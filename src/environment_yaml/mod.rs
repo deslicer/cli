@@ -12,6 +12,7 @@ pub use generate::{environment_config_file_path, DESLICER_ENVIRONMENTS_DIR};
 pub use merge::{
     generate_environment_yaml, merge_environment_yaml, BlockedDestination, MergedEnvironmentYaml,
 };
+pub use parse::{extract_apps_blocks, ExistingAppsBlock};
 pub use validate::{
     resolve_env_file, validate_environment_yaml, Severity, ValidationIssue, ValidationReport,
     VALID_DEST_DIRS, VALID_STATES,

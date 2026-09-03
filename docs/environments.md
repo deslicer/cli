@@ -67,6 +67,8 @@ destinations:
 
 Each `inventory_group` is an Observer host group (`GET /api/v1/groups`). Apps are repo-relative `source_path` entries. The filename stem (`acme-prod` for `acme-prod.yml`) is the `--environment` value and the GitHub Environment name. A repo-level `DESLICER_ENVIRONMENT` variable is only the name pointer so `pull_request` can select that Environment.
 
+`deslicer change plan --target-group <inventory_group>` accepts that exact group **name** (or a UUID). The CLI resolves names against live host groups for the authenticated tenant and fails closed if the name is missing or duplicated. On the token path, omitting `--target-group` auto-selects when the YAML has exactly one destination with `source_path` apps. Multiple destinations require an explicit `--target-group` (Observer allows one active plan per repository commit today).
+
 ### Path A2 (Observer API token)
 
 `deslicer init --provider github-token --environment <tenant-slug>` writes `.deslicer/environments/<tenant-slug>.yml` with this tenant's host groups only. Refresh after inventory changes:

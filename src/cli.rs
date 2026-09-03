@@ -45,7 +45,7 @@ pub enum Command {
     Auth(crate::commands::auth::AuthCmd),
     #[command(subcommand)]
     Change(crate::commands::change::ChangeCmd),
-    /// List host groups (`id` is the value for `change plan --target-group`)
+    /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
     /// List Ansible inventory groups, sync, or validate tenant environment YAML

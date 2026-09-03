@@ -156,7 +156,7 @@ mod tests {
 }
 
 /// Observer `HostGroupWithCount` subset from `GET /api/v1/groups`.
-/// `id` is the value for `change plan --target-group`.
+/// `id` is accepted by `change plan --target-group`; exact `name` also resolves.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HostGroup {
     pub id: String,

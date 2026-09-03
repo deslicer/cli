@@ -31,8 +31,11 @@ pub struct Args {
     #[arg(long, requires = "target_group")]
     pub source_dir: Option<std::path::PathBuf>,
 
-    /// Host group UUID. Required with --source-dir, and with
-    /// OBSERVER_API_URL + DESLICER_API_TOKEN for git-sourced plans.
+    /// Host group UUID or exact group `name` (resolved via `GET /api/v1/groups`).
+    /// Required with --source-dir. For OBSERVER_API_URL + DESLICER_API_TOKEN
+    /// git plans, omit when the environment YAML has exactly one destination
+    /// with apps — the CLI picks that inventory_group. Prefer the name from
+    /// `.deslicer/environments/<env>.yml` over a static `TARGET_GROUP_ID`.
     #[arg(long)]
     pub target_group: Option<String>,
 
@@ -109,11 +112,39 @@ async fn bundle_flow_client(ctx: &Ctx, args: &Args) -> Result<Client, CliError> 
     }
 }
 
+async fn resolve_plan_target_group(client: &Client, spec: &str) -> Result<String, CliError> {
+    if crate::target_group::looks_like_uuid(spec) {
+        return crate::target_group::resolve_target_group_id(spec, &[]);
+    }
+    let groups = client.list_groups().await?;
+    let id = crate::target_group::resolve_target_group_id(spec, &groups)?;
+    eprintln!("resolved --target-group {spec:?} → {id}");
+    Ok(id)
+}
+
+/// Pick UUID/name from the flag, else a single env-YAML destination with apps.
+async fn resolve_direct_plan_target_group(
+    client: &Client,
+    args: &Args,
+    environment: Option<&str>,
+) -> Result<String, CliError> {
+    let env_yaml = match environment {
+        Some(stem) => crate::target_group::read_environment_yaml(stem)?,
+        None => None,
+    };
+    let spec = crate::target_group::choose_target_group_spec(
+        args.target_group.as_deref(),
+        env_yaml.as_deref(),
+    )?;
+    resolve_plan_target_group(client, &spec).await
+}
+
 async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError> {
     let source_dir = args.source_dir.as_deref().expect("clap guarantees value");
-    let target_group = args.target_group.as_deref().expect("clap requires flag");
+    let target_group_spec = args.target_group.as_deref().expect("clap requires flag");
 
     let client = bundle_flow_client(ctx, args).await?;
+    let target_group = resolve_plan_target_group(&client, target_group_spec).await?;
 
     let packaged = crate::bundle::package_directory(source_dir)?;
     eprintln!(
@@ -132,7 +163,7 @@ async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError>
     eprintln!("bundle uploaded: {}", uploaded.id);
 
     let plan = client
-        .create_plan_from_bundle(&uploaded.id, target_group, args.name.as_deref())
+        .create_plan_from_bundle(&uploaded.id, &target_group, args.name.as_deref())
         .await?;
 
     // Bundle plans carry no git ref; the source identity is the digest.
@@ -187,7 +218,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     // the DAI CI proxy, so there is no OIDC resolve to supply repository identity
     // or environment discovery. Handle it before the proxy-mode gate.
     if session.is_observer_api_token() {
-        return match run_direct_git_plan(&session, &client, &args).await {
+        return match run_direct_git_plan(&session, &client, &args, environment.as_deref()).await {
             Ok(plan) => emit_change_plan(&plan),
             Err(err) => map_cli_error(ctx.log_format, err),
         };
@@ -256,20 +287,15 @@ async fn compile_one_environment(
 ///
 /// The proxy path derives the repository, commit, and host group from the OIDC
 /// claims; a tools-scope key carries none of that, so the repository identity
-/// comes from the runner's own env and the host group from `--target-group`.
+/// comes from the runner's own env and the host group from `--target-group`
+/// (or a single destination in the environment YAML).
 async fn run_direct_git_plan(
     session: &AuthenticatedSession,
     client: &Client,
     args: &Args,
+    environment: Option<&str>,
 ) -> Result<ChangePlan, CliError> {
-    let target_group = args.target_group.as_deref().ok_or_else(|| {
-        CliError::Other(
-            "git-sourced `change plan` with DESLICER_API_TOKEN requires \
-             --target-group <host-group-uuid>. Run `deslicer groups list` \
-             to find it."
-                .into(),
-        )
-    })?;
+    let target_group = resolve_direct_plan_target_group(client, args, environment).await?;
     let identity = crate::ci::git_identity(session.platform)?;
     // Forwarded so Observer's ephemeral runner can clone a private repo it has no
     // GitHub App installation for. Absent is fine: Observer falls back to its own
@@ -279,7 +305,7 @@ async fn run_direct_git_plan(
         .create_plan_from_git(
             &identity.repository_url,
             &identity.commit_sha,
-            target_group,
+            &target_group,
             args.name.as_deref(),
         )
         .await?;
