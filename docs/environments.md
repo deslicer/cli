@@ -151,11 +151,11 @@ Select deploy per job:
   if: github.ref == 'refs/heads/main'
 ```
 
-**Blocker (multi-group, same SHA):** Observer’s idempotent index is currently
-`(tenant_id, repository_url, commit_sha)`. Two plans for different
-`target_group_id` values on the same commit collide until that index includes
-`target_group_id`. Prefer one destination-with-apps per stem, or different
-commits/environments, until that Observer change lands.
+**Multi-group, same SHA:** Observer migration `206` scopes the idempotent
+index by `target_group_id` (plus an unscoped index when the group is null), so
+matrix/fan-out across inventory groups on one commit is supported on Observer
+builds that include that migration. Older Observer builds still collide on
+`(tenant, repo, commit)` alone.
 
 ## Lifecycle gates (Path A2)
 
