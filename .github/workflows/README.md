@@ -1,6 +1,6 @@
 # GitHub workflows — deslicer/cli
 
-Review and auto-fix workflows are the same `deslicer-code-harness` `@v1` reuseables used by deslicer-ai (and the DAP review lane). Verify/test jobs are Rust-specific.
+Review and auto-fix workflows are the same `deslicer-code-harness` `@v1` reuseables used by deslicer-ai (and the DAP review lane). Verify/test jobs are Rust-specific. Customer **config repos** that cannot call the private harness should use the public **Splunk conf PR review** workflow instead (deslicer-ai Code Review Agent).
 
 ## Review / automation (harness)
 
@@ -11,6 +11,12 @@ Review and auto-fix workflows are the same `deslicer-code-harness` `@v1` reuseab
 | `auto-fix-ci.yml` | Quality Gate failure on a PR | `core_auto_fix_ci.yml` |
 | `issue-triage.yml` | New issue | `core_issue_triage.yml` |
 | `issue-to-cursor-cloud-agent-pr.yml` | Issue labeled `agent:ready` | `core_issue_to_cursor_cloud_agent_pr.yml` |
+
+## Public customer review (deslicer-ai)
+
+| Workflow | Trigger | Notes |
+| --- | --- | --- |
+| `splunk-conf-review.yml` | `workflow_call` | Diff-only Splunk `.conf` review via `deslicer agent` + **Code Review Agent**. Example caller: `examples/splunk-conf-review-caller.yml`. Docs: [`docs/splunk-conf-pr-review.md`](../../docs/splunk-conf-pr-review.md). |
 
 ## Verify / test
 
@@ -41,6 +47,7 @@ Copy these from deslicer-ai / DAP (org inherit is enough if the org already shar
 | `OPENAI_API_KEY` | Optional Codex fallback in code review |
 | `CURSOR_CLOUD_API_KEY` | `agent:ready` → Cloud Agent PR (per-author `*_CURSOR_CLOUD_API_KEY` also works) |
 | `CROSS_REPO_WORKFLOW_TOKEN` | `docs-sync.yml` PR into `deslicer/docs` (`contents:write` + `pull-requests:write` on that repo) |
+| `DESLICER_DEVICE_SESSION` | `splunk-conf-review.yml` (device session TOML/JSON for `deslicer agent`; alias `DESLICER_DEVICE_SESSION_JSON`) |
 
 Existing publish secrets (`CARGO_REGISTRY_TOKEN`, `HOMEBREW_TAP_TOKEN`) are unchanged.
 

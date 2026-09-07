@@ -1,0 +1,18 @@
+Here is the review.
+
+```json
+{
+  "summary": "One hardening warning; no blocking errors.",
+  "ok": true,
+  "findings": [
+    {
+      "severity": "warning",
+      "file": "apps/demo/default/props.conf",
+      "stanza": "demo",
+      "key": "INDEXED_EXTRACTIONS",
+      "message": "INDEXED_EXTRACTIONS can duplicate fields at search time.",
+      "suggestion": "Prefer SEARCH-TIME extractions unless measured otherwise."
+    }
+  ]
+}
+```

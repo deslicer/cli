@@ -1,0 +1,35 @@
+# Example: call the public Splunk conf PR review reusable workflow.
+#
+# Copy this file into your config repo as `.github/workflows/splunk-conf-review.yml`
+# (or merge the `jobs:` block into an existing workflow).
+#
+# Secrets (repo or org):
+#   DESLICER_DEVICE_SESSION — device session TOML or JSON from `deslicer auth login`
+#     (see https://github.com/deslicer/cli/blob/main/docs/splunk-conf-pr-review.md)
+#
+# Optional:
+#   Set `deslicer_api_url` when not using the default SaaS portal.
+
+name: Splunk conf review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "**/*.conf"
+      - "**/default.meta"
+      - "**/local.meta"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    uses: deslicer/cli/.github/workflows/splunk-conf-review.yml@main
+    with:
+      agent_name: "Code Review Agent"
+      # deslicer_api_url: "https://your-portal.example"
+      # cli_scripts_ref: main
+    secrets:
+      DESLICER_DEVICE_SESSION: ${{ secrets.DESLICER_DEVICE_SESSION }}

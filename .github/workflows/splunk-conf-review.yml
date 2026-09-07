@@ -1,0 +1,195 @@
+# Reusable Splunk conf PR review via deslicer-ai Code Review Agent.
+#
+# Customer repos call this workflow (see examples/splunk-conf-review-caller.yml).
+# Requires a device session secret — CI OIDC cannot run `deslicer agent`.
+
+name: Splunk Conf PR Review
+
+on:
+  workflow_call:
+    inputs:
+      agent_name:
+        description: DAI public agent name or id (default Code Review Agent)
+        type: string
+        default: "Code Review Agent"
+      deslicer_api_url:
+        description: Portal base URL for the CLI (optional; uses session / default SaaS)
+        type: string
+        required: false
+        default: ""
+      cli_version:
+        description: deslicer CLI release tag (empty = latest stable)
+        type: string
+        required: false
+        default: ""
+      cli_scripts_ref:
+        description: deslicer/cli git ref for scripts/ci/splunk-conf-review
+        type: string
+        required: false
+        default: "main"
+      post_pr_comment:
+        description: Post findings as a PR comment review
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      DESLICER_DEVICE_SESSION:
+        description: Device session TOML or JSON for deslicer auth (file store)
+        required: false
+      DESLICER_DEVICE_SESSION_JSON:
+        description: Alias for DESLICER_DEVICE_SESSION (JSON or TOML)
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  conf-review:
+    name: Splunk conf review
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event.pull_request != null
+    steps:
+      - name: Require device session secret
+        env:
+          SESSION: ${{ secrets.DESLICER_DEVICE_SESSION || secrets.DESLICER_DEVICE_SESSION_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SESSION}" ]]; then
+            echo "::error::Provide secret DESLICER_DEVICE_SESSION (or DESLICER_DEVICE_SESSION_JSON)."
+            exit 1
+          fi
+
+      - name: Checkout PR head
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Checkout deslicer/cli scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: deslicer/cli
+          ref: ${{ inputs.cli_scripts_ref }}
+          path: _deslicer_cli
+          sparse-checkout: |
+            scripts/ci/splunk-conf-review
+            scripts/install.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Collect conf diffs
+        id: collect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          OUT_DIR: ${{ github.workspace }}/.deslicer-conf-review
+        run: |
+          set -euo pipefail
+          chmod +x _deslicer_cli/scripts/ci/splunk-conf-review/*.sh
+          _deslicer_cli/scripts/ci/splunk-conf-review/collect-diff.sh
+          if [[ -f "${OUT_DIR}/skipped" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip — no conf changes
+        if: steps.collect.outputs.skip == 'true'
+        run: echo "No *.conf / .meta changes; review skipped."
+
+      - name: Install deslicer CLI
+        if: steps.collect.outputs.skip != 'true'
+        env:
+          DESLICER_VERSION: ${{ inputs.cli_version }}
+          DESLICER_INSTALL_DIR: ${{ runner.temp }}/deslicer-bin
+        run: |
+          set -euo pipefail
+          mkdir -p "${DESLICER_INSTALL_DIR}"
+          if [[ -n "${DESLICER_VERSION}" ]]; then
+            export DESLICER_VERSION
+          else
+            unset DESLICER_VERSION || true
+          fi
+          bash _deslicer_cli/scripts/install.sh
+          echo "${DESLICER_INSTALL_DIR}" >> "$GITHUB_PATH"
+          deslicer --version
+
+      - name: Restore device session
+        if: steps.collect.outputs.skip != 'true'
+        env:
+          DESLICER_DEVICE_SESSION: ${{ secrets.DESLICER_DEVICE_SESSION || secrets.DESLICER_DEVICE_SESSION_JSON }}
+          DESLICER_CONFIG_DIR: ${{ runner.temp }}/deslicer-config
+        run: |
+          set -euo pipefail
+          bash _deslicer_cli/scripts/ci/splunk-conf-review/restore-session.sh
+
+      - name: Run Code Review Agent
+        if: steps.collect.outputs.skip != 'true'
+        id: agent
+        env:
+          DESLICER_API_URL: ${{ inputs.deslicer_api_url }}
+          AGENT_NAME: ${{ inputs.agent_name }}
+          OUT_DIR: ${{ github.workspace }}/.deslicer-conf-review
+        run: |
+          set -euo pipefail
+          EXTRA=()
+          if [[ -n "${DESLICER_API_URL}" ]]; then
+            EXTRA+=(--deslicer-api-url "${DESLICER_API_URL}")
+          fi
+          KEY="conf-review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.sha }}-${{ github.run_attempt }}"
+          deslicer "${EXTRA[@]}" agent run \
+            -a "${AGENT_NAME}" \
+            --idempotency-key "${KEY}" \
+            < "${OUT_DIR}/prompt.md" \
+            > "${OUT_DIR}/agent-stdout.txt"
+          echo "stdout=${OUT_DIR}/agent-stdout.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Parse findings
+        if: steps.collect.outputs.skip != 'true'
+        id: parse
+        continue-on-error: true
+        env:
+          OUT_DIR: ${{ github.workspace }}/.deslicer-conf-review
+        run: |
+          set -euo pipefail
+          python3 _deslicer_cli/scripts/ci/splunk-conf-review/parse-findings.py \
+            "${OUT_DIR}/agent-stdout.txt" \
+            -o "${OUT_DIR}/findings.json"
+
+      - name: Upload findings artifact
+        if: steps.collect.outputs.skip != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: splunk-conf-review-findings
+          path: |
+            .deslicer-conf-review/findings.json
+            .deslicer-conf-review/agent-stdout.txt
+            .deslicer-conf-review/prompt.md
+            .deslicer-conf-review/files.txt
+          if-no-files-found: warn
+
+      - name: Post PR review comment
+        if: steps.collect.outputs.skip != 'true' && inputs.post_pr_comment && hashFiles('.deslicer-conf-review/findings.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUT_DIR: ${{ github.workspace }}/.deslicer-conf-review
+        run: |
+          set -euo pipefail
+          BODY_FILE="${OUT_DIR}/review.md"
+          bash _deslicer_cli/scripts/ci/splunk-conf-review/render-review.md.sh \
+            "${OUT_DIR}/findings.json" > "${BODY_FILE}"
+          gh pr review "${{ github.event.pull_request.number }}" --comment --body-file "${BODY_FILE}"
+
+      - name: Fail on error findings or parse failure
+        if: steps.collect.outputs.skip != 'true'
+        env:
+          PARSE_OUTCOME: ${{ steps.parse.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "${PARSE_OUTCOME}" != "success" ]]; then
+            echo "::error::Findings parse failed or severity=error findings present."
+            exit 1
+          fi

@@ -1,0 +1,2 @@
+The agent failed to follow instructions and returned only prose.
+No structured findings were produced.

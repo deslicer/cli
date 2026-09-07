@@ -1,0 +1,18 @@
+Review complete.
+
+```json
+{
+  "summary": "Cleartext password introduced in outputs.conf.",
+  "ok": false,
+  "findings": [
+    {
+      "severity": "error",
+      "file": "apps/demo/local/outputs.conf",
+      "stanza": "tcpout:group1",
+      "key": "password",
+      "message": "Cleartext password in conf is unsafe.",
+      "suggestion": "Use a credential store / encrypted secret; do not commit plaintext."
+    }
+  ]
+}
+```
