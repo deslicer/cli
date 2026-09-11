@@ -6,6 +6,7 @@ pub mod approve;
 pub mod deploy;
 pub mod plan;
 mod plan_env;
+mod plan_name;
 pub mod reject;
 pub mod show;
 pub mod status;

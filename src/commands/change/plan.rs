@@ -2,6 +2,7 @@ use clap::Args as ClapArgs;
 
 use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::commands::change::plan_env::resolve_plan_environment;
+use crate::commands::change::plan_name::resolve_plan_name;
 use crate::commands::pipeline::{
     authenticate, map_cli_error, require_proxy_mode, AuthenticatedSession,
 };
@@ -40,7 +41,9 @@ pub struct Args {
     #[arg(long)]
     pub target_group: Option<String>,
 
-    /// Optional plan name for the bundle-sourced plan.
+    /// Optional plan name shown in Deslicer Changes/Runs.
+    /// When omitted in GitHub Actions, defaults to the pull request title
+    /// (or the push commit subject). Local runs fall back to `git log -1`.
     #[arg(long)]
     pub name: Option<String>,
 
@@ -174,8 +177,9 @@ async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError>
         .await?;
     eprintln!("bundle uploaded: {}", uploaded.id);
 
+    let plan_name = resolve_plan_name(args.name.as_deref());
     let plan = client
-        .create_plan_from_bundle(&uploaded.id, &target_group, args.name.as_deref())
+        .create_plan_from_bundle(&uploaded.id, &target_group, plan_name.as_deref())
         .await?;
 
     // Bundle plans carry no git ref; the source identity is the digest.
@@ -313,12 +317,13 @@ async fn run_direct_git_plan(
     // GitHub App installation for. Absent is fine: Observer falls back to its own
     // credential and fails closed if it has none.
     let clone_token = crate::clone_token::from_env(session.platform);
+    let plan_name = resolve_plan_name(args.name.as_deref());
     let plan = client
         .create_plan_from_git(
             &identity.repository_url,
             &identity.commit_sha,
             &target_group,
-            args.name.as_deref(),
+            plan_name.as_deref(),
         )
         .await?;
     if !is_still_compiling(&plan.status) {
