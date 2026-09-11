@@ -52,9 +52,7 @@ fn truncate_plan_name(name: &str) -> String {
 }
 
 fn github_actions_plan_name() -> Option<String> {
-    if std::env::var_os("GITHUB_ACTIONS").is_none() {
-        return None;
-    }
+    std::env::var_os("GITHUB_ACTIONS")?;
     let event_path = std::env::var_os("GITHUB_EVENT_PATH")?;
     let body: Value = serde_json::from_str(&std::fs::read_to_string(event_path).ok()?).ok()?;
     let event_name = std::env::var("GITHUB_EVENT_NAME").unwrap_or_default();
