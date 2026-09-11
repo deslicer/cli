@@ -51,7 +51,7 @@ where
         let chunk = chunk.map_err(read_failed)?;
         let Some(bytes) = chunk else { break };
 
-        for event in parser.push(&bytes)? {
+        for event in parser.push(&bytes) {
             if dispatch(renderer, event)? == RenderOutcome::Done {
                 return Ok(StreamEnd::Completed);
             }
@@ -80,6 +80,7 @@ fn dispatch<O: Write, E: Write>(
         // to prove the connection is alive, both of which already happened
         // by the time we see one.
         SseEvent::Comment(_) => Ok(RenderOutcome::Continue),
+        SseEvent::Skipped => renderer.on_skipped_frame(),
     }
 }
 

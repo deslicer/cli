@@ -4,9 +4,12 @@ Test the CLI end-to-end from your machine against a local (or any reachable) Obs
 
 ## 1. Build the CLI from source
 
+You do not need a GitHub Release. From a clone of `main` (or this branch):
+
 ```bash
 git clone https://github.com/deslicer/cli.git
 cd cli
+git pull origin main
 cargo build
 ```
 
@@ -14,6 +17,12 @@ The binary is `target/debug/deslicer` (the crate is `deslicer-cli`, the binary i
 
 ```bash
 ./target/debug/deslicer --version
+```
+
+To replace the `deslicer` on your `PATH` with this checkout (release build):
+
+```bash
+./scripts/install-from-source.sh
 ```
 
 ## 2. Point at an Observer API

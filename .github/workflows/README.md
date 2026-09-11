@@ -21,7 +21,8 @@ Review and auto-fix workflows are the same `deslicer-code-harness` `@v1` reuseab
 | `secret-scan.yml` | TruffleHog `--only-verified` (same posture as DAP) |
 | `workflow-syntax-check.yml` | actionlint on changed workflow YAML |
 | `build-main.yml` | Five release-target edge builds after merge to `main` |
-| `release.yml` / `homebrew.yml` / `crates-publish.yml` | Tag / publish (unchanged) |
+| `cut-release.yml` | After Quality Gate on `main` (or manual dispatch): plan semver, tag, call `release.yml` |
+| `release.yml` / `homebrew.yml` / `crates-publish.yml` | Build, sign, GitHub Release, Homebrew tap PR, crates.io |
 
 Add **Quality Gate**, **Secret Scanning (Lightweight)**, and **Cursor Code Review** as required status checks on `main` once they have run once.
 

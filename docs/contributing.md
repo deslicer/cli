@@ -42,7 +42,7 @@ To exercise the full plan flow against a local or remote Observer API, see [loca
 
 ## Commits
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Use [Conventional Commits](https://www.conventionalcommits.org/). Merges to `main` with `feat` / `fix` / `perf` subjects drive the automated release bump (`feat` → minor, `fix`/`perf` → patch, `BREAKING CHANGE` / `type!:` → major). `docs` / `chore` / `ci` / `test` alone do not cut a release.
 
 ```
 feat(change): add verify polling timeout
@@ -74,7 +74,10 @@ cli/
 
 ## Release
 
-Maintainers only — see [release-process.md](release-process.md).
+Merges to `main` cut a GitHub Release automatically when conventional commits
+call for it. Maintainers can also dispatch **Cut release** or push a `v*.*.*`
+tag. See [release-process.md](release-process.md). To run unreleased `main`
+locally, use `./scripts/install-from-source.sh`.
 
 ## License
 

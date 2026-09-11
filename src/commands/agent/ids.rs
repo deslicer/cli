@@ -24,7 +24,7 @@ pub fn parse_conversation_id(raw: &str) -> Result<&str, CliError> {
     require_uuid(
         raw,
         "a conversation id",
-        "Conversation ids are printed when a run starts.",
+        "Conversation ids are printed when a conversation starts.",
     )
 }
 
@@ -76,7 +76,7 @@ mod tests {
         assert!(parse_conversation_id("nope")
             .expect_err("reject")
             .to_string()
-            .contains("printed when a run starts"));
+            .contains("printed when a conversation starts"));
         assert!(parse_run_id("nope")
             .expect_err("reject")
             .to_string()

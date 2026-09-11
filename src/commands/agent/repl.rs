@@ -11,7 +11,7 @@ use crate::Ctx;
 use super::client::AgentClient;
 use super::ids::parse_conversation_id;
 use super::resolve::resolve_agent;
-use super::session::{cancelled_message, start_and_stream};
+use super::session::{cancelled_message, resume_hint, start_and_stream};
 use super::stream::StreamEnd;
 
 #[derive(ClapArgs)]
@@ -140,10 +140,16 @@ async fn run_loop(
                 detached_run = turn.run_id;
             }
             StreamEnd::Truncated => {
-                eprintln!(
-                    "The connection closed before the run finished. {}",
-                    cancelled_message(turn.run_id.as_deref(), turn.conversation_id.as_deref())
-                );
+                if turn.failure.is_none() {
+                    eprintln!(
+                        "The connection closed before the run finished. {}",
+                        cancelled_message(turn.run_id.as_deref(), turn.conversation_id.as_deref())
+                    );
+                } else if let Some(hint) =
+                    resume_hint(turn.run_id.as_deref(), turn.conversation_id.as_deref())
+                {
+                    eprintln!("The run may still be going server-side; {hint}.");
+                }
                 detached_run = turn.run_id;
             }
         }

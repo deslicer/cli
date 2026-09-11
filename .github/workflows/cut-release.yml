@@ -1,0 +1,127 @@
+# After Quality Gate passes on main, publish a release when there is something
+# to ship: either Cargo.toml is already ahead of the last tag, or conventional
+# commits since that tag imply a bump.
+#
+# A tag push from GITHUB_TOKEN does not retrigger release.yml, so this workflow
+# tags first, then calls it. Manual `git push origin vX.Y.Z` still uses the
+# tag trigger.
+#
+# workflow_dispatch cuts a release immediately with an explicit bump.
+
+name: Cut release
+
+on:
+  workflow_run:
+    workflows: [Quality Gate]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump (auto reads conventional commits since the last tag)
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  plan:
+    name: Plan version
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
+      needs_bump: ${{ steps.plan.outputs.needs_bump }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      reason: ${{ steps.plan.outputs.reason }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: main
+
+      - name: Plan
+        id: plan
+        env:
+          BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.bump || 'auto' }}
+        run: |
+          set -euo pipefail
+          scripts/cut-release.sh plan --bump "${BUMP}"
+
+  tag:
+    name: Bump and tag
+    needs: plan
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      tagged: ${{ steps.tag.outputs.tagged }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: main
+
+      - name: Apply version, commit, and tag
+        id: tag
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          NEEDS_BUMP: ${{ needs.plan.outputs.needs_bump }}
+          REASON: ${{ needs.plan.outputs.reason }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${REASON}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "release ${TAG} already published"
+            echo "tagged=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [ "${NEEDS_BUMP}" = "true" ]; then
+            scripts/cut-release.sh apply "${VERSION}"
+            git add Cargo.toml Cargo.lock
+            git commit -m "chore(release): bump version to ${VERSION}"
+            if ! git push origin HEAD:main; then
+              branch="release/${TAG}"
+              git push -u origin "HEAD:refs/heads/${branch}"
+              gh pr create --title "chore(release): bump version to ${VERSION}" \
+                --body "Automated version bump. Merging this PR lets the next Cut release job tag ${TAG}." \
+                --base main --head "${branch}"
+              echo "tagged=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          fi
+
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git tag "${TAG}"
+            git push origin "refs/tags/${TAG}"
+          fi
+          echo "tagged=true" >> "${GITHUB_OUTPUT}"
+
+  publish:
+    name: Build and publish
+    needs: [plan, tag]
+    if: needs.tag.outputs.tagged == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.plan.outputs.tag }}
+    secrets: inherit
+    permissions:
+      contents: write
+      id-token: write
+      actions: read
