@@ -181,9 +181,9 @@ fn rejects_empty_target_host() {
 \x20\x20\x20\x20\x20\x20\x20\x20target_host: '  '\n";
     let report =
         validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
-    assert!(report
-        .errors()
-        .any(|issue| issue.message.contains("target_host must be a non-empty string")));
+    assert!(report.errors().any(|issue| issue
+        .message
+        .contains("target_host must be a non-empty string")));
 }
 
 #[test]
