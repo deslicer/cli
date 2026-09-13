@@ -151,6 +151,42 @@ fn accepts_peer_apps_dest_dir() {
 }
 
 #[test]
+fn accepts_nonempty_target_host() {
+    let dir = tempdir().unwrap();
+    write_app(dir.path(), "apps/ta_nix");
+    let yaml = "destinations:\n\
+\x20\x20- inventory_group: indexers\n\
+\x20\x20\x20\x20apps:\n\
+\x20\x20\x20\x20\x20\x20- source_path: apps/ta_nix\n\
+\x20\x20\x20\x20\x20\x20\x20\x20target_host: splunk-idx-01.example.com\n";
+    let report =
+        validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
+    assert!(
+        report
+            .errors()
+            .all(|issue| !issue.message.contains("target_host")),
+        "{:?}",
+        report.issues
+    );
+}
+
+#[test]
+fn rejects_empty_target_host() {
+    let dir = tempdir().unwrap();
+    write_app(dir.path(), "apps/ta_nix");
+    let yaml = "destinations:\n\
+\x20\x20- inventory_group: indexers\n\
+\x20\x20\x20\x20apps:\n\
+\x20\x20\x20\x20\x20\x20- source_path: apps/ta_nix\n\
+\x20\x20\x20\x20\x20\x20\x20\x20target_host: '  '\n";
+    let report =
+        validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
+    assert!(report
+        .errors()
+        .any(|issue| issue.message.contains("target_host must be a non-empty string")));
+}
+
+#[test]
 fn rejects_unknown_live_group() {
     let dir = tempdir().unwrap();
     write_app(dir.path(), "apps/ta_nix");

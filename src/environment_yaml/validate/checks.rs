@@ -301,6 +301,29 @@ fn validate_common_fields(map: &serde_yml::Mapping, obj_path: &str, ctx: &mut Va
             )),
         }
     }
+
+    // Phase 1b: thin authoring check for optional target_host override.
+    // DAP enforces that the host is a member of the destination inventory_group.
+    if let Some(target_host) = map.get("target_host") {
+        match scalar_string(Some(target_host)) {
+            Some(value) if !value.trim().is_empty() => {}
+            Some(_) => ctx.issues.push(issue(
+                ctx.file_label,
+                &format!("{obj_path}.target_host"),
+                Severity::Error,
+                "target_host must be a non-empty string".into(),
+                "Set target_host to a hostname that is a member of this destination's \
+                 inventory_group (DAP verifies membership at compile)",
+            )),
+            None => ctx.issues.push(issue(
+                ctx.file_label,
+                &format!("{obj_path}.target_host"),
+                Severity::Error,
+                "target_host must be a string".into(),
+                "Set target_host to a hostname string, or omit the field",
+            )),
+        }
+    }
 }
 
 fn warn_if_not_splunk_app_root(base: &str, ctx: &mut ValidationCtx<'_>) {
