@@ -276,6 +276,14 @@ fn validate_common_fields(map: &serde_yml::Mapping, obj_path: &str, ctx: &mut Va
 
     if let Some(dest_dir) = map.get("dest_dir") {
         match scalar_string(Some(dest_dir)) {
+            Some(value) if value.trim() == "master-apps" => ctx.issues.push(issue(
+                ctx.file_label,
+                &format!("{obj_path}.dest_dir"),
+                Severity::Error,
+                "invalid dest_dir value: master-apps (legacy alias)".into(),
+                "Use `manager-apps` instead of `master-apps` (DAP identity alias; \
+                 CLI authoring allowlist rejects the legacy name)",
+            )),
             Some(value) if VALID_DEST_DIRS.contains(&value.as_str()) => {}
             Some(value) => ctx.issues.push(issue(
                 ctx.file_label,

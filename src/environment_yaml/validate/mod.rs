@@ -15,8 +15,23 @@ use checks::{validate_destination, ValidationCtx};
 /// Allowed `state` values on destinations / apps.
 pub const VALID_STATES: &[&str] = &["present", "absent"];
 
-/// Allowed `dest_dir` values (CCA / DAP metadata spec).
-pub const VALID_DEST_DIRS: &[&str] = &["apps", "shcluster/apps", "manager-apps", "deployment-apps"];
+/// Thin authoring allowlist for env YAML `dest_dir` (fail-fast in GH Actions / local validate).
+///
+/// DAP / Observer owns the full scope set, role-based defaults when `dest_dir` is
+/// omitted, and identity alias `master-apps` → `manager-apps`. Do not put that
+/// logic in the CLI.
+///
+/// `apps` maps on-disk to `etc/apps`. Legacy `master-apps` is rejected here —
+/// authors must use `manager-apps`.
+pub const VALID_DEST_DIRS: &[&str] = &[
+    "apps",
+    "deployment-apps",
+    "manager-apps",
+    "shcluster/apps",
+    "peer-apps",
+    "slave-apps",
+    "users",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]

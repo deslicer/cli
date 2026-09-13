@@ -115,6 +115,42 @@ fn rejects_invalid_dest_dir() {
 }
 
 #[test]
+fn rejects_legacy_master_apps_dest_dir() {
+    let dir = tempdir().unwrap();
+    write_app(dir.path(), "apps/ta_nix");
+    let yaml = "destinations:\n\
+\x20\x20- inventory_group: indexers\n\
+\x20\x20\x20\x20apps:\n\
+\x20\x20\x20\x20\x20\x20- source_path: apps/ta_nix\n\
+\x20\x20\x20\x20\x20\x20\x20\x20dest_dir: master-apps\n";
+    let report =
+        validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
+    assert!(report.errors().any(|issue| {
+        issue.message.contains("master-apps") && issue.suggestion.contains("manager-apps")
+    }));
+}
+
+#[test]
+fn accepts_peer_apps_dest_dir() {
+    let dir = tempdir().unwrap();
+    write_app(dir.path(), "apps/ta_nix");
+    let yaml = "destinations:\n\
+\x20\x20- inventory_group: indexers\n\
+\x20\x20\x20\x20apps:\n\
+\x20\x20\x20\x20\x20\x20- source_path: apps/ta_nix\n\
+\x20\x20\x20\x20\x20\x20\x20\x20dest_dir: peer-apps\n";
+    let report =
+        validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
+    assert!(
+        report
+            .errors()
+            .all(|issue| !issue.message.contains("dest_dir")),
+        "{:?}",
+        report.issues
+    );
+}
+
+#[test]
 fn rejects_unknown_live_group() {
     let dir = tempdir().unwrap();
     write_app(dir.path(), "apps/ta_nix");
