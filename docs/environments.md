@@ -88,7 +88,9 @@ deslicer inventory validate --environment acme-prod
 deslicer inventory validate --environment acme-prod --log-format json
 ```
 
-Checks (fail closed): YAML shape and required `inventory_group`; no duplicate groups; no duplicate `source_path`+`dest_dir`; `source_path` exists on disk unless `state: absent`; `dest_dir` allowlist; live host-group allowlist via auth → Observer `GET /api/v1/groups` (not a hardcoded list).
+Checks (fail closed): YAML shape and required `inventory_group`; no duplicate groups; no duplicate `source_path`+`dest_dir`; `source_path` exists on disk unless `state: absent`; thin `dest_dir` authoring allowlist (`apps`, `deployment-apps`, `manager-apps`, `shcluster/apps`, `peer-apps`, `slave-apps`, `users` — not `master-apps`); live host-group allowlist via auth → Observer `GET /api/v1/groups` (not a hardcoded list).
+
+Role-based `dest_dir` defaults (when YAML omits `dest_dir`) and identity alias `master-apps` → `manager-apps` are owned by DAP / Observer at compile time — the CLI does not invent defaults.
 
 `--force` on `init` overwrites workflow templates only — it does not wipe operator `apps:` lists.
 
