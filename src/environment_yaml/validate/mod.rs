@@ -17,20 +17,17 @@ pub const VALID_STATES: &[&str] = &["present", "absent"];
 
 /// Thin authoring allowlist for env YAML `dest_dir` (fail-fast in GH Actions / local validate).
 ///
-/// DAP / Observer owns the full scope set, role-based defaults when `dest_dir` is
-/// omitted, and identity alias `master-apps` → `manager-apps`. Do not put that
-/// logic in the CLI.
+/// Deploy targets only (D4 role defaults): DS → `deployment-apps`, CM → `manager-apps`,
+/// SH deployer → `shcluster/apps`, else `apps` (on-disk `etc/apps`).
 ///
-/// `apps` maps on-disk to `etc/apps`. Legacy `master-apps` is rejected here —
-/// authors must use `manager-apps`.
+/// DAP / Observer still **observes/parses** `peer-apps`, `slave-apps`, `users`, and
+/// legacy `master-apps` — those are not GitOps deploy destinations for env YAML.
+/// Legacy `master-apps` is rejected here; authors must use `manager-apps`.
 pub const VALID_DEST_DIRS: &[&str] = &[
     "apps",
     "deployment-apps",
     "manager-apps",
     "shcluster/apps",
-    "peer-apps",
-    "slave-apps",
-    "users",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

@@ -131,7 +131,7 @@ fn rejects_legacy_master_apps_dest_dir() {
 }
 
 #[test]
-fn accepts_peer_apps_dest_dir() {
+fn rejects_peer_apps_dest_dir() {
     let dir = tempdir().unwrap();
     write_app(dir.path(), "apps/ta_nix");
     let yaml = "destinations:\n\
@@ -141,13 +141,9 @@ fn accepts_peer_apps_dest_dir() {
 \x20\x20\x20\x20\x20\x20\x20\x20dest_dir: peer-apps\n";
     let report =
         validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
-    assert!(
-        report
-            .errors()
-            .all(|issue| !issue.message.contains("dest_dir")),
-        "{:?}",
-        report.issues
-    );
+    assert!(report
+        .errors()
+        .any(|issue| issue.message.contains("invalid dest_dir")));
 }
 
 #[test]
