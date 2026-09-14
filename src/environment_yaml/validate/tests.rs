@@ -147,6 +147,22 @@ fn rejects_peer_apps_dest_dir() {
 }
 
 #[test]
+fn rejects_slave_apps_dest_dir() {
+    let dir = tempdir().unwrap();
+    write_app(dir.path(), "apps/ta_nix");
+    let yaml = "destinations:\n\
+\x20\x20- inventory_group: indexers\n\
+\x20\x20\x20\x20apps:\n\
+\x20\x20\x20\x20\x20\x20- source_path: apps/ta_nix\n\
+\x20\x20\x20\x20\x20\x20\x20\x20dest_dir: slave-apps\n";
+    let report =
+        validate_environment_yaml(yaml, "prod.yml", dir.path(), Some(&known(&["indexers"])));
+    assert!(report
+        .errors()
+        .any(|issue| issue.message.contains("invalid dest_dir")));
+}
+
+#[test]
 fn accepts_nonempty_target_host() {
     let dir = tempdir().unwrap();
     write_app(dir.path(), "apps/ta_nix");
