@@ -23,12 +23,7 @@ pub const VALID_STATES: &[&str] = &["present", "absent"];
 /// DAP / Observer still **observes/parses** `peer-apps`, `slave-apps`, `users`, and
 /// legacy `master-apps` — those are not GitOps deploy destinations for env YAML.
 /// Legacy `master-apps` is rejected here; authors must use `manager-apps`.
-pub const VALID_DEST_DIRS: &[&str] = &[
-    "apps",
-    "deployment-apps",
-    "manager-apps",
-    "shcluster/apps",
-];
+pub const VALID_DEST_DIRS: &[&str] = &["apps", "deployment-apps", "manager-apps", "shcluster/apps"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
