@@ -48,13 +48,18 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             Err(err) => return map_cli_error(ctx.log_format, err),
         };
 
-        if progress.is_terminal() {
+        if progress.is_terminal() || !progress.should_poll_for_updates() {
             return emit_plan_status(plan.as_ref(), &progress, diff.as_ref());
         }
 
         last = Some(progress);
 
         if attempt + 1 < MAX_ATTEMPTS {
+            eprintln!(
+                "waiting for plan progress (attempt {}/{})...",
+                attempt + 1,
+                MAX_ATTEMPTS
+            );
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             delay_ms = delay_ms.saturating_mul(2);
         }

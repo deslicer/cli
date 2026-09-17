@@ -53,6 +53,12 @@ impl PlanProgress {
     pub fn is_terminal(&self) -> bool {
         matches!(self.progress_status.as_str(), "completed" | "expired")
     }
+
+    /// True only while apply progress is actively moving (`partial`).
+    /// `not_started` means no rollout has begun — emit once and exit.
+    pub fn should_poll_for_updates(&self) -> bool {
+        self.progress_status == "partial"
+    }
 }
 
 /// Observer `ExecutePlanResponse` from `POST /api/v1/plans/{plan_id}/execute`.
@@ -142,6 +148,36 @@ pub(crate) struct ChangePlanResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_progress_polls_only_while_partial() {
+        let partial = PlanProgress {
+            plan_id: "p".into(),
+            progress_status: "partial".into(),
+            total_items: 4,
+            fully_completed_items: 1,
+        };
+        assert!(!partial.is_terminal());
+        assert!(partial.should_poll_for_updates());
+
+        let not_started = PlanProgress {
+            plan_id: "p".into(),
+            progress_status: "not_started".into(),
+            total_items: 0,
+            fully_completed_items: 0,
+        };
+        assert!(!not_started.is_terminal());
+        assert!(!not_started.should_poll_for_updates());
+
+        let completed = PlanProgress {
+            plan_id: "p".into(),
+            progress_status: "completed".into(),
+            total_items: 4,
+            fully_completed_items: 4,
+        };
+        assert!(completed.is_terminal());
+        assert!(!completed.should_poll_for_updates());
+    }
 
     #[test]
     fn parses_host_group_list_and_ignores_unknown_fields() {
