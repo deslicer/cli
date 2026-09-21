@@ -51,5 +51,5 @@ serde_yml = "0.0.13"
 [dev-dependencies]
 wiremock = "0.6"
 rsa = "0.9"
-rand = "0.9"
+rand = "0.10"
 tempfile = "3"
