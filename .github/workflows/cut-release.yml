@@ -55,7 +55,7 @@ jobs:
           BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.bump || 'auto' }}
         run: |
           set -euo pipefail
-          scripts/cut-release.sh plan --bump "${BUMP}"
+          bash scripts/cut-release.sh plan --bump "${BUMP}"
 
   tag:
     name: Bump and tag
@@ -93,7 +93,7 @@ jobs:
           fi
 
           if [ "${NEEDS_BUMP}" = "true" ]; then
-            scripts/cut-release.sh apply "${VERSION}"
+            bash scripts/cut-release.sh apply "${VERSION}"
             git add Cargo.toml Cargo.lock
             git commit -m "chore(release): bump version to ${VERSION}"
             if ! git push origin HEAD:main; then
