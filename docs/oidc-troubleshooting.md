@@ -59,6 +59,12 @@ Run it **before** `deslicer auth login` when debugging token or binding failures
 | **10** | Backend unavailable | resolve-backend or Observer unreachable | Check `DESLICER_API_URL`; verify Observer health; use `OBSERVER_API_URL` air-gap override if approved |
 | **11** | Plan not found | Plan ID does not exist or wrong tenant | Verify plan ID and environment; confirm auth succeeded first |
 | **12** | Human approval required | Plan approval needs a verified human identity | Approve in the Deslicer portal, or gate the CI job with a GitHub Environment that requires reviewers |
+| **13** | Agent run failed | An interactive or one-shot agent run failed | Inspect the agent run logs |
+| **20** | Validation blocked | Plan validation returned blocking findings | Review findings; update the plan before approval |
+| **21** | Validation warning | Warnings were found with `--fail-on warning` | Review warnings or use the default `--fail-on block` policy |
+| **22** | Validation model unavailable | No allowed validation model could be resolved | Configure the tenant validation model and provider |
+| **23** | Validation timeout | Validation exceeded its bounded execution time | Retry; reduce plan size if the timeout repeats |
+| **24** | Validation unavailable | Validation service/specs failed or the stored verdict is `error` | Check DAI validation configuration and retry |
 
 ---
 

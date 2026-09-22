@@ -1,6 +1,9 @@
 # CI outputs
 
-Every `deslicer change` command prints a JSON object to stdout **and** writes key/value output variables to the native output mechanism of the detected CI platform, so downstream pipeline steps can consume results without parsing logs.
+Lifecycle-oriented `deslicer change` commands print JSON and write key/value
+outputs to the detected CI platform. `change validate` instead writes the
+requested report format directly to stdout so it can be redirected to a file
+or piped into a PR-comment command.
 
 ## Output sinks per platform
 
@@ -56,6 +59,41 @@ preview section when labels are present) when `GITHUB_STEP_SUMMARY` is set.
 | `fully_completed_items` | Items applied on every target host |
 | `diff_*` | Same keys as verify when a persisted dry-run diff exists |
 
+### `change validate`
+
+Validation is plan-ID scoped. It validates only items already persisted in a
+DAP plan; it does not upload or validate arbitrary local files.
+
+```bash
+# Human output; triggers validation and fails on blocking findings.
+deslicer change validate \
+  --plan-id "01994bdb-2d78-79d5-8f40-c03d342a3bc1" \
+  --environment production
+
+# Deterministic JSON for automation.
+deslicer change validate \
+  --plan-id "01994bdb-2d78-79d5-8f40-c03d342a3bc1" \
+  --environment production \
+  --format json > validation.json
+
+# Markdown suitable for a GitHub PR comment.
+deslicer change validate \
+  --plan-id "01994bdb-2d78-79d5-8f40-c03d342a3bc1" \
+  --environment production \
+  --format markdown > validation.md
+gh pr comment "${PR_NUMBER}" --body-file validation.md
+```
+
+Use `--report-only` to retrieve the latest report without running the model.
+Direct Observer API keys can use report-only mode with `OBSERVER_API_URL` and
+`DESLICER_API_TOKEN`; triggering validation requires the DAI proxy because DAI
+owns model access and Observer accepts report writes only from the
+portal-attested writer. `--force` bypasses reuse of an effective report.
+
+The default `--fail-on block` exits zero for warnings. Use
+`--fail-on warning` to gate on warnings, or `--fail-on never` to render
+findings without gating. Operational validation errors still exit non-zero.
+
 ### `change deploy` (queued, with `--no-wait`)
 
 | Key | Description |
@@ -90,4 +128,7 @@ Omitting `--environment` asks deslicer-ai for every bound environment and create
 
 ## Exit codes
 
-`0` on success; non-zero codes map to specific failure classes (OIDC rejected, repo not allowlisted, rate limited, ...). The full table lives in [oidc-troubleshooting.md](oidc-troubleshooting.md#exit-codes).
+`0` on success; non-zero codes map to specific failure classes. Plan
+validation adds `20` (blocked), `21` (warning when configured), `22` (model
+unavailable), `23` (timeout), and `24` (validation unavailable). The full table
+lives in [oidc-troubleshooting.md](oidc-troubleshooting.md#exit-codes).

@@ -89,6 +89,9 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::PlanNotFound(_) => "plan",
         CliError::HumanApprovalRequired(_) => "approval",
         CliError::AgentRunFailed(_) => "agent",
+        CliError::ValidationModelUnavailable
+        | CliError::ValidationTimeout
+        | CliError::ValidationUnavailable => "validation",
         CliError::Other(msg) if msg.contains("not logged in") || msg.contains("OIDC") => "auth",
         CliError::Other(_) => "error",
     }

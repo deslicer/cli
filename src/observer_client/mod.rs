@@ -24,7 +24,7 @@ pub use inventory::InventoryGroup;
 pub use repo::{GithubRepoRow, ListReposResponse, ProvisionRepoRequest, ProvisionRepoResponse};
 pub use types::{
     BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, HostGroup, OrchestratedPlan,
-    PlanProgress,
+    PlanProgress, PlanValidationFinding, PlanValidationReport,
 };
 
 use http_errors::{map_observer_error, parse_retry_after_header, retry_delay};
@@ -203,6 +203,43 @@ impl Client {
     /// Lookup by external plan id (UUID v4).
     pub async fn get_plan(&self, plan_id: &str) -> Result<ChangePlan, CliError> {
         let path = format!("api/v1/plans/{plan_id}");
+        self.get_json(&path).await
+    }
+
+    /// Trigger DAI-owned validation through the authenticated CLI proxy.
+    pub async fn validate_plan(
+        &self,
+        plan_id: &str,
+        force: bool,
+    ) -> Result<PlanValidationReport, CliError> {
+        #[derive(Serialize)]
+        struct Body {
+            force: bool,
+        }
+
+        let path = format!("v1/plans/{plan_id}/validation");
+        let response: types::PlanValidationEnvelope = self
+            .request_json(Method::POST, &path, Some(&Body { force }))
+            .await?;
+        Ok(response.report)
+    }
+
+    /// Read a report through the DAI CLI proxy.
+    pub async fn get_plan_validation(
+        &self,
+        plan_id: &str,
+    ) -> Result<PlanValidationReport, CliError> {
+        let path = format!("v1/plans/{plan_id}/validation");
+        let response: types::PlanValidationEnvelope = self.get_json(&path).await?;
+        Ok(response.report)
+    }
+
+    /// Read a report directly from Observer with a read/tools/admin API key.
+    pub async fn get_plan_validation_direct(
+        &self,
+        plan_id: &str,
+    ) -> Result<PlanValidationReport, CliError> {
+        let path = format!("api/v1/plans/{plan_id}/validation");
         self.get_json(&path).await
     }
 
