@@ -10,6 +10,9 @@ pub(crate) fn map_observer_error(
     retry_after_secs: Option<u64>,
 ) -> CliError {
     let message = error_message(body, status);
+    if let Some(error) = validation_error(body) {
+        return error;
+    }
     match status.as_u16() {
         400 => CliError::UnsupportedPlatform(message),
         401 => CliError::OidcRejected(message),
@@ -32,6 +35,20 @@ pub(crate) fn map_observer_error(
         },
         500..=599 => CliError::BackendUnavailable(status.to_string()),
         _ => CliError::Other(message),
+    }
+}
+
+fn validation_error(body: &str) -> Option<CliError> {
+    let code = serde_json::from_str::<serde_json::Value>(body)
+        .ok()?
+        .get("error")?
+        .as_str()?
+        .to_string();
+    match code.as_str() {
+        "model_unavailable" => Some(CliError::ValidationModelUnavailable),
+        "validation_timeout" => Some(CliError::ValidationTimeout),
+        "validation_failed" | "validation_unavailable" => Some(CliError::ValidationUnavailable),
+        _ => None,
     }
 }
 
@@ -159,5 +176,22 @@ mod tests {
             }
             other => panic!("expected AmbiguousBinding, got {other}"),
         }
+    }
+
+    #[test]
+    fn validation_errors_keep_distinct_exit_contract() {
+        let timeout = map_observer_error(
+            reqwest::StatusCode::GATEWAY_TIMEOUT,
+            r#"{"error":"validation_timeout"}"#,
+            None,
+        );
+        assert!(matches!(timeout, CliError::ValidationTimeout));
+
+        let model = map_observer_error(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            r#"{"error":"model_unavailable"}"#,
+            None,
+        );
+        assert!(matches!(model, CliError::ValidationModelUnavailable));
     }
 }

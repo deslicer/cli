@@ -81,6 +81,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **change** | `deslicer change approve` | Approve a pending plan |
 | **change** | `deslicer change reject` | Reject a pending plan |
 | **change** | `deslicer change deploy` | Execute an approved plan |
+| **change** | `deslicer change validate` | Validate an existing persisted plan |
 | **change** | `deslicer change verify` | Verify deployment outcome |
 | **change** | `deslicer change status` | Poll plan/execution status |
 | **agent** | `deslicer agent` | REPL on the tenant Orchestrator (`-a` to pick another agent) |

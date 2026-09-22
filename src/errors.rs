@@ -27,6 +27,12 @@ pub enum CliError {
     HumanApprovalRequired(String),
     #[error("agent run failed: {0}")]
     AgentRunFailed(String),
+    #[error("plan validation model unavailable")]
+    ValidationModelUnavailable,
+    #[error("plan validation timed out")]
+    ValidationTimeout,
+    #[error("plan validation unavailable")]
+    ValidationUnavailable,
     #[error("transport error: {0}")]
     Transport(String),
     #[error("{0}")]
@@ -46,6 +52,9 @@ impl CliError {
             CliError::PlanNotFound(_) => 11,
             CliError::HumanApprovalRequired(_) => 12,
             CliError::AgentRunFailed(_) => 13,
+            CliError::ValidationModelUnavailable => 22,
+            CliError::ValidationTimeout => 23,
+            CliError::ValidationUnavailable => 24,
             CliError::Other(_) => 1,
         }
     }

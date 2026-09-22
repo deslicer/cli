@@ -136,6 +136,56 @@ pub struct BundleUploaded {
     pub expires_at: Option<String>,
 }
 
+/// Stable DAI/Observer plan-validation report.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanValidationReport {
+    pub plan_id: String,
+    pub items_sha256: String,
+    #[serde(default)]
+    pub unsigned_plan_sha256: Option<String>,
+    pub verdict: String,
+    #[serde(default)]
+    pub effective: bool,
+    #[serde(default)]
+    pub overridden: bool,
+    #[serde(default)]
+    pub report: serde_json::Value,
+    #[serde(default)]
+    pub findings: Vec<PlanValidationFinding>,
+    pub engine: String,
+    pub engine_version: String,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<i32>,
+    pub created_at: String,
+    #[serde(default)]
+    pub override_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanValidationFinding {
+    #[serde(default)]
+    pub app_name: Option<String>,
+    pub config_path: String,
+    #[serde(default)]
+    pub stanza: Option<String>,
+    #[serde(default)]
+    pub key: Option<String>,
+    pub severity: String,
+    pub code: String,
+    pub message: String,
+    #[serde(default)]
+    pub spec_reference: Option<String>,
+    #[serde(default)]
+    pub suggested_value: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct PlanValidationEnvelope {
+    pub report: PlanValidationReport,
+}
+
 /// Observer `POST /api/v1/plans` response wrapper.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ChangePlanResponse {
@@ -188,6 +238,39 @@ mod tests {
         assert_eq!(groups[0].name, "search-heads");
         assert_eq!(groups[0].display_name.as_deref(), Some("Search Heads"));
         assert_eq!(groups[0].member_count, Some(3));
+    }
+
+    #[test]
+    fn parses_plan_validation_report_contract() {
+        let body = br#"{
+          "plan_id":"01994bdb-2d78-79d5-8f40-c03d342a3bc1",
+          "items_sha256":"digest",
+          "verdict":"warn",
+          "effective":true,
+          "overridden":false,
+          "report":{"summary":"one warning"},
+          "findings":[{
+            "app_name":"search",
+            "config_path":"local/web.conf",
+            "stanza":"settings",
+            "key":"enableSplunkWebSSL",
+            "severity":"warning",
+            "code":"invalid_value",
+            "message":"expected true",
+            "spec_reference":null,
+            "suggested_value":"true"
+          }],
+          "engine":"dap-agent",
+          "engine_version":"1",
+          "model_id":null,
+          "duration_ms":20,
+          "created_at":"2026-09-22T07:00:00Z",
+          "override_reason":null
+        }"#;
+        let report: PlanValidationReport = serde_json::from_slice(body).expect("validation report");
+        assert_eq!(report.verdict, "warn");
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].severity, "warning");
     }
 }
 
