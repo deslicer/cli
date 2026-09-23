@@ -3,6 +3,26 @@
 `deslicer init` writes CI templates that Observer pins and serves
 (`GET /api/v1/bootstrap-templates`). The CLI does not embed workflow YAML.
 
+## Choose a setup path
+
+| Path | Use when | Authentication |
+| --- | --- | --- |
+| **GitHub App / OIDC** | The organization has the Deslicer GitHub App and CI should use short-lived identity | `deslicer auth login`, then `deslicer init --bind` |
+| **Observer API token** | The runner can reach Observer management without OIDC | `OBSERVER_API_URL` and a dedicated tools-scope `DESLICER_API_TOKEN` |
+| **Bundle** | Observer cannot clone the source repository | Same Observer token plus `change plan --source-dir`; see [bundle-flow.md](bundle-flow.md) |
+
+Before starting, confirm that the CLI can see the intended host groups:
+
+```bash
+deslicer auth login
+deslicer auth whoami
+deslicer groups list
+```
+
+For the token path, export `OBSERVER_API_URL` and `DESLICER_API_TOKEN`
+instead of running device login. Never reuse the dashboard's stored
+admin/read key as the CLI tools key.
+
 ```text
 deslicer init [--provider github|github-token|gitlab|bitbucket|azure|auto]
               [--environment NAME] [--target-group UUID] [--dir PATH]
@@ -42,6 +62,91 @@ step and exits 0.
 
 Azure DevOps and Bitbucket stay bundle-only this release
 (`deslicer change plan --source-dir`) — that is Path B, not Path A2.
+
+## GitHub App / OIDC setup
+
+From an existing config repository:
+
+```bash
+deslicer init \
+  --provider github \
+  --environment production \
+  --target-group <host-group-uuid> \
+  --bind
+```
+
+This fetches pinned templates, writes them into the repository, and binds the
+repository/environment/host-group tuple. Without `--bind`, files are still
+written; finish the binding in the portal or rerun the command with `--bind`.
+
+If the repository does not exist yet, provision it through an installation:
+
+```bash
+deslicer repo status --installation <installation-id>
+deslicer repo bootstrap \
+  --installation <installation-id> \
+  --name my-splunk-config
+
+# The command is a dry run until --yes is supplied.
+deslicer repo bootstrap \
+  --installation <installation-id> \
+  --name my-splunk-config \
+  --yes
+```
+
+Clone the returned repository, run `deslicer init --bind` there, then commit
+and push the generated files. To receive newer workflow pins later:
+
+```bash
+deslicer repo refresh \
+  --installation <installation-id> \
+  --repo-id <github-repo-id>
+```
+
+`repo refresh` opens a reviewable pull request; it does not force-push the
+default branch.
+
+## Observer-token setup
+
+Use an existing repository with an `origin` remote:
+
+```bash
+export OBSERVER_API_URL="https://observer.example.com:8088"
+export DESLICER_API_TOKEN="<tools-scope-key>"
+
+deslicer init \
+  --provider github-token \
+  --environment acme-prod
+```
+
+The command writes token-path workflows and
+`.deslicer/environments/acme-prod.yml`, then prints a `gh` recipe for creating
+the matching GitHub Environment. The CLI deliberately does not create GitHub
+Environments or write secrets.
+
+Map repository apps to inventory groups in that YAML:
+
+```yaml
+destinations:
+  - inventory_group: indexers
+    apps:
+      - source_path: apps/my_indexer_app
+  - inventory_group: search_heads
+    apps:
+      - source_path: apps/my_search_app
+```
+
+The `inventory_group` value must match an exact group name from
+`deslicer groups list`. Refresh and validate the file after inventory changes:
+
+```bash
+deslicer inventory sync --environment acme-prod
+deslicer inventory validate --environment acme-prod
+```
+
+Commit the generated `.github`, `.deslicer`, and README changes normally.
+Additional environments use additional YAML filename stems and matching
+GitHub Environments.
 
 ## Enrollment
 
@@ -85,5 +190,27 @@ These commands wrap the existing GitHub App routes. They require
 organization, name, and `private` visibility and does not create the
 repository. GitLab, Azure DevOps, and Bitbucket never call provision;
 use `deslicer init --provider` for those hosts.
+
+## First-plan check
+
+For GitHub App / OIDC setup, push a configuration change and let the generated
+workflow create the plan. For the Observer-token path, a local smoke test is:
+
+```bash
+deslicer change plan \
+  --environment acme-prod \
+  --target-group indexers \
+  --name "bootstrap smoke"
+```
+
+Approve the returned plan in the portal, then run:
+
+```bash
+deslicer change deploy --plan-id "$PLAN_ID"
+deslicer change verify --plan-id "$PLAN_ID"
+```
+
+See [quickstart.md](quickstart.md) for the complete plan lifecycle and
+[environments.md](environments.md) for environment-file rules.
 
 Canonical contract: DAP `docs/components/dap/cli-repo-init-and-enroll-spec.md`.
