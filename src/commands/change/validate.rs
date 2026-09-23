@@ -11,7 +11,7 @@ const EXIT_UNAVAILABLE: i32 = 24;
 #[derive(ClapArgs)]
 pub struct Args {
     /// External plan id returned by `deslicer change plan`.
-    #[arg(long)]
+    #[arg(long, value_parser = parse_plan_id)]
     pub plan_id: String,
 
     #[arg(long)]
@@ -86,6 +86,21 @@ fn emit_report(format: OutputFormat, report: &PlanValidationReport) {
     }
 }
 
+fn parse_plan_id(raw: &str) -> Result<String, String> {
+    uuid::Uuid::parse_str(raw)
+        .map(|_| raw.to_string())
+        .map_err(|_| "plan id must be a UUID".to_string())
+}
+
+fn report_summary(report: &PlanValidationReport) -> Option<&str> {
+    report
+        .report
+        .get("summary")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|summary| !summary.is_empty())
+}
+
 fn human_report(report: &PlanValidationReport) -> String {
     let (errors, warnings, info) = finding_counts(report);
     let mut lines = vec![
@@ -95,6 +110,9 @@ fn human_report(report: &PlanValidationReport) -> String {
             errors, warnings, info
         ),
     ];
+    if let Some(summary) = report_summary(report) {
+        lines.extend([String::new(), single_line(summary)]);
+    }
     for finding in &report.findings {
         lines.push(format!(
             "- [{}] {}: {} ({})",
@@ -120,6 +138,9 @@ fn markdown_report(report: &PlanValidationReport) -> String {
             errors, warnings, info
         ),
     ];
+    if let Some(summary) = report_summary(report) {
+        lines.extend([String::new(), escape_markdown(summary)]);
+    }
     if !report.findings.is_empty() {
         lines.extend([
             String::new(),
@@ -247,9 +268,29 @@ mod tests {
 
     #[test]
     fn markdown_is_deterministic_and_escapes_table_content() {
-        let output = markdown_report(&report("block", "error"));
+        let mut report = report("block", "error");
+        report.report = serde_json::json!({
+            "summary": "Checked settings | no secrets exposed."
+        });
+        let output = markdown_report(&report);
         assert!(output.contains("### Deslicer plan validation: Block"));
+        assert!(output.contains("Checked settings \\| no secrets exposed."));
         assert!(output.contains("expected true \\| false"));
         assert!(output.contains("`local/web.conf [settings] enableSplunkWebSSL`"));
+    }
+
+    #[test]
+    fn human_report_includes_structured_summary() {
+        let mut report = report("pass", "info");
+        report.findings.clear();
+        report.report = serde_json::json!({"summary": "All checked settings passed."});
+        let output = human_report(&report);
+        assert!(output.contains("All checked settings passed."));
+    }
+
+    #[test]
+    fn plan_id_parser_rejects_non_uuid_values() {
+        assert!(parse_plan_id("totally-not-a-plan").is_err());
+        assert!(parse_plan_id("87597ca8-ac36-409f-9b68-a4db995172f1").is_ok());
     }
 }

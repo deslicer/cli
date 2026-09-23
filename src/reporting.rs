@@ -83,6 +83,7 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::EnvironmentNotBound(_) => "auth",
         CliError::AmbiguousBinding(_) => "auth",
         CliError::UnsupportedPlatform(_) => "platform",
+        CliError::InvalidInput(_) => "usage",
         CliError::RateLimited { .. } => "rate_limit",
         CliError::BackendUnavailable(_) => "transport",
         CliError::Transport(_) => "transport",

@@ -45,6 +45,7 @@ fn validation_error(body: &str) -> Option<CliError> {
         .as_str()?
         .to_string();
     match code.as_str() {
+        "invalid_plan_id" => Some(CliError::InvalidInput("plan id must be a UUID".to_string())),
         "model_unavailable" => Some(CliError::ValidationModelUnavailable),
         "validation_timeout" => Some(CliError::ValidationTimeout),
         "validation_failed" | "validation_unavailable" => Some(CliError::ValidationUnavailable),
@@ -193,5 +194,16 @@ mod tests {
             None,
         );
         assert!(matches!(model, CliError::ValidationModelUnavailable));
+    }
+
+    #[test]
+    fn invalid_plan_id_is_a_usage_error() {
+        let err = map_observer_error(
+            reqwest::StatusCode::BAD_REQUEST,
+            r#"{"error":"invalid_plan_id"}"#,
+            None,
+        );
+        assert!(matches!(err, CliError::InvalidInput(_)));
+        assert_eq!(err.exit_code(), 2);
     }
 }
