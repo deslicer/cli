@@ -132,16 +132,24 @@ impl TokenStore for KeyringTokenStore {
 }
 
 pub struct CompositeTokenStore {
-    preferred: KeyringTokenStore,
+    preferred: Box<dyn TokenStore>,
     fallback: FileTokenStore,
 }
 
 impl CompositeTokenStore {
     pub fn default_store() -> Result<Self, CliError> {
         Ok(Self {
-            preferred: KeyringTokenStore,
+            preferred: Box::new(KeyringTokenStore),
             fallback: FileTokenStore::default_path()?,
         })
+    }
+
+    #[cfg(test)]
+    fn new(preferred: Box<dyn TokenStore>, fallback: FileTokenStore) -> Self {
+        Self {
+            preferred,
+            fallback,
+        }
     }
 }
 
@@ -174,10 +182,19 @@ impl TokenStore for CompositeTokenStore {
             return self.fallback.save(session);
         }
         match self.preferred.save(session) {
-            Ok(()) => {
-                let _ = self.fallback.clear();
-                Ok(())
-            }
+            Ok(()) => match self.preferred.load() {
+                Ok(Some(loaded)) if loaded == *session => {
+                    let _ = self.fallback.clear();
+                    Ok(())
+                }
+                _ => {
+                    eprintln!(
+                        "warning: OS keychain did not persist the CLI session; storing in {} (0600)",
+                        self.fallback.path.display()
+                    );
+                    self.fallback.save(session)
+                }
+            },
             Err(_) => {
                 eprintln!(
                     "warning: no OS keychain available; storing the CLI session in {} (0600)",
@@ -279,13 +296,51 @@ fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), CliError> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
 
-    #[test]
-    fn file_store_round_trips_a_session() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = FileTokenStore::new(dir.path().join("credentials.toml"));
-        let session = StoredSession {
+    struct InMemoryTokenStore {
+        persisted: Mutex<Option<StoredSession>>,
+        discard_writes: bool,
+    }
+
+    impl InMemoryTokenStore {
+        fn persistent() -> Self {
+            Self {
+                persisted: Mutex::new(None),
+                discard_writes: false,
+            }
+        }
+
+        fn discarding() -> Self {
+            Self {
+                persisted: Mutex::new(None),
+                discard_writes: true,
+            }
+        }
+    }
+
+    impl TokenStore for InMemoryTokenStore {
+        fn load(&self) -> Result<Option<StoredSession>, CliError> {
+            Ok(self.persisted.lock().unwrap().clone())
+        }
+
+        fn save(&self, session: &StoredSession) -> Result<(), CliError> {
+            if !self.discard_writes {
+                *self.persisted.lock().unwrap() = Some(session.clone());
+            }
+            Ok(())
+        }
+
+        fn clear(&self) -> Result<(), CliError> {
+            *self.persisted.lock().unwrap() = None;
+            Ok(())
+        }
+    }
+
+    fn session() -> StoredSession {
+        StoredSession {
             cli_session_token: "dslcli_abc".into(),
             expires_at: "2026-08-14T20:00:00Z".into(),
             tenant_id: "tenant".into(),
@@ -293,11 +348,43 @@ mod tests {
             observer_api_url: "https://api.deslicer.ai/api/cli/observer/".into(),
             tenant_slug: None,
             deslicer_api_url: None,
-        };
+        }
+    }
+
+    #[test]
+    fn file_store_round_trips_a_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FileTokenStore::new(dir.path().join("credentials.toml"));
+        let session = session();
         store.save(&session).unwrap();
         assert_eq!(store.load().unwrap(), Some(session));
         store.clear().unwrap();
         assert_eq!(store.load().unwrap(), None);
+    }
+
+    #[test]
+    fn composite_keeps_fallback_when_preferred_write_is_not_readable() {
+        let dir = tempfile::tempdir().unwrap();
+        let fallback = FileTokenStore::new(dir.path().join("credentials.toml"));
+        let store = CompositeTokenStore::new(Box::new(InMemoryTokenStore::discarding()), fallback);
+        let session = session();
+
+        store.save(&session).unwrap();
+
+        assert_eq!(store.fallback.load().unwrap(), Some(session));
+    }
+
+    #[test]
+    fn composite_clears_fallback_after_verified_preferred_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let fallback = FileTokenStore::new(dir.path().join("credentials.toml"));
+        let session = session();
+        fallback.save(&session).unwrap();
+        let store = CompositeTokenStore::new(Box::new(InMemoryTokenStore::persistent()), fallback);
+
+        store.save(&session).unwrap();
+
+        assert_eq!(store.fallback.load().unwrap(), None);
     }
 
     #[test]
