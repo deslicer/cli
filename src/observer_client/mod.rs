@@ -73,14 +73,20 @@ impl Client {
     pub async fn create_plan_orchestrated(
         &self,
         environment: Option<&str>,
+        target_group_id: Option<&str>,
     ) -> Result<OrchestratedPlan, CliError> {
         #[derive(Serialize)]
         struct Body<'a> {
             #[serde(skip_serializing_if = "Option::is_none")]
             environment: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            target_group_id: Option<&'a str>,
         }
 
-        let body = Body { environment };
+        let body = Body {
+            environment,
+            target_group_id,
+        };
         self.request_json(Method::POST, "v1/plan", Some(&body))
             .await
     }

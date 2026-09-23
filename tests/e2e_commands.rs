@@ -140,7 +140,7 @@ async fn test_change_plan(platform: CiPlatform) {
         .await;
 
     let client = proxy_client(&deslicer, platform).await;
-    let created = client.create_plan_orchestrated(None).await.unwrap();
+    let created = client.create_plan_orchestrated(None, None).await.unwrap();
     assert_eq!(created.plan_id, PLAN_ID);
     assert_eq!(created.plan_row_id.as_deref(), Some(PLAN_ROW_ID));
     assert_eq!(created.status, "draft");

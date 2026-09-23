@@ -281,9 +281,12 @@ async fn discover_environments(
 async fn compile_one_environment(
     client: &Client,
     environment: Option<&str>,
+    target_group_id: Option<&str>,
     no_wait: bool,
 ) -> Result<(ChangePlan, bool), CliError> {
-    let created = client.create_plan_orchestrated(environment).await?;
+    let created = client
+        .create_plan_orchestrated(environment, target_group_id)
+        .await?;
     if no_wait || created.plan_row_id.is_none() {
         return Ok((orchestrated_as_change_plan(&created), false));
     }
@@ -355,12 +358,23 @@ async fn run_git_plans(
     environment: Option<&str>,
 ) -> Result<i32, CliError> {
     let environments = discover_environments(ctx, session, environment).await?;
+    let target_group_id = match args.target_group.as_deref() {
+        Some(spec) => Some(resolve_plan_target_group(client, spec).await?),
+        None => None,
+    };
     let mut plans = Vec::new();
     let mut any_failed = false;
     let mut last_ready: Option<ChangePlan> = None;
 
     for environment in &environments {
-        match compile_one_environment(client, environment.as_deref(), args.no_wait).await {
+        match compile_one_environment(
+            client,
+            environment.as_deref(),
+            target_group_id.as_deref(),
+            args.no_wait,
+        )
+        .await
+        {
             Ok((plan, ready)) => {
                 if ready {
                     last_ready = Some(plan.clone());
