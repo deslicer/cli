@@ -12,6 +12,8 @@ pub enum CliError {
     AmbiguousBinding(String),
     #[error("unsupported CI platform: {0}")]
     UnsupportedPlatform(String),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
     #[error("rate limited: retry after {retry_after_secs}s")]
     RateLimited { retry_after_secs: u64 },
     #[error("backend unavailable (HTTP {0})")]
@@ -47,6 +49,7 @@ impl CliError {
             CliError::EnvironmentNotBound(_) => 6,
             CliError::AmbiguousBinding(_) => 7,
             CliError::UnsupportedPlatform(_) => 8,
+            CliError::InvalidInput(_) => 2,
             CliError::RateLimited { .. } => 9,
             CliError::BackendUnavailable(_) | CliError::Transport(_) => 10,
             CliError::PlanNotFound(_) => 11,

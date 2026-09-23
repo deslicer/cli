@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
+use url::Url;
 
 use super::release;
 use crate::errors::CliError;
@@ -13,6 +14,8 @@ use crate::errors::CliError;
 /// 100 MiB cap on both the downloaded archive and the extracted binary —
 /// release binaries are ~10 MiB, so anything near the cap is malformed.
 const MAX_ARTIFACT_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_RELEASE_REDIRECTS: usize = 5;
+const RELEASE_DOWNLOAD_HOSTS: &[&str] = &["github.com", "release-assets.githubusercontent.com"];
 
 pub async fn download_and_replace(tag: &str) -> Result<(), CliError> {
     let artifact = release::artifact_name()?;
@@ -32,11 +35,7 @@ pub async fn download_and_replace(tag: &str) -> Result<(), CliError> {
 }
 
 async fn fetch_capped(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, CliError> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| CliError::Transport(format!("download {url}: {e}")))?;
+    let response = fetch_release_response(client, url).await?;
 
     let status = response.status();
     if !status.is_success() {
@@ -58,6 +57,60 @@ async fn fetch_capped(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, Cl
         )));
     }
     Ok(bytes.to_vec())
+}
+
+async fn fetch_release_response(
+    client: &reqwest::Client,
+    public_url: &str,
+) -> Result<reqwest::Response, CliError> {
+    let mut current = Url::parse(public_url)
+        .map_err(|e| CliError::Transport(format!("invalid release URL: {e}")))?;
+    validate_release_url(&current)?;
+
+    for redirect_count in 0..=MAX_RELEASE_REDIRECTS {
+        let response = client
+            .get(current.clone())
+            .send()
+            .await
+            .map_err(|e| CliError::Transport(format!("download {public_url}: {e}")))?;
+        if !response.status().is_redirection() {
+            return Ok(response);
+        }
+        if redirect_count == MAX_RELEASE_REDIRECTS {
+            return Err(CliError::Transport(
+                "GitHub release download exceeded redirect limit".into(),
+            ));
+        }
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| CliError::Transport("release redirect omitted Location".into()))?;
+        current = current
+            .join(location)
+            .map_err(|e| CliError::Transport(format!("invalid release redirect: {e}")))?;
+        validate_release_url(&current)?;
+    }
+    Err(CliError::Transport(
+        "GitHub release download exceeded redirect limit".into(),
+    ))
+}
+
+fn validate_release_url(url: &Url) -> Result<(), CliError> {
+    // REQ-SEC-004 / REQ-SEC-006: self-update redirects stay on GitHub's
+    // TLS-only release hosts and cannot carry userinfo credentials.
+    let host = url.host_str().unwrap_or_default();
+    let allowed = url.scheme() == "https"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && RELEASE_DOWNLOAD_HOSTS.contains(&host);
+    if allowed {
+        Ok(())
+    } else {
+        Err(CliError::Transport(format!(
+            "refused release redirect to untrusted host {host:?}"
+        )))
+    }
 }
 
 fn verify_sha256(archive: &[u8], sidecar: &[u8]) -> Result<(), CliError> {
@@ -198,5 +251,16 @@ mod tests {
         let good = hex::encode(Sha256::digest(b"other"));
         assert!(verify_sha256(b"payload", format!("{good}  f").as_bytes()).is_err());
         assert!(verify_sha256(b"payload", b"not-a-digest").is_err());
+    }
+
+    #[test]
+    fn release_redirects_are_https_and_host_allowlisted() {
+        let github = Url::parse("https://github.com/deslicer/cli/releases/download/v1/a").unwrap();
+        let asset = Url::parse("https://release-assets.githubusercontent.com/path?a=b").unwrap();
+        assert!(validate_release_url(&github).is_ok());
+        assert!(validate_release_url(&asset).is_ok());
+        assert!(validate_release_url(&Url::parse("http://github.com/a").unwrap()).is_err());
+        assert!(validate_release_url(&Url::parse("https://example.com/a").unwrap()).is_err());
+        assert!(validate_release_url(&Url::parse("https://user@github.com/a").unwrap()).is_err());
     }
 }
