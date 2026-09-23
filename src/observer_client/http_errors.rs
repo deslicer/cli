@@ -23,8 +23,10 @@ pub(crate) fn map_observer_error(
                 CliError::Other(worker_plane_message(&message))
             } else if mentions_environment(body) {
                 CliError::EnvironmentNotBound(message)
-            } else {
+            } else if mentions_repo_not_allowlisted(body) {
                 CliError::RepoNotAllowlisted(message)
+            } else {
+                CliError::Other(forbidden_message(body))
             }
         }
         404 => CliError::PlanNotFound(message),
@@ -86,6 +88,47 @@ fn mentions_environment(text: &str) -> bool {
     text.to_ascii_lowercase().contains("environment")
 }
 
+fn mentions_repo_not_allowlisted(body: &str) -> bool {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
+        return ["error", "detail", "message"]
+            .iter()
+            .filter_map(|key| value.get(key).and_then(|field| field.as_str()))
+            .any(|text| {
+                is_repo_not_allowlisted_code(text) || is_repo_not_allowlisted_message(text)
+            });
+    }
+    is_repo_not_allowlisted_code(body) || is_repo_not_allowlisted_message(body)
+}
+
+fn is_repo_not_allowlisted_code(code: &str) -> bool {
+    matches!(code, "repo_not_allowlisted" | "repository_not_allowlisted")
+}
+
+fn is_repo_not_allowlisted_message(message: &str) -> bool {
+    let lowered = message.to_ascii_lowercase();
+    [
+        "repo not allowlisted",
+        "repository not allowlisted",
+        "repository is not allowlisted",
+    ]
+    .iter()
+    .any(|phrase| lowered.contains(phrase))
+}
+
+fn forbidden_message(body: &str) -> String {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return "observer request forbidden (HTTP 403)".to_string();
+    };
+    for key in ["error", "detail", "message"] {
+        if let Some(text) = value.get(key).and_then(|field| field.as_str()) {
+            if !text.is_empty() {
+                return text.to_string();
+            }
+        }
+    }
+    "observer request forbidden (HTTP 403)".to_string()
+}
+
 /// Observer returns `mfa_required` when approval lacks a human identity; the
 /// CI proxy returns `approval_not_found` / `self_approval_blocked` when no
 /// valid GitHub Environment reviewer could be attested.
@@ -132,6 +175,57 @@ pub(crate) fn parse_retry_after_header(headers: &reqwest::header::HeaderMap) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_repo_allowlist_code_maps_to_repo_not_allowlisted() {
+        let err = map_observer_error(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"error":"repo_not_allowlisted"}"#,
+            None,
+        );
+
+        assert!(matches!(err, CliError::RepoNotAllowlisted(_)));
+        assert_eq!(err.exit_code(), 5);
+    }
+
+    #[test]
+    fn explicit_repo_allowlist_message_maps_to_repo_not_allowlisted() {
+        let err = map_observer_error(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"error":"forbidden","message":"repository is not allowlisted"}"#,
+            None,
+        );
+
+        assert!(matches!(err, CliError::RepoNotAllowlisted(_)));
+    }
+
+    #[test]
+    fn identity_attestation_forbidden_preserves_stable_code() {
+        let err = map_observer_error(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"error":"identity_attestation_required","message":"attestation required"}"#,
+            None,
+        );
+
+        match err {
+            CliError::Other(message) => assert_eq!(message, "identity_attestation_required"),
+            other => panic!("expected Other, got {other}"),
+        }
+    }
+
+    #[test]
+    fn compile_failed_forbidden_is_not_repo_allowlist() {
+        let err = map_observer_error(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"error":"compile_failed"}"#,
+            None,
+        );
+
+        match err {
+            CliError::Other(message) => assert_eq!(message, "compile_failed"),
+            other => panic!("expected Other, got {other}"),
+        }
+    }
 
     #[test]
     fn worker_plane_forbidden_is_not_repo_allowlist() {
