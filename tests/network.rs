@@ -10,7 +10,7 @@ use deslicer_cli::resolver;
 use deslicer_cli::token_source::TokenSource;
 use deslicer_cli::Ctx;
 use std::sync::Mutex;
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -212,6 +212,10 @@ async fn client_orchestrated_plan_returns_both_ids() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/api/cli/observer/v1/plan"))
+        .and(body_json(serde_json::json!({
+            "environment": "staging",
+            "target_group_id": "019f36d6-3f61-7eea-9417-7ac4a8a10f69"
+        })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "plan_id": "plan-external",
             "plan_row_id": "plan-row",
@@ -224,7 +228,10 @@ async fn client_orchestrated_plan_returns_both_ids() {
     let base = url::Url::parse(&format!("{}/api/cli/observer/", server.uri())).unwrap();
     let client = Client::new(base, "ci-jwt".to_string());
     let created = client
-        .create_plan_orchestrated(Some("staging"))
+        .create_plan_orchestrated(
+            Some("staging"),
+            Some("019f36d6-3f61-7eea-9417-7ac4a8a10f69"),
+        )
         .await
         .unwrap();
 
