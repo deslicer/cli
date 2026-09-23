@@ -102,11 +102,19 @@ GitHub App repos already receive this YAML from Observer `github_repo_sync`; do 
 
 `deslicer inventory sync` and Path A2 `init` read `.deslicer/environments/*.{yml,yaml}` locally to resolve a single filename stem when `--environment` is omitted. CI OIDC still resolves the binding through deslicer-ai after authentication.
 
-For a manual listing:
+Generate a GitHub Actions-compatible matrix containing only destinations that
+have at least one `source_path`:
 
 ```bash
-ls .deslicer/environments/
+deslicer environments plan-matrix --log-format json
+# {"include":[{"environment":"production","inventory_group":"indexers"}]}
+
+# Limit discovery to one filename stem:
+deslicer environments plan-matrix --environment production --log-format json
 ```
+
+Empty `apps:` placeholders are omitted so CI can skip plan jobs for groups that
+have no desired configuration.
 
 ## Portal bindings vs repo files
 

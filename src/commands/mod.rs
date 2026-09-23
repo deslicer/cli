@@ -4,6 +4,7 @@ pub mod change;
 pub mod completion;
 pub mod docs;
 pub mod enroll;
+pub mod environments;
 pub mod groups;
 pub mod init;
 pub mod inventory;
