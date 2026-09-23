@@ -2,12 +2,13 @@ use base64::Engine;
 use clap::Args as ClapArgs;
 use serde_json::{json, Value};
 
+use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
 use crate::ci::{self, CiPlatform};
 use crate::commands::auth::format::{
-    print_output, status_ci_human, status_device_human, status_token_human,
+    print_output, status_ci_human, status_device_human, status_none_human, status_token_human,
 };
+use crate::commands::pipeline::map_cli_error;
 use crate::reporting::{emit_oidc_error, oidc_exit_code, redact_secrets};
-use crate::token_store::load_stored_session;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
@@ -17,32 +18,37 @@ pub struct Args {
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
-    let platform = ci::detect_platform(ctx.ci_override);
-    let audience = ci::AUDIENCE;
-
-    if crate::observer_token::direct_auth_ready(&ctx) {
-        let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
-        print_output(
-            ctx.log_format,
-            &json!({
-                "ok": true,
-                "platform": platform.header_value(),
-                "identity": "observer_api_token",
-                "observer_api_url": url,
-                "resolution_path": crate::observer_token::RESOLUTION_PATH,
-                "audience": audience,
-            }),
-            &status_token_human(url),
-        );
-        return 0;
-    }
-
-    if platform == CiPlatform::Local {
-        if let Ok(Some(session)) = load_stored_session() {
-            return print_device_status(&ctx, &session);
+    match AuthCredentialResolver::new(&ctx).resolve() {
+        Ok(AuthCredential::DirectObserver { platform }) => print_direct_status(&ctx, platform),
+        Ok(AuthCredential::CiOidc { platform }) => print_ci_status(ctx, args, platform).await,
+        Ok(AuthCredential::Device(session) | AuthCredential::ExpiredDevice(session)) => {
+            print_device_status(&ctx, &session)
         }
+        Ok(AuthCredential::None) => print_no_identity(&ctx),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
+}
 
+fn print_direct_status(ctx: &Ctx, platform: CiPlatform) -> i32 {
+    let audience = ci::AUDIENCE;
+    let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
+    print_output(
+        ctx.log_format,
+        &json!({
+            "ok": true,
+            "platform": platform.header_value(),
+            "identity": "observer_api_token",
+            "observer_api_url": url,
+            "resolution_path": crate::observer_token::RESOLUTION_PATH,
+            "audience": audience,
+        }),
+        &status_token_human(url),
+    );
+    0
+}
+
+async fn print_ci_status(ctx: Ctx, args: Args, platform: CiPlatform) -> i32 {
+    let audience = ci::AUDIENCE;
     let token_result = ci::provider_for(platform).fetch_token(audience).await;
 
     let (jwt_header, jwt_claims) = match &token_result {
@@ -69,36 +75,20 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(_) => Value::Null,
     };
 
-    let identity = token_result.as_ref().ok().map(|_| {
-        if platform == CiPlatform::Local {
-            "local_dev_token"
-        } else {
-            "ci"
-        }
-    });
-
     let ok = token_result.is_ok()
         && resolved_backend
             .get("observer_api_url")
             .and_then(Value::as_str)
             .is_some();
 
-    #[rustfmt::skip]
-    let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() { // pragma: allowlist secret
-        json!({ "dev_token": "set" })
-    } else {
-        Value::Null
-    };
-
     let output = json!({
         "ok": ok,
         "platform": platform.header_value(),
-        "identity": identity,
+        "identity": token_result.as_ref().ok().map(|_| "ci"),
         "audience": audience,
         "jwt_header": jwt_header,
         "jwt_claims": jwt_claims,
         "resolved_backend": resolved_backend,
-        "audit": audit,
     });
 
     let backend_url = resolved_backend
@@ -118,6 +108,20 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     } else {
         token_result.as_ref().err().map(oidc_exit_code).unwrap_or(1)
     }
+}
+
+fn print_no_identity(ctx: &Ctx) -> i32 {
+    print_output(
+        ctx.log_format,
+        &json!({
+            "ok": false,
+            "platform": "local",
+            "identity": "none",
+            "logged_in": false,
+        }),
+        &status_none_human(),
+    );
+    1
 }
 
 fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
@@ -197,28 +201,5 @@ fn redact_sensitive_claims(value: &mut Value) {
             }
         }
         _ => {}
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    #[test]
-    fn audit_never_includes_raw_dev_token() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("DESLICER_DEV_TOKEN", "secret-token-value-12345"); // pragma: allowlist secret
-        #[rustfmt::skip]
-        let audit = if std::env::var("DESLICER_DEV_TOKEN").is_ok() { // pragma: allowlist secret
-            json!({ "dev_token": "set" })
-        } else {
-            Value::Null
-        };
-        let serialized = audit.to_string();
-        assert!(!serialized.contains("secret-token-value-12345"));
-        std::env::remove_var("DESLICER_DEV_TOKEN"); // pragma: allowlist secret
     }
 }

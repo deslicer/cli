@@ -252,7 +252,7 @@ Set `OBSERVER_API_URL` to the **management** plane URL. Using the data plane por
 | Goal | Path | Setup |
 |------|------|--------|
 | Fastest smoke test | B (bundle) | DAP stack + `SEED_API_KEY` + `OBSERVER_API_URL=http://localhost:8080` — [local-testing.md](local-testing.md) |
-| Full CI proxy path | A (OIDC) | DAP + DAI + seed `github_installations`, `dap_settings`, repo bindings + OIDC or `DESLICER_DEV_TOKEN` |
+| Full CI proxy path | A (OIDC) | DAP + DAI + seed `github_installations`, `dap_settings`, repo bindings + a real CI OIDC token |
 | Portal-only | — | DAI → `/api/dap/*` → Observer; no CLI required for browse/approve |
 
 ---

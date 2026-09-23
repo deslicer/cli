@@ -113,4 +113,7 @@ Or in the Deslicer portal under **Automate → Plans**. Approval and execution r
 | Plan never leaves `draft` | Compile-runner image missing or can't reach the Observer — check Observer logs |
 | `connection refused` | Observer not running, or you used the data plane port instead of the management plane |
 
-More detail in [bundle-flow.md](bundle-flow.md#troubleshooting). For testing the proxied CI path locally (`--ci-platform local`), set `DESLICER_DEV_TOKEN` to a pre-issued dev token — see [oidc-troubleshooting.md](oidc-troubleshooting.md).
+More detail in [bundle-flow.md](bundle-flow.md#troubleshooting). Local
+automation uses `OBSERVER_API_URL` with `DESLICER_API_TOKEN`; interactive
+portal access uses `deslicer auth login`. The retired `DESLICER_DEV_TOKEN` is
+never transmitted. See [oidc-troubleshooting.md](oidc-troubleshooting.md).

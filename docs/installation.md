@@ -85,12 +85,12 @@ If the binary lives in a root-owned directory (e.g. `/usr/local/bin`), re-run th
 
 ```bash
 docker run --rm -it \
-  -e DESLICER_API_URL=https://api.deslicer.ai \
-  -e DESLICER_DEV_TOKEN="${DESLICER_DEV_TOKEN}" \
+  -e OBSERVER_API_URL="${OBSERVER_API_URL}" \
+  -e DESLICER_API_TOKEN="${DESLICER_API_TOKEN}" \
   ghcr.io/deslicer/cli:latest deslicer auth status
 ```
 
-For CI, mount OIDC-related env vars from the runner instead of `DESLICER_DEV_TOKEN`.
+For CI OIDC, mount the platform-specific variables described below instead.
 
 ---
 
@@ -210,19 +210,26 @@ Set `--ci-platform bitbucket` if auto-detection fails.
 
 ### Local development
 
-For laptop testing without CI OIDC:
+For interactive laptop use, start device login:
 
 ```bash
-export DESLICER_DEV_TOKEN="<portal-issued dev token>"
-deslicer auth login --environment local
-deslicer change status --environment local
+deslicer auth login
+deslicer auth whoami
 ```
 
-| Variable | Purpose |
-|----------|---------|
-| `DESLICER_DEV_TOKEN` | Non-production bearer for local/dev auth |
-| `DESLICER_API_URL` | Portal URL (default `https://api.deslicer.ai`) |
-| `OBSERVER_API_URL` | Skip resolve-backend; talk to Observer directly |
+For local automation, use direct Observer credentials:
+
+```bash
+export OBSERVER_API_URL="https://observer.example.com:8088"
+export DESLICER_API_TOKEN="<tools-scope-api-key>"
+deslicer auth status
+```
+
+`DESLICER_DEV_TOKEN` is retired. The CLI never transmits it; when it is the
+only attempted credential, commands fail with migration guidance. Unset it and
+use device login for a person or the direct Observer pair above for automation.
+`deslicer auth logout` clears only the stored device session; credentials
+supplied through environment variables are unchanged.
 
 Use `--ci-platform local` to force local mode.
 

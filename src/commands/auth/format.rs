@@ -83,6 +83,12 @@ pub fn status_token_human(observer_api_url: Option<&str>) -> String {
     }
 }
 
+pub fn status_none_human() -> String {
+    "Identity: none\nLogged in: no\nRun `deslicer auth login` for interactive use, \
+     or set OBSERVER_API_URL and DESLICER_API_TOKEN for automation\n"
+        .to_string()
+}
+
 pub fn status_ci_human(
     platform: &str,
     observer_api_url: Option<&str>,

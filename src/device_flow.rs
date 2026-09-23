@@ -113,11 +113,10 @@ fn print_device_pending(ctx: &Ctx, started: &StartResponse) {
 }
 
 fn device_pending_message() -> String {
-    format!(
-        "device login requires an interactive terminal; approve the code in the portal on a TTY, \
-         or set {dev_token_env} / use CI OIDC (--ci-platform github|gitlab|azure|bitbucket)",
-        dev_token_env = crate::ci::local::dev_token_env_var(),
-    )
+    "device login requires an interactive terminal; approve the code in the portal on a TTY, \
+     use OBSERVER_API_URL with DESLICER_API_TOKEN for automation, or use real CI OIDC \
+     (--ci-platform github|gitlab|azure|bitbucket)"
+        .to_string()
 }
 
 async fn poll_for_token(ctx: &Ctx, started: &StartResponse) -> Result<StoredSession, CliError> {

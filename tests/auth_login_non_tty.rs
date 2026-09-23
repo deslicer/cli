@@ -15,10 +15,6 @@ fn cli_bin() -> PathBuf {
         .join(bin_name)
 }
 
-fn dev_token_env() -> String {
-    format!("{}{}", "DESL", "ICER_DEV_TOKEN")
-}
-
 fn api_url_flag() -> String {
     format!(
         "--{}-api-url",
@@ -37,7 +33,9 @@ fn auth_login_ci_local_without_token_fails_fast() {
         .arg("local")
         .arg(api_url_flag())
         .arg("http://127.0.0.1:9/")
-        .env_remove(dev_token_env())
+        .env_remove("DESLICER_DEV_TOKEN")
+        .env_remove("DESLICER_API_TOKEN")
+        .env_remove("OBSERVER_API_URL")
         .env("CI", "1")
         .env("TERM", "dumb")
         .output()
@@ -57,10 +55,9 @@ fn auth_login_ci_local_without_token_fails_fast() {
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let token_env = dev_token_env();
     assert!(
-        stderr.contains(&token_env),
-        "stderr should hint {token_env}, got: {stderr}"
+        stderr.contains("OBSERVER_API_URL") && stderr.contains("DESLICER_API_TOKEN"),
+        "stderr should explain automation credentials, got: {stderr}"
     );
     assert!(
         stderr.contains("TTY") || stderr.contains("CI"),

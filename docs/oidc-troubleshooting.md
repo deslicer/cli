@@ -39,8 +39,16 @@ Run it **before** `deslicer auth login` when debugging token or binding failures
 
 ### Local
 
-1. Set `DESLICER_DEV_TOKEN` from the Deslicer portal (dev/staging only).
-2. Run `deslicer auth login --environment local` with `--ci-platform local`.
+Local interactive sessions use device login:
+
+```bash
+deslicer auth login
+deslicer auth status
+```
+
+Local automation uses `OBSERVER_API_URL` with a tools-scope
+`DESLICER_API_TOKEN`. `DESLICER_DEV_TOKEN` is retired and is never sent to
+deslicer-ai or Observer. Unset it when the migration error is shown.
 
 ---
 
