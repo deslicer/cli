@@ -51,6 +51,9 @@ pub enum Command {
     /// List Ansible inventory groups, sync, or validate tenant environment YAML
     #[command(subcommand)]
     Inventory(crate::commands::inventory::InventoryCmd),
+    /// Build CI helpers from `.deslicer/environments` files
+    #[command(subcommand)]
+    Environments(crate::commands::environments::EnvironmentsCmd),
     /// Write CI templates for a config repo (optional --bind)
     Init(crate::commands::init::Args),
     /// Print documentation topic URLs (`--open` for a browser)
@@ -121,6 +124,7 @@ impl Cli {
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
+            Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
             Command::Init(args) => crate::commands::init::run(ctx, args).await,
             Command::Docs(args) => crate::commands::docs::run(ctx, args),
             Command::Enroll(cmd) => crate::commands::enroll::dispatch(ctx, cmd).await,
