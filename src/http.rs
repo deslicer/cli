@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::errors::CliError;
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Silence tolerated on a streaming body before it is treated as dead.
 ///
@@ -167,5 +167,10 @@ mod tests {
         let _guard = ENV_LOCK.lock().expect("env lock");
         clear_http_guards();
         assert!(assert_url_allowed(&parse("ftp://example.com/x")).is_err());
+    }
+
+    #[test]
+    fn request_timeout_allows_cold_create_window() {
+        assert_eq!(REQUEST_TIMEOUT, Duration::from_secs(120));
     }
 }
