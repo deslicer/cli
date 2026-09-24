@@ -97,7 +97,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | Flag / env | Default | Purpose |
 |------------|---------|---------|
 | `--deslicer-api-url` / `DESLICER_API_URL` | `https://api.deslicer.ai` | deslicer-ai portal (resolve-backend) |
-| `--observer-api-url` / `OBSERVER_API_URL` | _(unset)_ | Air-gapped escape hatch — skip resolve |
+| `--observer-api-url` / `OBSERVER_API_URL` | _(unset)_ | Air-gapped escape hatch — skip resolve; requires `DESLICER_API_TOKEN` |
 | `DESLICER_API_TOKEN` (env only) | _(unset)_ | Observer API key (`tools` scope) for direct Observer access (bundle flow or git-sourced CI). Create under **Platform → API keys**. Not DAI's stored admin/read key. |
 | `--ci-platform` | `auto` | Force platform: `github`, `gitlab`, `azure`, `bitbucket`, `local` |
 | `--log-format` | `human` | `human` or `json` |

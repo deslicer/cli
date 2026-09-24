@@ -23,6 +23,7 @@ pub struct Cli {
     )]
     pub deslicer_api_url: url::Url,
 
+    /// Observer API endpoint for direct access. Requires DESLICER_API_TOKEN.
     #[arg(long, env = "OBSERVER_API_URL", global = true)]
     pub observer_api_url: Option<url::Url>,
 
@@ -118,6 +119,9 @@ impl Cli {
             ci_override: self.ci_platform.as_override(),
             log_format: self.log_format,
         };
+        if let Err(err) = crate::observer_token::ObserverTokenConfiguration::validate(&ctx) {
+            return crate::reporting::emit_cli_error(ctx.log_format, &err);
+        }
         match self.command {
             Command::Agent(cmd) => crate::commands::agent::dispatch(ctx, cmd).await,
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,

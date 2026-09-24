@@ -2,9 +2,25 @@
 //! access. Env-only so the secret never appears in process argv (REQ-LOG-007).
 
 use crate::cli::Ctx;
+use crate::errors::CliError;
 
 /// Resolution path stamped on sessions that skip DAI / OIDC.
 pub const RESOLUTION_PATH: &str = "observer_api_token";
+
+pub struct ObserverTokenConfiguration;
+
+impl ObserverTokenConfiguration {
+    pub fn validate(ctx: &Ctx) -> Result<(), CliError> {
+        if ctx.observer_api_url.is_some() && api_token().is_none() {
+            return Err(CliError::InvalidInput(
+                "--observer-api-url / OBSERVER_API_URL requires DESLICER_API_TOKEN \
+                 (an Observer API key with tools scope)"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+}
 
 pub fn api_token() -> Option<String> {
     std::env::var("DESLICER_API_TOKEN")
@@ -61,5 +77,15 @@ mod tests {
             "https://observer.example.test"
         ))));
         std::env::remove_var("DESLICER_API_TOKEN");
+    }
+
+    #[test]
+    fn explicit_observer_url_requires_token() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        std::env::remove_var("DESLICER_API_TOKEN");
+        let result = ObserverTokenConfiguration::validate(&ctx_with_observer(Some(
+            "https://observer.example.test",
+        )));
+        assert!(matches!(result, Err(CliError::InvalidInput(_))));
     }
 }
