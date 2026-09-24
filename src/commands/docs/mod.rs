@@ -12,7 +12,7 @@ use crate::token_store::load_active_session;
 use crate::Ctx;
 
 mod catalog;
-mod open;
+pub mod open;
 mod urls;
 
 pub use catalog::{lookup, Topic, TOPICS};

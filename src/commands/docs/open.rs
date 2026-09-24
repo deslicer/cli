@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 
 use url::Url;
 
-use super::catalog::{DAP_PLATFORM_API_KEYS_PATH, DOCS_BASE_URL_ENV};
+use super::catalog::{CLI_DEVICE_AUTH_PATH, DAP_PLATFORM_API_KEYS_PATH, DOCS_BASE_URL_ENV};
 
 /// True when the CLI must not launch a GUI browser or block on user input.
 pub fn is_non_interactive() -> bool {
@@ -77,7 +77,30 @@ fn portal_origin_allows(url: &Url, portal: &Url) -> bool {
     if url.port_or_known_default() != portal.port_or_known_default() {
         return false;
     }
-    url.path() == DAP_PLATFORM_API_KEYS_PATH && url.query().is_none()
+    match url.path() {
+        DAP_PLATFORM_API_KEYS_PATH if url.query().is_none() => true,
+        CLI_DEVICE_AUTH_PATH => cli_auth_query_allowed(url.query()),
+        _ => false,
+    }
+}
+
+/// Allow bare `/dashboard/cli-auth` or `?user_code=ABCD-EFGH` only.
+fn cli_auth_query_allowed(query: Option<&str>) -> bool {
+    let Some(raw) = query else {
+        return true;
+    };
+    let mut pairs = url::form_urlencoded::parse(raw.as_bytes());
+    let Some((key, value)) = pairs.next() else {
+        return true;
+    };
+    if pairs.next().is_some() {
+        return false;
+    }
+    key == "user_code"
+        && !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
 }
 
 fn configured_docs_host() -> Option<String> {
@@ -141,6 +164,23 @@ mod tests {
         assert!(!allowed_open_url(api_keys, None));
         assert!(!allowed_open_url(
             "https://ops.deslicer.show/dashboard/dap/api-keys?create=1",
+            Some(&portal())
+        ));
+    }
+
+    #[test]
+    fn allows_portal_cli_auth_with_user_code() {
+        let bare = "https://ops.deslicer.show/dashboard/cli-auth";
+        let with_code = "https://ops.deslicer.show/dashboard/cli-auth?user_code=ABCD-EFGH";
+        assert!(allowed_open_url(bare, Some(&portal())));
+        assert!(allowed_open_url(with_code, Some(&portal())));
+        assert!(!allowed_open_url(with_code, None));
+        assert!(!allowed_open_url(
+            "https://ops.deslicer.show/dashboard/cli-auth?user_code=ABCD&next=evil",
+            Some(&portal())
+        ));
+        assert!(!allowed_open_url(
+            "https://evil.com/dashboard/cli-auth?user_code=ABCD-EFGH",
             Some(&portal())
         ));
     }

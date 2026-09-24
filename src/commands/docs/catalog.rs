@@ -170,6 +170,9 @@ pub const TOPICS: &[Topic] = &[
 /// Portal path for `deslicer docs api-keys`. Create is an in-page dialog.
 pub const DAP_PLATFORM_API_KEYS_PATH: &str = "/dashboard/dap/api-keys";
 
+/// Portal path for interactive CLI device login (`deslicer auth login`).
+pub const CLI_DEVICE_AUTH_PATH: &str = "/dashboard/cli-auth";
+
 pub fn portal_path(topic: &Topic) -> Option<&'static str> {
     match topic.id {
         "api-keys" => Some(DAP_PLATFORM_API_KEYS_PATH),
