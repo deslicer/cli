@@ -2,6 +2,7 @@ use clap::Subcommand;
 
 use crate::Ctx;
 
+pub mod import_seed;
 pub mod list;
 pub mod sync;
 pub mod validate;
@@ -14,6 +15,8 @@ pub enum InventoryCmd {
     Sync(sync::Args),
     /// Validate `.deslicer/environments/<stem>.yml` (shape + live host groups)
     Validate(validate::Args),
+    /// Declare hosts from a lab Ansible inventory seed YAML
+    ImportSeed(import_seed::Args),
 }
 
 pub async fn dispatch(ctx: Ctx, cmd: InventoryCmd) -> i32 {
@@ -21,6 +24,7 @@ pub async fn dispatch(ctx: Ctx, cmd: InventoryCmd) -> i32 {
         InventoryCmd::List(args) => list::run(ctx, args).await,
         InventoryCmd::Sync(args) => sync::run(ctx, args).await,
         InventoryCmd::Validate(args) => validate::run(ctx, args).await,
+        InventoryCmd::ImportSeed(args) => import_seed::run(ctx, args).await,
     }
 }
 
@@ -35,5 +39,6 @@ mod tests {
         assert!(inventory.find_subcommand("sync").is_some());
         assert!(inventory.find_subcommand("list").is_some());
         assert!(inventory.find_subcommand("validate").is_some());
+        assert!(inventory.find_subcommand("import-seed").is_some());
     }
 }

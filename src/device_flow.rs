@@ -72,6 +72,7 @@ pub async fn login_device_session_with_poll(
         .map_err(|e| CliError::Transport(format!("invalid device start JSON: {e}")))?;
 
     print_device_instructions(&started);
+    maybe_open_browser(ctx, &started);
 
     if !poll {
         print_device_pending(ctx, &started);
@@ -93,6 +94,17 @@ fn print_device_instructions(started: &StartResponse) {
             "Open {} and enter code: {}",
             started.verification_uri, started.user_code
         );
+    }
+}
+
+/// AWS SSO-style: launch the default browser when a TTY is available.
+fn maybe_open_browser(ctx: &Ctx, started: &StartResponse) {
+    let url = started
+        .verification_uri_complete
+        .as_deref()
+        .unwrap_or(started.verification_uri.as_str());
+    if let Err(err) = crate::commands::docs::open::open_url(url, Some(&ctx.deslicer_api_url)) {
+        eprintln!("Could not open browser ({err}); open the URL above manually.");
     }
 }
 

@@ -6,6 +6,7 @@
 //! request paths work in both modes.
 
 mod bootstrap;
+mod declared;
 mod direct_create;
 mod enrollment;
 mod http_errors;
@@ -15,6 +16,9 @@ mod types;
 
 pub use bootstrap::{
     BootstrapTemplateFile, BootstrapTemplates, CreateEnvironmentBindingRequest, GithubInstallation,
+};
+pub use declared::{
+    AssignHostRequest, CreateDeclaredHostRequest, DeclaredHost, InventoryAssignmentResponse,
 };
 pub use enrollment::{
     CreateEnrollmentTokenRequest, CreateEnrollmentTokenResponse, EnrollmentTokenSummary,
@@ -314,6 +318,24 @@ impl Client {
     pub async fn list_inventory(&self) -> Result<Vec<InventoryGroup>, CliError> {
         let inventory: inventory::AnsibleInventory = self.get_json("api/v1/inventory").await?;
         Ok(inventory.into_groups())
+    }
+
+    /// Create or reuse a declared host (`POST /api/v1/hosts/declared`).
+    pub async fn create_declared_host(
+        &self,
+        body: &CreateDeclaredHostRequest<'_>,
+    ) -> Result<DeclaredHost, CliError> {
+        self.request_json(Method::POST, "api/v1/hosts/declared", Some(body))
+            .await
+    }
+
+    /// Assign a host to an Ansible inventory group (`POST /api/v1/inventory/assign`).
+    pub async fn assign_inventory_host(
+        &self,
+        body: &AssignHostRequest,
+    ) -> Result<InventoryAssignmentResponse, CliError> {
+        self.request_json(Method::POST, "api/v1/inventory/assign", Some(body))
+            .await
     }
 
     pub async fn fetch_bootstrap_templates(
