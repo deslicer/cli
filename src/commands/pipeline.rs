@@ -1,3 +1,4 @@
+use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
 use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::cli::LogFormat;
 use crate::errors::CliError;
@@ -5,7 +6,7 @@ use crate::observer_client::Client;
 use crate::observer_token;
 use crate::resolver::ResolvedBackend;
 use crate::token_source::TokenSource;
-use crate::token_store::{load_active_session, StoredSession};
+use crate::token_store::StoredSession;
 use crate::Ctx;
 
 pub struct AuthenticatedSession {
@@ -18,27 +19,28 @@ pub async fn authenticate(
     environment: Option<&str>,
     plan_id: Option<&str>,
 ) -> Result<(AuthenticatedSession, Client), CliError> {
-    let platform = ci::detect_platform(ctx.ci_override);
-    if let Some(pair) = client_from_observer_token(ctx, platform, environment)? {
-        return Ok(pair);
-    }
-    if platform == CiPlatform::Local {
-        if let Some(session) = load_active_session()? {
-            return client_from_device_session(session);
+    match AuthCredentialResolver::new(ctx).resolve()? {
+        AuthCredential::DirectObserver { platform } => {
+            client_from_observer_token(ctx, platform, environment)
         }
+        AuthCredential::Device(session) => client_from_device_session(session),
+        AuthCredential::CiOidc { platform } => {
+            authenticate_with_ci_oidc(ctx, platform, environment, plan_id).await
+        }
+        AuthCredential::ExpiredDevice(_) | AuthCredential::None => Err(not_logged_in_error()),
     }
+}
+
+async fn authenticate_with_ci_oidc(
+    ctx: &Ctx,
+    platform: CiPlatform,
+    environment: Option<&str>,
+    plan_id: Option<&str>,
+) -> Result<(AuthenticatedSession, Client), CliError> {
     let jwt = ci::provider_for(platform)
         .fetch_token(ci::AUDIENCE)
         .await
-        .map_err(|err| match err {
-            crate::ci::OidcError::MissingEnv(_) if platform == CiPlatform::Local => {
-                CliError::Other(
-                    "not logged in. Run `deslicer auth login` and approve the code in the portal"
-                        .into(),
-                )
-            }
-            other => CliError::from(other),
-        })?;
+        .map_err(CliError::from)?;
     let backend = crate::resolver::resolve(ctx, &jwt, platform, environment, plan_id).await?;
 
     let client = if backend.proxy_mode {
@@ -72,13 +74,13 @@ fn client_from_observer_token(
     ctx: &Ctx,
     platform: CiPlatform,
     environment: Option<&str>,
-) -> Result<Option<(AuthenticatedSession, Client)>, CliError> {
-    let Some(token) = observer_token::api_token() else {
-        return Ok(None);
-    };
-    let Some(observer_api_url) = ctx.observer_api_url.clone() else {
-        return Ok(None);
-    };
+) -> Result<(AuthenticatedSession, Client), CliError> {
+    let token = observer_token::api_token()
+        .ok_or_else(|| CliError::Other("DESLICER_API_TOKEN is not set".into()))?;
+    let observer_api_url = ctx
+        .observer_api_url
+        .clone()
+        .ok_or_else(|| CliError::Other("OBSERVER_API_URL is not set".into()))?;
     crate::http::assert_url_allowed(&observer_api_url)?;
     let backend = ResolvedBackend {
         observer_api_url: observer_api_url.clone(),
@@ -89,7 +91,7 @@ fn client_from_observer_token(
     let client = Client::new(observer_api_url, TokenSource::static_token(token))
         .with_ci_platform(platform)
         .with_environment(environment.map(str::to_string));
-    Ok(Some((AuthenticatedSession { platform, backend }, client)))
+    Ok((AuthenticatedSession { platform, backend }, client))
 }
 
 fn client_from_device_session(
@@ -115,6 +117,14 @@ fn client_from_device_session(
         },
         client,
     ))
+}
+
+fn not_logged_in_error() -> CliError {
+    CliError::Other(
+        "not logged in. Run `deslicer auth login` and approve the code in the portal, \
+         or set OBSERVER_API_URL and DESLICER_API_TOKEN for automation"
+            .into(),
+    )
 }
 
 pub fn map_cli_error(log_format: LogFormat, err: CliError) -> i32 {

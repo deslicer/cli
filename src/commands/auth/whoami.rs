@@ -1,65 +1,46 @@
 use clap::Args as ClapArgs;
 use serde_json::json;
 
+use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
 use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::commands::auth::format::{
     print_output, whoami_ci_human, whoami_device_human, whoami_none_human, whoami_token_human,
 };
+use crate::commands::pipeline::map_cli_error;
 use crate::reporting::{emit_oidc_error, oidc_exit_code};
-use crate::token_store::load_stored_session;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {}
 
 pub async fn run(ctx: Ctx, _args: Args) -> i32 {
-    if let Ok(Some(session)) = load_stored_session() {
-        let logged_in = session.is_active();
-        let output = device_whoami_json(&session);
-        print_output(
-            ctx.log_format,
-            &output,
-            &whoami_device_human(
-                logged_in,
-                &session.display_name,
-                &session.tenant_id,
-                &session.expires_at,
-                session.tenant_slug.as_deref(),
-            ),
-        );
-        return if logged_in { 0 } else { 1 };
+    match AuthCredentialResolver::new(&ctx).resolve() {
+        Ok(AuthCredential::DirectObserver { .. }) => print_direct_whoami(&ctx),
+        Ok(AuthCredential::CiOidc { platform }) => print_ci_whoami(&ctx, platform).await,
+        Ok(AuthCredential::Device(session) | AuthCredential::ExpiredDevice(session)) => {
+            print_device_whoami(&ctx, &session)
+        }
+        Ok(AuthCredential::None) => print_no_identity(&ctx),
+        Err(err) => map_cli_error(ctx.log_format, err),
     }
+}
 
-    if crate::observer_token::direct_auth_ready(&ctx) {
-        let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
-        print_output(
-            ctx.log_format,
-            &json!({
-                "ok": true,
-                "logged_in": true,
-                "identity": "observer_api_token",
-                "observer_api_url": url,
-            }),
-            &whoami_token_human(url),
-        );
-        return 0;
-    }
+fn print_direct_whoami(ctx: &Ctx) -> i32 {
+    let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
+    print_output(
+        ctx.log_format,
+        &json!({
+            "ok": true,
+            "logged_in": true,
+            "identity": "observer_api_token",
+            "observer_api_url": url,
+        }),
+        &whoami_token_human(url),
+    );
+    0
+}
 
-    let platform = ci::detect_platform(ctx.ci_override);
-    if platform == CiPlatform::Local {
-        print_output(
-            ctx.log_format,
-            &json!({
-                "ok": false,
-                "logged_in": false,
-                "identity": "none",
-                "hint": "run auth login and approve the code in the portal",
-            }),
-            &whoami_none_human(),
-        );
-        return 1;
-    }
-
+async fn print_ci_whoami(ctx: &Ctx, platform: CiPlatform) -> i32 {
     match ci::provider_for(platform).fetch_token(AUDIENCE).await {
         Ok(_) => {
             print_output(
@@ -89,6 +70,41 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
             oidc_exit_code(&err)
         }
     }
+}
+
+fn print_device_whoami(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
+    let logged_in = session.is_active();
+    let output = device_whoami_json(session);
+    print_output(
+        ctx.log_format,
+        &output,
+        &whoami_device_human(
+            logged_in,
+            &session.display_name,
+            &session.tenant_id,
+            &session.expires_at,
+            session.tenant_slug.as_deref(),
+        ),
+    );
+    if logged_in {
+        0
+    } else {
+        1
+    }
+}
+
+fn print_no_identity(ctx: &Ctx) -> i32 {
+    print_output(
+        ctx.log_format,
+        &json!({
+            "ok": false,
+            "logged_in": false,
+            "identity": "none",
+            "hint": "run auth login and approve the code in the portal",
+        }),
+        &whoami_none_human(),
+    );
+    1
 }
 
 fn device_whoami_json(session: &crate::token_store::StoredSession) -> serde_json::Value {

@@ -14,8 +14,13 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         Ok(()) => {
             print_output(
                 ctx.log_format,
-                &json!({ "ok": true, "logged_out": true }),
-                "Logged out\n",
+                &json!({
+                    "ok": true,
+                    "logged_out": true,
+                    "cleared": "device_session",
+                    "environment_credentials_unchanged": true,
+                }),
+                "Logged out device session\nEnvironment credentials are unchanged\n",
             );
             0
         }

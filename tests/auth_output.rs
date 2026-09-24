@@ -75,6 +75,7 @@ fn auth_logout_respects_human_format() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Logged out"));
+    assert!(stdout.contains("Logged out device session"));
+    assert!(stdout.contains("Environment credentials are unchanged"));
     assert!(!stdout.trim_start().starts_with('{'));
 }

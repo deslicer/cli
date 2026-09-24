@@ -1,7 +1,7 @@
 use clap::Args as ClapArgs;
 use serde_json::json;
 
-use crate::ci::CiPlatform;
+use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
 use crate::commands::auth::format::{login_human, print_output};
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::errors::CliError;
@@ -16,28 +16,21 @@ pub struct Args {
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
-    if crate::observer_token::direct_auth_ready(&ctx) {
-        return match authenticate(&ctx, args.environment.as_deref(), None).await {
-            Ok((session, _client)) => {
-                print_login(
-                    ctx,
-                    session.platform.header_value(),
-                    session.backend.observer_api_url.as_str(),
-                    &session.backend.resolution_path,
-                    &session.backend.audience,
-                );
-                0
-            }
-            Err(err) => map_cli_error(ctx.log_format, err),
+    let credential = match AuthCredentialResolver::new(&ctx).resolve() {
+        Ok(credential) => credential,
+        Err(err) => return map_cli_error(ctx.log_format, err),
+    };
+    if matches!(
+        credential,
+        AuthCredential::ExpiredDevice(_) | AuthCredential::None
+    ) {
+        return if interactive::is_non_interactive() {
+            map_cli_error(ctx.log_format, local_login_error())
+        } else {
+            device_login(ctx).await
         };
     }
-    let platform = crate::ci::detect_platform(ctx.ci_override);
-    if platform == CiPlatform::Local && std::env::var("DESLICER_DEV_TOKEN").is_err() {
-        if interactive::is_non_interactive() {
-            return map_cli_error(ctx.log_format, local_ci_login_error());
-        }
-        return device_login(ctx).await;
-    }
+
     match authenticate(&ctx, args.environment.as_deref(), None).await {
         Ok((session, _client)) => {
             print_login(
@@ -74,13 +67,13 @@ async fn device_login(ctx: Ctx) -> i32 {
     }
 }
 
-fn local_ci_login_error() -> CliError {
-    CliError::Other(format!(
+fn local_login_error() -> CliError {
+    CliError::Other(
         "cannot run interactive device login without a TTY (CI=1 or non-interactive stdout/stdin). \
-         Set {dev_token_env} for local CI, or use your platform OIDC token with \
-         --ci-platform github|gitlab|azure|bitbucket.",
-        dev_token_env = crate::ci::local::dev_token_env_var(),
-    ))
+         For automation, set OBSERVER_API_URL and DESLICER_API_TOKEN, or use real CI OIDC \
+         with --ci-platform github|gitlab|azure|bitbucket."
+            .into(),
+    )
 }
 
 fn print_login(
