@@ -81,6 +81,27 @@ cargo install deslicer-cli --force
 
 If the binary lives in a root-owned directory (e.g. `/usr/local/bin`), re-run the install script with `sudo` instead of `deslicer update`.
 
+### `HTTP 302 Found` while updating
+
+CLI versions before v1.6.0 cannot follow GitHub release redirects. Upgrade once
+with current Homebrew or the pinned v1.6.0 installer:
+
+```bash
+brew update && brew upgrade deslicer
+# or
+DESLICER_VERSION=v1.6.0 bash <(
+  curl -fsSL https://raw.githubusercontent.com/deslicer/cli/v1.6.0/scripts/install.sh
+)
+```
+
+Then verify that your shell resolves the upgraded binary:
+
+```bash
+type -a deslicer
+deslicer --version       # v1.6.0 or newer
+deslicer update --check
+```
+
 ## Docker
 
 ```bash
