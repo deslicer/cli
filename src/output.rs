@@ -85,8 +85,20 @@ fn append_github_step_summary(markdown: &str) -> io::Result<()> {
 }
 
 fn emit_to_sink(pairs: &[(&str, String)]) -> i32 {
+    emit_to_sink_with_fallback(pairs, true)
+}
+
+fn emit_to_sink_with_fallback(pairs: &[(&str, String)], stdout_fallback: bool) -> i32 {
     let platform = detect_platform(None);
     let sink = detect_sink(platform);
+    if !stdout_fallback {
+        match sink {
+            OutputSink::Stdout => return 0,
+            OutputSink::GithubOutput if std::env::var("GITHUB_OUTPUT").is_err() => return 0,
+            OutputSink::GitlabDotenv if std::env::var("DESLICER_DOTENV_PATH").is_err() => return 0,
+            _ => {}
+        }
+    }
     match write_outputs(sink, pairs) {
         Ok(()) => 0,
         Err(e) => {
@@ -171,6 +183,20 @@ pub fn emit_change_plan_with_diff(
     preview: Option<&PrPreviewLabels>,
 ) -> i32 {
     println!("{}", serde_json::to_string(plan).unwrap_or_default());
+    emit_plan_metadata(plan, diff, preview, true)
+}
+
+/// Preserve CI outputs without adding JSON records to a human-readable display.
+pub fn emit_change_plan_ci_outputs(plan: &ChangePlan) -> i32 {
+    emit_plan_metadata(plan, None, None, false)
+}
+
+fn emit_plan_metadata(
+    plan: &ChangePlan,
+    diff: Option<&DiffCounts>,
+    preview: Option<&PrPreviewLabels>,
+    stdout_fallback: bool,
+) -> i32 {
     let summary = if let Some(labels) = preview.filter(|value| !value.is_empty()) {
         let base = if let Some(counts) = diff {
             counts.human_summary()
@@ -201,7 +227,7 @@ pub fn emit_change_plan_with_diff(
     }
     let _ =
         append_github_step_summary(&plan_summary_markdown("Deslicer plan", plan, diff, preview));
-    emit_to_sink(&pairs)
+    emit_to_sink_with_fallback(&pairs, stdout_fallback)
 }
 
 pub fn emit_change_plans(plans: &[ChangePlan]) -> i32 {

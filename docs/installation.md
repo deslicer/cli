@@ -102,6 +102,18 @@ deslicer --version       # v1.6.0 or newer
 deslicer update --check
 ```
 
+`--check` only checks release metadata; it does not exercise archive redirects.
+For a self-managed binary, run `deslicer update` and then `deslicer --version`
+to verify the complete download, checksum, and replacement path. Keep Homebrew
+installs on `brew upgrade deslicer`.
+
+Release-path validation on macOS arm64: the published v1.6.0 binary successfully
+ran `deslicer update --version v1.7.0`, reported `checksum verified`, and then
+reported v1.7.0 from `--version`. This was tested with a temporary binary, not
+the installed CLI. It covers the post-fix Darwin redirect path from
+[issue #110](https://github.com/deslicer/cli/issues/110); pre-v1.6.0 binaries
+still need the one-time recovery above.
+
 ## Docker
 
 ```bash
