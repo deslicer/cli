@@ -1,5 +1,31 @@
 # Repository setup skill evaluation
 
+## End-to-end authentication expansion
+
+Before this revision, a fresh agent using the original skill reported:
+“the skill supports scaffolding an already authenticated repository, but does
+not yet support complete fresh-laptop onboarding for this scenario.” It could
+not retrieve custom-portal selection, auth precedence/status semantics, GitHub
+login/helper setup, author identity, no-App repo creation, exact CI writes, or
+first-run verification. That is the failing completeness baseline.
+
+Added AUTHENTICATION.md and COMPLETION.md, with source-checked Deslicer auth
+semantics and installed `gh` help checks. A fresh skill-only agent covered:
+
+- Fresh laptop and custom portal, separate GitHub/Git and Observer credentials.
+- Normal private GitHub repo creation without a Deslicer App installation.
+- Stale direct-Observer overrides taking precedence over device login.
+- Configured token status versus a live successful Observer read.
+- CI configuration and exact-commit verification without triggering deployment.
+
+The evaluator identified ambiguous persistence of the custom portal selector.
+The example now exports `DESLICER_API_URL` and explicitly requires retaining it
+for subsequent portal commands and CI configuration. No actual login, credential
+write, repository creation, or CI deployment was performed for these scenarios.
+The evaluator also flagged cross-terminal environment inheritance; authentication
+guidance now requires the same trusted shell or an approved process-accessible
+secret mechanism, never transferring the token through chat.
+
 Scope: `.agents/skills/deslicer-repo-setup`. Instruction-only scenarios; no
 customer repositories, GitHub secrets, bindings, or deployments were mutated.
 
