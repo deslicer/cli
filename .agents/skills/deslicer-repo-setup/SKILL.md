@@ -26,6 +26,11 @@ GitHub repository. None substitutes for the others.
 
 ## Choose the path
 
+**Default new, unspecified GitHub setups to A2 (Observer tools token).** Use
+explicit `--provider github-token`, never `auto`. Preserve existing or explicitly
+requested App/OIDC; switching paths requires agreement. See the comparison in
+REFERENCE.md. Missing A2 credentials means finish authentication, not switch paths.
+
 | Situation | Action |
 | --- | --- |
 | Existing local Git repository | Reuse it; no `git init` |
@@ -47,10 +52,6 @@ requested. Inspect workflow triggers before pushing: they may deploy.
 Execute in-scope steps. Pause only for consent, credentials, administrator
 access, or target choices; resume afterward. Never request passwords/tokens
 in chat or approve device consent for the user.
-
-For example, token setup uses `deslicer init --provider github-token
---environment acme-prod` after authentication, then app mapping and
-`deslicer inventory validate --environment acme-prod` before publishing.
 
 ## Completion and traps
 

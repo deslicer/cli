@@ -5,22 +5,31 @@
 
 ## Choose a setup path
 
+**Default onboarding path: A2 (Observer API token).** Use this for a new GitHub
+repository unless GitHub App/OIDC is explicitly selected. Preserve existing
+App/OIDC setups; do not migrate them automatically. This is an onboarding/skill
+default, not a change to CLI `--provider auto` detection.
+
 | Path | Use when | Authentication |
 | --- | --- | --- |
-| **GitHub App / OIDC** | The organization has the Deslicer GitHub App and CI should use short-lived identity | `deslicer auth login`, then `deslicer init --bind` |
-| **Observer API token** | The runner can reach Observer management without OIDC | `OBSERVER_API_URL` and a dedicated tools-scope `DESLICER_API_TOKEN` |
-| **Bundle** | Observer cannot clone the source repository | Same Observer token plus `change plan --source-dir`; see [bundle-flow.md](bundle-flow.md) |
+| **A2 / Observer API token (default)** | New setup; runner can reach Observer management | `OBSERVER_API_URL` and a dedicated tools-scope `DESLICER_API_TOKEN`; `init --provider github-token`, no `--bind` |
+| **GitHub App / OIDC (opt-in/existing)** | Connected Deslicer GitHub App; CI should use short-lived identity | Device login for setup; `init --provider github --bind`; real Actions OIDC in CI |
+
+Bundle upload (Path B, `change plan --source-dir`) is a separate source choice
+when Observer cannot clone the repository, not a competing authentication mode.
+See [bundle-flow.md](bundle-flow.md). GitHub administration and Git clone/push
+credentials are separate from Deslicer authentication in both paths.
 
 Before starting, confirm that the CLI can see the intended host groups:
 
 ```bash
-deslicer auth login
 deslicer auth whoami
 deslicer groups list
 ```
 
 For the token path, export `OBSERVER_API_URL` and `DESLICER_API_TOKEN`
-instead of running device login. Never reuse the dashboard's stored
+before these checks; no device login is needed. For the App path, first complete
+`deslicer auth login` against the intended portal. Never reuse the dashboard's stored
 admin/read key as the CLI tools key.
 
 ```text
@@ -34,7 +43,7 @@ selects the **OIDC/App** provider (`github`). Path A2 (Observer API token,
 no GitHub App) is always explicit:
 
 ```bash
-deslicer init --provider github-token --environment acme-prod --force
+deslicer init --provider github-token --environment acme-prod
 # then run the printed GitHub Environment `gh` recipe and commit
 # later: deslicer inventory sync
 # later: deslicer docs path-a2

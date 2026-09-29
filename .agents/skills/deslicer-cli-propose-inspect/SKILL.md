@@ -7,6 +7,11 @@ description: Use when an agent needs to create or inspect Deslicer CLI change pl
 
 Create or inspect a proposal, then hand it to a human. Creating a plan uploads or resolves source and triggers compilation; it is a write, not a read-only preview.
 
+**A2 is the default for new, unspecified GitHub setups.** Preserve explicit or
+existing App/OIDC; never require a tools token to replace it. For missing setup
+or credentials use `deslicer-repo-setup`. Read REFERENCE.md's authentication
+paths before the handoff; reuse a matching plan already created by CI.
+
 ## Boundaries
 
 | Allowed when requested | Outside this workflow |
@@ -19,9 +24,9 @@ Never test approval by expecting `403 mfa_required`: rejection is not guaranteed
 
 ## Workflow
 
-1. **Establish scope.** Resolve Observer URL, environment, exact target group, source, and portal base URL from the user's request or confirmed configuration. Ask only for missing or conflicting values. Never infer a portal from an Observer hostname. The [workshop profile](WORKSHOP.md) applies only when explicitly selected.
+1. **Establish scope.** Resolve auth path, environment, exact group, source, and portal from confirmed configuration. A2 needs the direct Observer URL; App/OIDC uses its resolved backend. Ask only for missing/conflicting values. Never infer a portal from an Observer hostname. The [workshop profile](WORKSHOP.md) applies only when explicitly selected.
 2. **Check capability.** Run `deslicer --version` and relevant `--help`. Follow the user's explicit version pin; otherwise retain a compatible installation. See [commands and troubleshooting](REFERENCE.md) for setup and version caveats.
-3. **Check access.** Use the out-of-band tools-scope `DESLICER_API_TOKEN` with `OBSERVER_API_URL`. Never echo secrets, dump the environment, or use shell tracing. `auth whoami` in direct mode reports configuration, not server authentication. Confirm access and target membership with `groups list --log-format json`; match exact `name` or ID, not display name.
+3. **Check access.** A2 uses out-of-band `DESLICER_API_TOKEN` with `OBSERVER_API_URL`; App/OIDC uses the established device/real-CI identity as described in REFERENCE.md. Never echo secrets, dump the environment, or use shell tracing. `whoami` alone is not live access proof. Confirm access and target membership with `groups list --environment NAME --log-format json`; match exact `name` or ID, not display name.
 4. **Select source.** Read REFERENCE.md before creating a plan. Git compile uses a remotely available commit, not uncommitted edits. Bundles upload local bytes: review the directory, hidden files, secrets, and LFS pointers; `.gitignore` is not honored. `--changed-paths` labels output, never limits deployment scope.
 5. **Propose once.** Supply explicit environment and target group. After an ambiguous timeout, inspect for an existing matching plan before retrying. Reuse only after checking source and target; a name alone is insufficient.
 6. **Inspect evidence.** Use the external `plan_id`. Re-read lifecycle status with `change show`; `change status` reports execution progress too. Exit 0, `--no-wait`, or `not_started` does not mean `pending_approval`. Read validation with `--report-only --format json` when requested. Missing reports, 502s, and unavailable diffs remain unknowns.
