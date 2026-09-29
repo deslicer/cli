@@ -1,5 +1,12 @@
 # Repository evidence and maintenance
 
+Authentication-path follow-up checked against main after PRs #117/#118 merged:
+`src/auth_resolution.rs` and `src/commands/pipeline.rs` support direct tools,
+device, and real CI identities. `src/commands/change/plan.rs` rejects device
+sessions for git-sourced plans; bundle source is separate. `change show` now
+supports human display; explicit JSON behavior remains the parsing contract.
+This is source validation, not runtime proof of an OIDC deployment.
+
 Reviewed 2026-09-29 against `deslicer/cli` origin/main at `c95a2671d1b2ad1e203325586d75f2aeae8b61ff` (v1.7.0). Installed binary help was checked on v1.6.0 (`840382ed352891e77bfd0bda34c7a4343a374eba`). This is source/help validation, not a live Observer or portal test. Version-sensitive details live in the reference rather than a permanent global pin.
 
 All paths below are relative to the [reviewed source tree](https://github.com/deslicer/cli/tree/c95a2671d1b2ad1e203325586d75f2aeae8b61ff).

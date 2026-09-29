@@ -17,7 +17,41 @@ If installation is requested, use the repository's documented Homebrew, cargo, o
 
 Legacy: pre-v1.6.0 self-updaters cannot follow GitHub asset redirects. They need a one-time documented installer/Homebrew upgrade. This is an installation migration, not a reason to downgrade newer binaries.
 
-For this workflow, the operator provisions `OBSERVER_API_URL` and a tools-scope `DESLICER_API_TOKEN` out of band. The token has no CLI flag. `DESLICER_DEV_TOKEN` is retired. Do not obtain Splunk credentials or change authentication mode just to bypass an error.
+### Authentication paths and setup handoff
+
+Default **new, unspecified GitHub setups to A2**. Preserve an explicit choice
+or existing App/OIDC setup; never silently migrate it to the default. Setup and
+credential provisioning belong to `deslicer-repo-setup`, not this workflow.
+
+| Path | Proposal | Inspection |
+| --- | --- | --- |
+| A2 (default) | Observer URL + tools token; git source requires available commit and separate private clone access | Same tools identity; show/status/report-only |
+| GitHub App/OIDC (opt-in/existing) | Real GitHub Actions OIDC in the established reviewed plan workflow, with binding and proxy support | Authorized portal device session locally or real CI identity; same show/status/report-only boundaries |
+
+A2 uses `OBSERVER_API_URL` and a tools-scope `DESLICER_API_TOKEN` supplied out of
+band. No App installation, device login, or `init --bind` is required. The token
+has no CLI flag. `DESLICER_DEV_TOKEN` is retired. Never obtain Splunk credentials
+or change authentication mode to bypass an error.
+
+For App/OIDC, retain the confirmed portal (`DESLICER_API_URL`), tenant,
+environment, and binding from setup. Inspect through the established device
+session or real CI credentials; verify live access. Do not synthesize OIDC
+runner variables locally. Direct Observer URL/token overrides take precedence:
+if they conflict, resolve the selected path with setup and scope commands
+without those overrides rather than deleting credentials globally.
+
+**Device sessions cannot create git-sourced plans.** Prefer the reviewed,
+authorized CI workflow for that source. Device-authenticated `--source-dir`
+bundles are a separate upload choice; do not switch sources just to bypass this
+restriction. Require an explicit source choice and review bundle contents first.
+Expired/missing device credentials return to setup for user login; lack of an
+Observer key in an OIDC setup is not an A2 credential error.
+
+Carry the selected path, confirmed portal/backend, environment/group,
+repository/commit, and existing plan ID with CI run evidence across skills.
+Inspect a matching existing plan instead of duplicating it. If source/target
+cannot be confirmed, report the uncertainty. Neither path authorizes approval,
+deploy, validation reruns, or `change verify`.
 
 ```bash
 deslicer --version
@@ -81,7 +115,7 @@ If create times out or returns an existing plan, use scoped `change show --envir
 
 For follow-ups, prefer returned external `plan_id`, not internal `id`/`plan_row_id`. Older responses may lack `plan_id`; the CLI's `external_id()` falls back to `id`. Treat that as a compatibility fallback, not a general instruction to substitute row IDs.
 
-At the reviewed revision, single-plan `show` and `plan` print a plan record and may append a second JSON record of CI values locally. Lists print an array. Other CI environments may write output files or Azure logging lines. `--log-format json` does not guarantee one JSON document for every lifecycle command. Human output for `change show` is also JSON at this revision.
+With `--log-format json`, single-plan `show` and `plan` print a plan record and may append a second JSON record of CI values locally. Lists print an array. Other CI environments may write output files or Azure logging lines. JSON mode does not guarantee one JSON document for every lifecycle command. Current source supports human-readable `change show`; older releases may still print JSON in human mode. Use explicit JSON for inspection/parsing.
 
 Parse all JSON records, distinguish arrays from objects, and check consistent plan IDs/status values. Do not pick an arbitrary last line; conflicting records require fresh inspection. Never use `eval` or source output as shell code. Capture the CLI exit code before parsing so a parser success cannot hide a command failure. Preserve diagnostics separately from stdout.
 

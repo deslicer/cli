@@ -4,6 +4,47 @@ Examples contain placeholders: resolve them before execution, never invent IDs
 or credentials. Check installed CLI help if flags differ. This reference is
 self-contained so the skill can be installed without a CLI source checkout.
 
+## A2 default versus GitHub App/OIDC opt-in
+
+For a new GitHub setup with no path specified, select **A2** and say so.
+Explicit user choice wins; preserve existing working App/OIDC configuration.
+Conflicting configuration needs clarification, not silent migration. This is a
+skill policy: the CLI still maps `--provider auto` on GitHub to `github`.
+
+| Decision | A2 — default | GitHub App/OIDC — explicit or existing |
+| --- | --- | --- |
+| Deslicer identity locally | Observer URL + tools-scope API key | Portal device login for setup/inspection |
+| Deslicer identity in CI | Environment-scoped Observer tools key | Short-lived GitHub Actions OIDC identity |
+| Init provider | `github-token` explicitly | `github` explicitly |
+| Deslicer GitHub App required | No | Yes, connected installation and environment binding |
+| Remote creation | Existing remote or authenticated `gh repo create` | Existing repo or device-authenticated `deslicer repo bootstrap` |
+| Binding | No `init --bind` | Device-authenticated `init --bind`, target-group UUID |
+| CI requirements | Environment secret `DESLICER_API_TOKEN`; Observer URL and environment variables | Generated OIDC workflow, `id-token: write`, portal resolution/binding |
+| First git-sourced plan | Tools-token CLI or configured token CI; private clone access is separate | Reviewed real OIDC CI workflow; device login alone cannot create a git-sourced plan |
+
+Both paths still need GitHub permissions for repository administration and Git
+transport. A2's Observer token is neither a GitHub token nor a clone credential.
+Device login is not a local GitHub OIDC token. `--source-dir` is a separate
+bundle source choice (Path B), not a synonym for A2 or a third CI identity.
+
+Default A2 sequence: secure Observer credentials → live groups check → GitHub
+login/repo → `init --provider github-token` → app mappings/validation → CI
+Environment configuration → reviewed push → propose/inspect. No App install,
+device login, OIDC configuration, or `--bind` is needed for this sequence.
+
+For explicit App/OIDC, follow device login → connected installation/repo →
+`init --provider github --bind` → reviewed real CI plan. Do not install an
+Observer token as a workaround; direct-token overrides take precedence over OIDC.
+
+### Handoff to propose/inspect
+
+Pass the selected path, portal/backend identity (no secrets), environment,
+exact group, repo/commit, and any existing plan ID plus CI run/commit evidence.
+Reuse a matching CI-created plan rather than creating a duplicate. On A2,
+continue with configured tools credentials. On App/OIDC, inspect via an existing
+authorized device session or real CI identity; create git plans in reviewed CI.
+If access is missing, return to authentication setup without changing paths.
+
 ## Local Git versus remote provisioning
 
 For an approved new local directory that is not inside another checkout:

@@ -3,6 +3,11 @@
 Authenticate three separate layers: Deslicer/Observer, Git-host administration,
 and Git transport. Success in one does not establish the others.
 
+**New unspecified GitHub setup: use A2.** Go to “Observer tools-token path”
+below, then “GitHub account and Git transport.” Device login is for an explicitly
+selected or existing portal/App path, not an A2 prerequisite. Preserve existing
+OIDC; do not provision an Observer key just because A2 is the default.
+
 ## Tools and target
 
 Check `git --version`, `deslicer --version`, and (for GitHub) `gh --version`.
