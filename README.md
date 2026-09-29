@@ -44,6 +44,11 @@ curl -fsSL https://raw.githubusercontent.com/deslicer/cli/main/scripts/install-f
 
 ## Quick start
 
+Agents setting up local Git, an existing repository, or a new GitHub App repo
+can use the bundled [deslicer-repo-setup skill](.agents/skills/deslicer-repo-setup/SKILL.md).
+Ask: “Use deslicer-repo-setup to configure this repository for Deslicer.”
+It separates Git initialization, CI scaffolding, remote creation, and binding.
+
 New to the CLI? Follow the [Quickstart](docs/quickstart.md). The fastest way to a first plan — no GitHub App or OIDC setup required — is the bundle flow:
 
 ```bash
