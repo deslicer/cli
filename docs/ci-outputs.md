@@ -67,6 +67,8 @@ preview section when labels are present) when `GITHUB_STEP_SUMMARY` is set.
 | `fully_completed_items` | Items applied on every target host |
 | `diff_*` | Same keys as verify when a persisted dry-run diff exists |
 
+When `plan_status` is a terminal failure (`failed`, `compile_failed`, `rejected`, `expired`), the command exits **14** after writing outputs. Use `--timeout` (default 60s) to cap waiting while `progress_status` is `partial`.
+
 ### `change validate`
 
 Validation is plan-ID scoped. It validates only items already persisted in a
@@ -138,5 +140,6 @@ Omitting `--environment` asks deslicer-ai for every bound environment and create
 
 `0` on success; non-zero codes map to specific failure classes. Plan
 validation adds `20` (blocked), `21` (warning when configured), `22` (model
-unavailable), `23` (timeout), and `24` (validation unavailable). The full table
+unavailable), `23` (timeout), and `24` (validation unavailable). `change status`
+exits **14** when the plan lifecycle status is a terminal failure. The full table
 lives in [oidc-troubleshooting.md](oidc-troubleshooting.md#exit-codes).

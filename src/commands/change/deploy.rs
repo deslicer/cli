@@ -6,11 +6,13 @@ use crate::output::{emit_execution_queued, emit_execution_summary};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
+#[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
     /// External plan id of an approved plan.
     #[arg(long)]
     pub plan_id: String,
 
+    /// Environment binding for CI proxy authentication during deploy.
     #[arg(long)]
     pub environment: Option<String>,
 

@@ -11,6 +11,7 @@ use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
+    /// Environment name used to resolve CI bindings during login.
     #[arg(long)]
     pub environment: Option<String>,
 }
