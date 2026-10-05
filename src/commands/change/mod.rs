@@ -17,7 +17,7 @@ pub mod verify;
 pub const CHANGE_WORKFLOW_EXAMPLES: &str = concat!(
     "Examples:\n",
     "  deslicer change plan --environment production\n", // pragma: allowlist secret
-    "  deslicer change show --plan-id <plan-id>\n", // pragma: allowlist secret
+    "  deslicer change show --plan-id <plan-id>\n",      // pragma: allowlist secret
     "  deslicer change validate --plan-id <plan-id> --environment production\n", // pragma: allowlist secret
     "  deslicer change approve --plan-id <plan-id> --environment production\n", // pragma: allowlist secret
     "  deslicer change deploy --plan-id <plan-id> --environment production\n", // pragma: allowlist secret
