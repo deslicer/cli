@@ -6,10 +6,13 @@ use crate::output::{emit_change_plan, emit_change_plan_ci_outputs};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
+#[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
+    /// External plan id (omit to list plans for `--environment`).
     #[arg(long)]
     pub plan_id: Option<String>,
 
+    /// Environment name or tenant slug used to scope plan listing and CI auth.
     #[arg(long)]
     pub environment: Option<String>,
 }
