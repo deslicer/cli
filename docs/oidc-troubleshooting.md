@@ -84,7 +84,7 @@ When OIDC environment variables are missing, `auth status` exits **4** (OIDC una
 
 ```bash
 env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-  [REDACTED] auth status --ci-platform github --log-format json
+  deslicer auth status --ci-platform github --log-format json # pragma: allowlist secret
 # stdout: { "ok": false, "platform": "github", ... }
 # stderr: { "error": { "kind": "oidc", "message": "..." } }
 # exit code: 4
