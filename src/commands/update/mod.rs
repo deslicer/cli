@@ -121,7 +121,9 @@ mod tests {
     use super::*;
 
     fn scrub_placeholder_literal() -> String {
-        ['[', 'R', 'E', 'D', 'A', 'C', 'T', 'E', 'D', ']'].iter().collect()
+        ['[', 'R', 'E', 'D', 'A', 'C', 'T', 'E', 'D', ']']
+            .iter()
+            .collect()
     }
 
     #[test]
