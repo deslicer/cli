@@ -14,6 +14,7 @@ pub struct Args {
     #[arg(long, value_parser = parse_plan_id)]
     pub plan_id: String,
 
+    /// Environment binding for CI proxy authentication.
     #[arg(long)]
     pub environment: Option<String>,
 

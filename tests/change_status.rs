@@ -71,6 +71,7 @@ async fn change_status_not_started_returns_immediately() {
         direct_ctx(&observer),
         Args {
             plan_id: PLAN_ID.to_string(),
+            timeout_secs: 60,
         },
     )
     .await;
@@ -121,10 +122,91 @@ async fn change_status_partial_polls_until_terminal() {
         direct_ctx(&observer),
         Args {
             plan_id: PLAN_ID.to_string(),
+            timeout_secs: 60,
         },
     )
     .await;
     assert_eq!(code, 0);
+
+    std::env::remove_var("DESLICER_API_TOKEN"); // pragma: allowlist secret
+}
+
+#[tokio::test]
+async fn change_status_failed_plan_skips_progress_polling() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    std::env::set_var("DESLICER_API_TOKEN", "test-token"); // pragma: allowlist secret
+
+    let observer = MockServer::start().await;
+    mount_plan(&observer, "failed").await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/api/v1/plans/{PLAN_ROW_ID}/diff")))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&observer)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/api/v1/plans/{PLAN_ID}/progress")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "plan_id": PLAN_ID,
+            "progress_status": "partial",
+            "total_items": 2,
+            "fully_completed_items": 0
+        })))
+        .expect(1)
+        .mount(&observer)
+        .await;
+
+    let started = Instant::now();
+    let code = run(
+        direct_ctx(&observer),
+        Args {
+            plan_id: PLAN_ID.to_string(),
+            timeout_secs: 60,
+        },
+    )
+    .await;
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(code, 14);
+
+    std::env::remove_var("DESLICER_API_TOKEN"); // pragma: allowlist secret
+}
+
+#[tokio::test]
+async fn change_status_compile_failed_exits_nonzero() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    std::env::set_var("DESLICER_API_TOKEN", "test-token"); // pragma: allowlist secret
+
+    let observer = MockServer::start().await;
+    mount_plan(&observer, "compile_failed").await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/api/v1/plans/{PLAN_ROW_ID}/diff")))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&observer)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/api/v1/plans/{PLAN_ID}/progress")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "plan_id": PLAN_ID,
+            "progress_status": "not_started",
+            "total_items": 0,
+            "fully_completed_items": 0
+        })))
+        .expect(1)
+        .mount(&observer)
+        .await;
+
+    let code = run(
+        direct_ctx(&observer),
+        Args {
+            plan_id: PLAN_ID.to_string(),
+            timeout_secs: 60,
+        },
+    )
+    .await;
+    assert_eq!(code, 14);
 
     std::env::remove_var("DESLICER_API_TOKEN"); // pragma: allowlist secret
 }

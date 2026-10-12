@@ -14,7 +14,9 @@ use crate::token_source::TokenSource;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
+#[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
+    /// Environment name or tenant slug for CI binding and plan creation.
     #[arg(long)]
     pub environment: Option<String>,
 
@@ -59,18 +61,12 @@ pub struct Args {
     pub changed_paths: Option<String>,
 }
 
+use super::lifecycle::{is_compile_failure, is_still_compiling};
+
 /// Compile polling: the ephemeral compile-runner takes seconds to a few
 /// minutes to clone, parse, diff, and post the plan draft.
 const COMPILE_POLL_ATTEMPTS: u32 = 60;
 const COMPILE_POLL_INTERVAL_SECS: u64 = 5;
-
-fn is_still_compiling(status: &str) -> bool {
-    matches!(status, "draft" | "compiling" | "compile_pending")
-}
-
-fn is_compile_failure(status: &str) -> bool {
-    matches!(status, "failed" | "compile_failed" | "rejected")
-}
 
 async fn wait_for_compile(client: &Client, plan_id: &str) -> Result<ChangePlan, String> {
     let mut last_err: Option<String> = None;
@@ -472,13 +468,14 @@ mod tests {
 
     #[test]
     fn compile_is_only_triggered_while_still_compiling() {
-        assert!(super::is_still_compiling("draft"));
-        assert!(super::is_still_compiling("compiling"));
-        assert!(super::is_still_compiling("compile_pending"));
-        assert!(!super::is_still_compiling("pending_approval"));
-        assert!(!super::is_still_compiling("approved_unsigned"));
-        assert!(!super::is_still_compiling("executing"));
-        assert!(!super::is_still_compiling("completed"));
-        assert!(!super::is_still_compiling("failed"));
+        use crate::commands::change::lifecycle;
+        assert!(lifecycle::is_still_compiling("draft"));
+        assert!(lifecycle::is_still_compiling("compiling"));
+        assert!(lifecycle::is_still_compiling("compile_pending"));
+        assert!(!lifecycle::is_still_compiling("pending_approval"));
+        assert!(!lifecycle::is_still_compiling("approved_unsigned"));
+        assert!(!lifecycle::is_still_compiling("executing"));
+        assert!(!lifecycle::is_still_compiling("completed"));
+        assert!(!lifecycle::is_still_compiling("failed"));
     }
 }

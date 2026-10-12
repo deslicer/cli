@@ -13,6 +13,7 @@ use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
+    /// Environment name used to resolve CI bindings in status output.
     #[arg(long)]
     pub environment: Option<String>,
 }

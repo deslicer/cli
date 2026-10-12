@@ -15,6 +15,7 @@ use crate::ci::CiPlatform;
     about
 )]
 pub struct Cli {
+    /// API base URL used for resolve-backend and OIDC exchange.
     #[arg(
         long,
         env = "DESLICER_API_URL",
@@ -27,9 +28,11 @@ pub struct Cli {
     #[arg(long, env = "OBSERVER_API_URL", global = true)]
     pub observer_api_url: Option<url::Url>,
 
+    /// CI platform used for OIDC, output sinks, and git identity (default: auto-detect).
     #[arg(long, value_enum, default_value_t = CiPlatformArg::Auto, global = true)]
     pub ci_platform: CiPlatformArg,
 
+    /// Human tables on stderr/stdout, or single-line JSON for automation.
     #[arg(long, value_enum, default_value_t = LogFormat::Human, global = true)]
     pub log_format: LogFormat,
 
@@ -42,8 +45,10 @@ pub enum Command {
     /// Talk to an agent (REPL by default; device session)
     #[command(subcommand)]
     Agent(crate::commands::agent::AgentCmd),
+    /// Sign in, check CI identity, and manage stored credentials
     #[command(subcommand)]
     Auth(crate::commands::auth::AuthCmd),
+    /// Create, inspect, approve, and deploy configuration change plans
     #[command(subcommand)]
     Change(crate::commands::change::ChangeCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)

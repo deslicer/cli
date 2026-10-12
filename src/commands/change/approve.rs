@@ -5,6 +5,7 @@ use crate::output::emit_change_plan;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
+#[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
     /// External plan id.
     #[arg(long)]
