@@ -81,7 +81,7 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::OidcRejected(_) => "oidc",
         CliError::RepoNotAllowlisted(_) => "auth",
         CliError::EnvironmentNotBound(_) => "auth",
-        CliError::AmbiguousBinding(_) => "auth",
+        CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => "auth",
         CliError::UnsupportedPlatform(_) => "platform",
         CliError::InvalidInput(_) => "usage",
         CliError::RateLimited { .. } => "rate_limit",

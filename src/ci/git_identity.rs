@@ -22,15 +22,19 @@ pub fn git_identity(platform: CiPlatform) -> Result<CiGitIdentity, CliError> {
                 CliError::Other(
                     "git-sourced `change plan` with DESLICER_API_TOKEN needs \
                  GITHUB_REPOSITORY + GITHUB_SHA (or GitLab CI_PROJECT_URL + \
-                 CI_COMMIT_SHA). In GitHub Actions these are set automatically. \
-                 Otherwise use --source-dir + --target-group."
+                 CI_COMMIT_SHA). In GitHub Actions these are set automatically after \
+                 checkout. Git-backed tenants require the repository to be connected via \
+                 the GitHub App; a long-lived tools token may still be rejected — use CI OIDC \
+                 (no OBSERVER_API_URL override) or the portal Propose change flow. \
+                 See the github-token docs topic in `deslicer docs`." // pragma: allowlist secret
                         .into(),
                 )
             }),
         CiPlatform::Azure | CiPlatform::Bitbucket => Err(CliError::Other(
             "git-sourced `change plan` with DESLICER_API_TOKEN is supported on \
              GitHub Actions and GitLab CI. Use OIDC (`deslicer change plan \
-             --environment …`) or --source-dir + --target-group."
+             --environment …`) without OBSERVER_API_URL, or bundle upload only on \
+             direct-mode tenants (`--source-dir` — not git-backed change management)."
                 .into(),
         )),
     }

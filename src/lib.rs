@@ -1,5 +1,6 @@
 pub mod auth_resolution;
 pub mod bundle;
+pub mod change_management;
 pub mod ci;
 pub mod cli;
 pub mod clone_token;
