@@ -30,8 +30,11 @@ pub(crate) fn map_observer_error(
             }
         }
         404 => CliError::PlanNotFound(message),
-        409 if is_duplicate_plan_error(body) => CliError::Other(message),
-        409 => CliError::AmbiguousBinding(message),
+        409 => crate::change_management::map_http_conflict(
+            body,
+            message,
+            is_duplicate_plan_error(body),
+        ),
         429 => CliError::RateLimited {
             retry_after_secs: retry_after_secs.unwrap_or(30),
         },
@@ -271,6 +274,23 @@ mod tests {
             }
             other => panic!("expected AmbiguousBinding, got {other}"),
         }
+    }
+
+    #[test]
+    fn git_backed_mode_conflict_is_not_ambiguous_binding() {
+        let err = map_observer_error(
+            reqwest::StatusCode::CONFLICT,
+            r#"{"error":"git_backed_mode_enabled","message":"This tenant uses git-backed change management."}"#,
+            None,
+        );
+        match &err {
+            CliError::GitBackedChangeManagement(message) => {
+                assert!(message.contains("git-backed change management"));
+                assert!(message.contains("GitHub App"));
+            }
+            other => panic!("expected GitBackedChangeManagement, got {other}"),
+        }
+        assert_eq!(err.exit_code(), 7);
     }
 
     #[test]

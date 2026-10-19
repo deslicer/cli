@@ -6,6 +6,7 @@
 //! request paths work in both modes.
 
 mod bootstrap;
+mod change_management;
 mod declared;
 mod direct_create;
 mod enrollment;

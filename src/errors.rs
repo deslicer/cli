@@ -10,6 +10,8 @@ pub enum CliError {
     EnvironmentNotBound(String),
     #[error("ambiguous binding: {0}")]
     AmbiguousBinding(String),
+    #[error("git-backed change management: {0}")]
+    GitBackedChangeManagement(String),
     #[error("unsupported CI platform: {0}")]
     UnsupportedPlatform(String),
     #[error("invalid input: {0}")]
@@ -47,7 +49,7 @@ impl CliError {
             CliError::OidcRejected(_) => 4,
             CliError::RepoNotAllowlisted(_) => 5,
             CliError::EnvironmentNotBound(_) => 6,
-            CliError::AmbiguousBinding(_) => 7,
+            CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => 7,
             CliError::UnsupportedPlatform(_) => 8,
             CliError::InvalidInput(_) => 2,
             CliError::RateLimited { .. } => 9,

@@ -74,7 +74,7 @@ fn map_exchange_error(
                 CliError::RepoNotAllowlisted(message)
             }
         }
-        409 => CliError::AmbiguousBinding(message),
+        409 => crate::change_management::map_http_conflict(body, message, false),
         429 => CliError::RateLimited {
             retry_after_secs: retry_after_secs.unwrap_or(30),
         },

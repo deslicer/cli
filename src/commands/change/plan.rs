@@ -155,6 +155,7 @@ async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError>
     let target_group_spec = args.target_group.as_deref().expect("clap requires flag");
 
     let client = bundle_flow_client(ctx, args).await?;
+    client.ensure_bundle_plan_allowed().await?;
     let target_group = resolve_plan_target_group(&client, target_group_spec).await?;
 
     let packaged = crate::bundle::package_directory(source_dir)?;
@@ -219,8 +220,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             ctx.log_format,
             CliError::Other(
                 "`change plan` without --source-dir starts a git-sourced compile. \
-             Device sessions have no repository credentials. Re-run with \
-             --source-dir <path> --target-group <id>."
+             Device sessions have no repository credentials. Use CI with Path A OIDC, \
+             or connect the GitHub App and bind the environment in the portal. \
+             Bundle upload (`--source-dir`) is only for direct-mode tenants, not \
+             git-backed change management."
                     .into(),
             ),
         );
