@@ -287,6 +287,12 @@ impl Client {
         self.post_change_plan_mutation(&path).await
     }
 
+    /// Create a Pending inverse plan from a completed plan (never auto-approves).
+    pub async fn revert(&self, plan_id: &str) -> Result<ChangePlan, CliError> {
+        let path = format!("api/v1/plans/{plan_id}/revert");
+        self.post_change_plan_mutation(&path).await
+    }
+
     pub async fn reject(&self, plan_id: &str, reason: &str) -> Result<ChangePlan, CliError> {
         #[derive(Serialize)]
         struct RejectBody<'a> {

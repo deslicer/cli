@@ -285,6 +285,32 @@ async fn client_execute_parses_execution_queued() {
 }
 
 #[tokio::test]
+async fn client_revert_parses_pending_inverse_plan() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plans/plan-done/revert"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "message": "ok",
+            "plan": {
+                "id": "row-revert",
+                "plan_id": "plan-revert",
+                "status": "pending_approval",
+                "name": "revert of plan-done"
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = Client::new(base, "tools-token".to_string());
+    let plan = client.revert("plan-done").await.unwrap();
+
+    assert_eq!(plan.external_id(), "plan-revert");
+    assert_eq!(plan.status, "pending_approval");
+}
+
+#[tokio::test]
 async fn client_progress_parses_real_shape() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
