@@ -10,6 +10,7 @@ pub mod environments;
 pub mod groups;
 pub mod init;
 pub mod inventory;
+pub mod license;
 pub mod pipeline;
 pub mod remediate;
 pub mod repo;
