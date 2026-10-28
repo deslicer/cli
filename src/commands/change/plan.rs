@@ -62,9 +62,25 @@ pub struct Args {
 
     /// Destination for non-git plans. ACS: `acs-stack:<stack-name>` creates a
     /// Pending ACS draft (never auto-approves). Mutually exclusive with
-    /// `--source-dir`.
-    #[arg(long, value_name = "SPEC", conflicts_with = "source_dir")]
+    /// `--source-dir` / `--from-registry`.
+    #[arg(
+        long,
+        value_name = "SPEC",
+        conflicts_with_all = ["source_dir", "from_registry"]
+    )]
     pub destination: Option<String>,
+
+    /// Create a Pending plan from a Splunkbase/registry app version
+    /// (`<app>@<ver>`). Works in any change-management mode. Uses
+    /// `POST /api/v1/app-provenance/compare-registry`. Mutually exclusive with
+    /// `--source-dir` / `--destination`. Prefer `--target-group` (or a single
+    /// env-YAML destination) so Observer knows where to compare.
+    #[arg(
+        long,
+        value_name = "APP@VER",
+        conflicts_with_all = ["source_dir", "destination"]
+    )]
+    pub from_registry: Option<String>,
 }
 
 use super::lifecycle::{is_compile_failure, is_still_compiling};
@@ -235,6 +251,42 @@ async fn run_acs_destination_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, 
     Ok(plan)
 }
 
+async fn run_registry_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError> {
+    let spec = args
+        .from_registry
+        .as_deref()
+        .expect("caller checks from_registry");
+    let app_ref = crate::observer_client::parse_registry_app_ref(spec)?;
+    let environment = resolve_plan_environment(ctx, args.environment.as_deref())?;
+    let (_session, client) = authenticate(ctx, environment.as_deref(), None).await?;
+    let target_group =
+        match resolve_direct_plan_target_group(&client, args, environment.as_deref()).await {
+            Ok(id) => Some(id),
+            Err(err) if args.target_group.is_none() => {
+                // Env YAML may have zero/multiple destinations; Observer can still
+                // compare without a group in some tenants.
+                eprintln!(
+                "note: no --target-group resolved ({err}); sending compare-registry without one"
+            );
+                None
+            }
+            Err(err) => return Err(err),
+        };
+    let plan = client
+        .create_plan_from_registry(
+            &app_ref.app,
+            &app_ref.version,
+            target_group.as_deref(),
+            args.name.as_deref(),
+        )
+        .await?;
+    eprintln!(
+        "registry plan created for {}@{} (Pending — approve before deploy)",
+        app_ref.app, app_ref.version
+    );
+    Ok(plan)
+}
+
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if args.source_dir.is_some() {
         return match run_bundle_flow(&ctx, &args).await {
@@ -245,6 +297,13 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
     if args.destination.is_some() {
         return match run_acs_destination_plan(&ctx, &args).await {
+            Ok(plan) => emit_change_plan(&plan),
+            Err(err) => map_cli_error(ctx.log_format, err),
+        };
+    }
+
+    if args.from_registry.is_some() {
+        return match run_registry_plan(&ctx, &args).await {
             Ok(plan) => emit_change_plan(&plan),
             Err(err) => map_cli_error(ctx.log_format, err),
         };
