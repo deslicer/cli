@@ -5,6 +5,7 @@
 //! the proxy prefix when the base carries a trailing slash, so the same
 //! request paths work in both modes.
 
+mod acs;
 mod bootstrap;
 mod change_management;
 mod declared;
@@ -14,6 +15,8 @@ mod http_errors;
 mod inventory;
 mod repo;
 mod types;
+
+pub use acs::{AcsObserveReport, AcsStack, CredentialTestResult, SplunkCredential};
 
 pub use bootstrap::{
     BootstrapTemplateFile, BootstrapTemplates, CreateEnvironmentBindingRequest, GithubInstallation,
