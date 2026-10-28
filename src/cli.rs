@@ -51,6 +51,9 @@ pub enum Command {
     /// Create, inspect, approve, and deploy configuration change plans
     #[command(subcommand)]
     Change(crate::commands::change::ChangeCmd),
+    /// Splunk Cloud ACS stacks, credentials, and observe (read-only)
+    #[command(subcommand)]
+    Acs(crate::commands::acs::AcsCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -131,6 +134,7 @@ impl Cli {
             Command::Agent(cmd) => crate::commands::agent::dispatch(ctx, cmd).await,
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
+            Command::Acs(cmd) => crate::commands::acs::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,

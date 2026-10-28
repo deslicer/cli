@@ -59,6 +59,12 @@ pub struct Args {
     /// `--changed-paths-file`).
     #[arg(long, value_name = "PATHS")]
     pub changed_paths: Option<String>,
+
+    /// Destination for non-git plans. ACS: `acs-stack:<stack-name>` creates a
+    /// Pending ACS draft (never auto-approves). Mutually exclusive with
+    /// `--source-dir`.
+    #[arg(long, value_name = "SPEC", conflicts_with = "source_dir")]
+    pub destination: Option<String>,
 }
 
 use super::lifecycle::{is_compile_failure, is_still_compiling};
@@ -198,9 +204,47 @@ async fn run_bundle_flow(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError>
     Ok(compiled)
 }
 
+fn parse_acs_stack_destination(spec: &str) -> Result<String, CliError> {
+    const PREFIX: &str = "acs-stack:";
+    let Some(rest) = spec.strip_prefix(PREFIX) else {
+        return Err(CliError::InvalidInput(format!(
+            "unsupported --destination {spec:?}; use acs-stack:<stack-name>"
+        )));
+    };
+    let stack = rest.trim();
+    if stack.is_empty() {
+        return Err(CliError::InvalidInput(
+            "--destination acs-stack: requires a non-empty stack name".into(),
+        ));
+    }
+    Ok(stack.to_string())
+}
+
+async fn run_acs_destination_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliError> {
+    let spec = args
+        .destination
+        .as_deref()
+        .expect("caller checks destination");
+    let stack = parse_acs_stack_destination(spec)?;
+    let environment = resolve_plan_environment(ctx, args.environment.as_deref())?;
+    let (_session, client) = authenticate(ctx, environment.as_deref(), None).await?;
+    let plan = client
+        .create_acs_draft_plan(&stack, args.name.as_deref())
+        .await?;
+    eprintln!("ACS draft plan created for stack {stack} (Pending — approve before deploy)");
+    Ok(plan)
+}
+
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if args.source_dir.is_some() {
         return match run_bundle_flow(&ctx, &args).await {
+            Ok(plan) => emit_change_plan(&plan),
+            Err(err) => map_cli_error(ctx.log_format, err),
+        };
+    }
+
+    if args.destination.is_some() {
+        return match run_acs_destination_plan(&ctx, &args).await {
             Ok(plan) => emit_change_plan(&plan),
             Err(err) => map_cli_error(ctx.log_format, err),
         };
@@ -446,7 +490,17 @@ async fn emit_ready_plan(
 
 #[cfg(test)]
 mod tests {
-    use super::environments_for_plan;
+    use super::{environments_for_plan, parse_acs_stack_destination};
+
+    #[test]
+    fn acs_destination_parses_stack_name() {
+        assert_eq!(
+            parse_acs_stack_destination("acs-stack:prod").unwrap(),
+            "prod"
+        );
+        assert!(parse_acs_stack_destination("acs-stack:").is_err());
+        assert!(parse_acs_stack_destination("k8s:ns").is_err());
+    }
 
     #[test]
     fn explicit_environment_wins() {

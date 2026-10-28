@@ -140,12 +140,18 @@ jobs:
           BIN=./target/debug/deslicer
           "$BIN" --help
           "$BIN" --version
-          for cmd in auth change groups inventory init docs completion update enroll worker; do
+          for cmd in auth change acs groups inventory init docs completion update enroll worker; do
             "$BIN" "$cmd" --help
           done
           for sub in plan show approve reject deploy revert jobs retry verify status; do
             "$BIN" change "$sub" --help
           done
+          for sub in stacks credentials observe; do
+            "$BIN" acs "$sub" --help
+          done
+          "$BIN" acs stacks list --help
+          "$BIN" acs credentials list --help
+          "$BIN" acs credentials test --help
           for sub in create list revoke; do
             "$BIN" enroll "$sub" --help
           done
