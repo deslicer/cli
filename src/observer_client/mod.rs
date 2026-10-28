@@ -8,6 +8,7 @@
 mod acs;
 mod app_provenance;
 mod bootstrap;
+mod catalog;
 mod change_management;
 mod declared;
 mod direct_create;
@@ -21,6 +22,7 @@ mod types;
 
 pub use acs::{AcsObserveReport, AcsStack, CredentialTestResult, SplunkCredential};
 pub use app_provenance::InventoryApp;
+pub use catalog::CatalogEntry;
 pub use mappings::EnvironmentAppMapping;
 pub use registry::{parse_registry_app_ref, RegistryAppRef};
 
