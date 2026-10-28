@@ -58,7 +58,7 @@ deslicer-ai or Observer. Unset it when the migration error is shown.
 |------|------|---------------|-----|
 | **0** | OK | Command succeeded | — |
 | **1** | Generic error | Unexpected failure (network parse, internal error) | Re-run with `--log-format json`; check stderr |
-| **4** | OIDC rejected | Token invalid, expired, or wrong audience | Verify audience is `https://api.deslicer.ai`; refresh job token; check clock skew |
+| **4** | Auth rejected | OIDC JWT invalid/expired/wrong audience, or `DESLICER_API_TOKEN` rejected by Observer | For CI OIDC: verify audience is `https://api.deslicer.ai`, refresh the job token, check clock skew. For direct URL+token: mint a tools-scope API key in the portal or run `deslicer auth login` |
 | **5** | Repo not allowlisted | Repository not registered for this tenant/environment | Add repo allowlist in Deslicer portal → CI integrations |
 | **6** | Env not bound | Named environment has no CI binding for this repo | Create binding in portal or pick a bound environment name |
 | **7** | Ambiguous binding | Multiple bindings match (same repo + environment) | Deduplicate bindings in portal; use UUID-named env file (see [environments.md](environments.md)) |

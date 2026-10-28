@@ -4,10 +4,21 @@ use std::time::Duration;
 
 use crate::errors::CliError;
 
-pub(crate) fn map_observer_error(
+/// How a 401 from Observer should be labelled for the operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AuthRejectionKind {
+    /// CI OIDC JWT, DAI resolve/exchange, or unspecified legacy clients.
+    #[default]
+    Oidc,
+    /// Direct `OBSERVER_API_URL` + `DESLICER_API_TOKEN` path.
+    ApiToken,
+}
+
+pub(crate) fn map_observer_error_with_auth(
     status: reqwest::StatusCode,
     body: &str,
     retry_after_secs: Option<u64>,
+    auth: AuthRejectionKind,
 ) -> CliError {
     let message = error_message(body, status);
     if let Some(error) = validation_error(body) {
@@ -15,7 +26,10 @@ pub(crate) fn map_observer_error(
     }
     match status.as_u16() {
         400 => CliError::UnsupportedPlatform(message),
-        401 => CliError::OidcRejected(message),
+        401 => match auth {
+            AuthRejectionKind::Oidc => CliError::OidcRejected(message),
+            AuthRejectionKind::ApiToken => CliError::ApiTokenRejected(message),
+        },
         403 => {
             if mentions_human_approval(body) {
                 CliError::HumanApprovalRequired(message)
@@ -181,10 +195,11 @@ mod tests {
 
     #[test]
     fn explicit_repo_allowlist_code_maps_to_repo_not_allowlisted() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::FORBIDDEN,
             r#"{"error":"repo_not_allowlisted"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
 
         assert!(matches!(err, CliError::RepoNotAllowlisted(_)));
@@ -193,10 +208,11 @@ mod tests {
 
     #[test]
     fn explicit_repo_allowlist_message_maps_to_repo_not_allowlisted() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::FORBIDDEN,
             r#"{"error":"forbidden","message":"repository is not allowlisted"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
 
         assert!(matches!(err, CliError::RepoNotAllowlisted(_)));
@@ -204,10 +220,11 @@ mod tests {
 
     #[test]
     fn identity_attestation_forbidden_preserves_stable_code() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::FORBIDDEN,
             r#"{"error":"identity_attestation_required","message":"attestation required"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
 
         match err {
@@ -218,10 +235,11 @@ mod tests {
 
     #[test]
     fn compile_failed_forbidden_is_not_repo_allowlist() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::FORBIDDEN,
             r#"{"error":"compile_failed"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
 
         match err {
@@ -232,10 +250,11 @@ mod tests {
 
     #[test]
     fn worker_plane_forbidden_is_not_repo_allowlist() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::FORBIDDEN,
             r#"{"error":"worker_plane_not_enabled"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         match err {
             CliError::Other(message) => {
@@ -247,10 +266,11 @@ mod tests {
 
     #[test]
     fn duplicate_plan_conflict_is_not_ambiguous_binding() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::CONFLICT,
             r#"{"error":"duplicate_plan","message":"An active plan already exists for this repository and commit SHA"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         match err {
             CliError::Other(message) => {
@@ -263,10 +283,11 @@ mod tests {
 
     #[test]
     fn other_conflict_stays_ambiguous_binding() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::CONFLICT,
             r#"{"error":"ambiguous_environment","message":"multiple environments"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         match err {
             CliError::AmbiguousBinding(message) => {
@@ -278,10 +299,11 @@ mod tests {
 
     #[test]
     fn git_backed_mode_conflict_is_not_ambiguous_binding() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::CONFLICT,
             r#"{"error":"git_backed_mode_enabled","message":"This tenant uses git-backed change management."}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         match &err {
             CliError::GitBackedChangeManagement(message) => {
@@ -295,29 +317,71 @@ mod tests {
 
     #[test]
     fn validation_errors_keep_distinct_exit_contract() {
-        let timeout = map_observer_error(
+        let timeout = map_observer_error_with_auth(
             reqwest::StatusCode::GATEWAY_TIMEOUT,
             r#"{"error":"validation_timeout"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         assert!(matches!(timeout, CliError::ValidationTimeout));
 
-        let model = map_observer_error(
+        let model = map_observer_error_with_auth(
             reqwest::StatusCode::SERVICE_UNAVAILABLE,
             r#"{"error":"model_unavailable"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         assert!(matches!(model, CliError::ValidationModelUnavailable));
     }
 
     #[test]
     fn invalid_plan_id_is_a_usage_error() {
-        let err = map_observer_error(
+        let err = map_observer_error_with_auth(
             reqwest::StatusCode::BAD_REQUEST,
             r#"{"error":"invalid_plan_id"}"#,
             None,
+            AuthRejectionKind::Oidc,
         );
         assert!(matches!(err, CliError::InvalidInput(_)));
         assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn unauthorized_defaults_to_oidc_rejection() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::UNAUTHORIZED,
+            "",
+            None,
+            AuthRejectionKind::Oidc,
+        );
+        match &err {
+            CliError::OidcRejected(message) => {
+                assert!(message.contains("401"));
+            }
+            other => panic!("expected OidcRejected, got {other}"),
+        }
+        assert_eq!(err.exit_code(), 4);
+        assert!(err.to_string().contains("OIDC token rejected"));
+    }
+
+    #[test]
+    fn unauthorized_with_api_token_auth_is_not_oidc() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::UNAUTHORIZED,
+            "",
+            None,
+            AuthRejectionKind::ApiToken,
+        );
+        match &err {
+            CliError::ApiTokenRejected(message) => {
+                assert!(message.contains("401"));
+            }
+            other => panic!("expected ApiTokenRejected, got {other}"),
+        }
+        assert_eq!(err.exit_code(), 4);
+        let text = err.to_string();
+        assert!(text.contains("API token rejected"));
+        assert!(text.contains("DESLICER_API_TOKEN"));
+        assert!(!text.contains("OIDC"));
     }
 }

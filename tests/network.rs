@@ -208,6 +208,28 @@ async fn exchange_maps_401_to_exit_4() {
 }
 
 #[tokio::test]
+async fn direct_api_token_401_is_not_oidc() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/groups"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client =
+        Client::new(base, TokenSource::static_token("bad-token".into())).with_api_token_auth();
+    let err = client.list_groups().await.unwrap_err();
+
+    assert!(matches!(err, CliError::ApiTokenRejected(_)));
+    assert_eq!(err.exit_code(), 4);
+    let text = err.to_string();
+    assert!(text.contains("API token rejected"));
+    assert!(text.contains("DESLICER_API_TOKEN"));
+    assert!(!text.contains("OIDC"));
+}
+
+#[tokio::test]
 async fn client_orchestrated_plan_returns_both_ids() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

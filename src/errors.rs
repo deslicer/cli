@@ -4,6 +4,12 @@ use thiserror::Error;
 pub enum CliError {
     #[error("OIDC token rejected: {0}")]
     OidcRejected(String),
+    #[error(
+        "API token rejected: {0}\n\
+         Check DESLICER_API_TOKEN (a tools-scope Observer API key from the portal), \
+         or run `deslicer auth login` for interactive use."
+    )]
+    ApiTokenRejected(String),
     #[error("repository not allowlisted: {0}")]
     RepoNotAllowlisted(String),
     #[error("environment not bound: {0}")]
@@ -46,7 +52,7 @@ pub enum CliError {
 impl CliError {
     pub fn exit_code(&self) -> i32 {
         match self {
-            CliError::OidcRejected(_) => 4,
+            CliError::OidcRejected(_) | CliError::ApiTokenRejected(_) => 4,
             CliError::RepoNotAllowlisted(_) => 5,
             CliError::EnvironmentNotBound(_) => 6,
             CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => 7,
