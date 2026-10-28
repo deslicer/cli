@@ -127,7 +127,8 @@ fn print_no_identity(ctx: &Ctx) -> i32 {
 
 fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
     let logged_in = session.is_active();
-    let output = json!({
+    let drift = api_url_drift(ctx, session);
+    let mut output = json!({
         "ok": logged_in,
         "platform": "device",
         "identity": "device",
@@ -138,24 +139,83 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
         "expires_at": session.expires_at,
         "observer_api_url": session.observer_api_url,
         "resolution_path": "device_session",
+        "deslicer_api_url": crate::session_portal::resolve_deslicer_api_url(ctx, session).as_str(),
+        "session_deslicer_api_url": session.deslicer_api_url,
+        "cli_deslicer_api_url": ctx.deslicer_api_url.as_str(),
     });
-    print_output(
-        ctx.log_format,
-        &output,
-        &status_device_human(
-            logged_in,
-            &session.tenant_id,
-            &session.display_name,
-            &session.expires_at,
-            &session.observer_api_url,
-            session.tenant_slug.as_deref(),
-        ),
+    if let Some(warning) = drift.as_ref() {
+        output["api_url_drift"] = json!(true);
+        output["warning"] = json!(warning);
+        // Drift is a warning, not a hard failure, while the session is active.
+        if logged_in {
+            output["ok"] = json!(true);
+        }
+    } else {
+        output["api_url_drift"] = json!(false);
+    }
+    let mut human = status_device_human(
+        logged_in,
+        &session.tenant_id,
+        &session.display_name,
+        &session.expires_at,
+        &session.observer_api_url,
+        session.tenant_slug.as_deref(),
     );
+    if let Some(warning) = drift.as_ref() {
+        human.push_str(&format!("Warning: {warning}\n"));
+    }
+    print_output(ctx.log_format, &output, &human);
     if logged_in {
         0
     } else {
         1
     }
+}
+
+/// Warn when the CLI flag/env API URL drifts from the portal that issued the session.
+///
+/// Related: DAI #2846 / parity #155. Operators who log into show/enterprise then
+/// run with the default SaaS `--deslicer-api-url` get confusing 404s from agent.
+pub(crate) fn api_url_drift(
+    ctx: &Ctx,
+    session: &crate::token_store::StoredSession,
+) -> Option<String> {
+    let session_portal = crate::session_portal::portal_url(session)?;
+    let effective = crate::session_portal::resolve_deslicer_api_url(ctx, session);
+    let explicit = crate::session_portal::deslicer_api_url_is_explicit();
+
+    // When the flag/env is not explicit, resolve_deslicer_api_url already prefers
+    // the session portal — no drift for the effective URL. Still warn if the
+    // *default* CLI URL would have drifted (informational about the session).
+    if explicit {
+        let requested = normalize_origin(&ctx.deslicer_api_url);
+        let portal = normalize_origin(&session_portal);
+        if requested != portal {
+            return Some(format!(
+                "API URL drift: --deslicer-api-url / DESLICER_API_URL is {requested}, \
+                 but this session was issued by {portal}. Agent and org commands use the \
+                 explicit flag; re-login on the intended portal or drop the override."
+            ));
+        }
+    } else {
+        let default_portal = normalize_origin(&ctx.deslicer_api_url);
+        let session_origin = normalize_origin(&session_portal);
+        let _ = effective; // resolve prefers the session portal when the flag is unset
+        if default_portal != session_origin {
+            return Some(format!(
+                "API URL drift: session portal is {session_origin}, while the CLI default \
+                 is {default_portal}. Commands use the session portal automatically; pass \
+                 --deslicer-api-url {session_origin} to make that explicit, or re-login."
+            ));
+        }
+    }
+    None
+}
+
+fn normalize_origin(url: &url::Url) -> String {
+    let origin = url.origin().ascii_serialization();
+    // Strip trailing slash variance for comparison display.
+    origin.trim_end_matches('/').to_string()
 }
 
 fn decode_jwt_parts(jwt: &str) -> (Value, Value) {
@@ -202,5 +262,59 @@ fn redact_sensitive_claims(value: &mut Value) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::LogFormat;
+    use crate::token_store::StoredSession;
+
+    fn session(observer: &str, portal: Option<&str>) -> StoredSession {
+        StoredSession {
+            cli_session_token: "dslcli_abc".into(),
+            expires_at: "2099-01-01T00:00:00Z".into(),
+            tenant_id: "tenant".into(),
+            display_name: "Ada".into(),
+            observer_api_url: observer.into(),
+            tenant_slug: None,
+            deslicer_api_url: portal.map(str::to_string),
+        }
+    }
+
+    fn ctx(url: &str) -> Ctx {
+        Ctx {
+            deslicer_api_url: url::Url::parse(url).unwrap(),
+            observer_api_url: None,
+            ci_override: None,
+            log_format: LogFormat::Human,
+        }
+    }
+
+    #[test]
+    fn warns_when_session_portal_differs_from_default() {
+        // Ensure we exercise the non-explicit path.
+        std::env::remove_var("DESLICER_API_URL");
+        let session = session(
+            "https://ops.deslicer.show/api/cli/observer/",
+            Some("https://ops.deslicer.show/"),
+        );
+        let ctx = ctx("https://api.deslicer.ai/");
+        let warning = api_url_drift(&ctx, &session).expect("drift");
+        assert!(warning.contains("API URL drift"));
+        assert!(warning.contains("ops.deslicer.show"));
+        assert!(warning.contains("api.deslicer.ai"));
+    }
+
+    #[test]
+    fn no_warning_when_session_matches_default() {
+        std::env::remove_var("DESLICER_API_URL");
+        let session = session(
+            "https://api.deslicer.ai/api/cli/observer/",
+            Some("https://api.deslicer.ai/"),
+        );
+        let ctx = ctx("https://api.deslicer.ai/");
+        assert!(api_url_drift(&ctx, &session).is_none());
     }
 }
