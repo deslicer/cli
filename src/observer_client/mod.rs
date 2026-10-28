@@ -6,6 +6,7 @@
 //! request paths work in both modes.
 
 mod acs;
+mod app_provenance;
 mod bootstrap;
 mod change_management;
 mod declared;
@@ -19,6 +20,7 @@ mod repo;
 mod types;
 
 pub use acs::{AcsObserveReport, AcsStack, CredentialTestResult, SplunkCredential};
+pub use app_provenance::InventoryApp;
 pub use mappings::EnvironmentAppMapping;
 pub use registry::{parse_registry_app_ref, RegistryAppRef};
 
