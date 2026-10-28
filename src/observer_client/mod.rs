@@ -13,11 +13,13 @@ mod direct_create;
 mod enrollment;
 mod http_errors;
 mod inventory;
+mod mappings;
 mod registry;
 mod repo;
 mod types;
 
 pub use acs::{AcsObserveReport, AcsStack, CredentialTestResult, SplunkCredential};
+pub use mappings::EnvironmentAppMapping;
 pub use registry::{parse_registry_app_ref, RegistryAppRef};
 
 pub use bootstrap::{
