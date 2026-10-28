@@ -63,6 +63,9 @@ pub enum Command {
     /// Catalog blueprints (list, show, multi-target plan)
     #[command(subcommand)]
     Catalog(crate::commands::catalog::CatalogCmd),
+    /// Remediate analyse / draft (draft plan id)
+    #[command(subcommand)]
+    Remediate(crate::commands::remediate::RemediateCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -150,6 +153,7 @@ impl Cli {
             Command::Routine(cmd) => crate::commands::routine::dispatch(ctx, cmd).await,
             Command::Skill(cmd) => crate::commands::skill::dispatch(ctx, cmd).await,
             Command::Catalog(cmd) => crate::commands::catalog::dispatch(ctx, cmd).await,
+            Command::Remediate(cmd) => crate::commands::remediate::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
