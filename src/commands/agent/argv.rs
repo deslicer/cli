@@ -9,7 +9,9 @@ use std::ffi::{OsStr, OsString};
 
 const AGENT: &str = "agent";
 
-const SUBCOMMANDS: &[&str] = &["list", "ls", "run", "logs", "resume", "repl", "help"];
+const SUBCOMMANDS: &[&str] = &[
+    "list", "ls", "clone", "run", "logs", "resume", "repl", "help",
+];
 
 const VALUE_FLAGS: &[&str] = &[
     "-a",

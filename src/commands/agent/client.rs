@@ -84,6 +84,50 @@ impl AgentClient {
         Ok(body.agents)
     }
 
+    /// Clone one or more agents. Returns the newly created agent summaries.
+    pub async fn clone_agents(&self, ids: &[String]) -> Result<Vec<AgentSummary>, CliError> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            ids: &'a [String],
+        }
+        #[derive(Deserialize)]
+        struct CloneResponse {
+            #[serde(default)]
+            agents: Vec<AgentSummary>,
+            #[serde(default)]
+            agent: Option<AgentSummary>,
+        }
+
+        let url = self.endpoint(&format!("{LIST_PATH}/clone"))?;
+        let response = self
+            .json
+            .post(url)
+            .bearer_auth(&self.token)
+            .json(&Body { ids })
+            .send()
+            .await
+            .map_err(|e| CliError::Transport(format!("clone agents: {e}")))?;
+        if !response.status().is_success() {
+            return Err(self.error_from(response).await);
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| CliError::Transport(format!("clone agents body: {e}")))?;
+        if let Ok(list) = serde_json::from_slice::<Vec<AgentSummary>>(&bytes) {
+            return Ok(list);
+        }
+        let wrapped: CloneResponse = serde_json::from_slice(&bytes)
+            .map_err(|e| CliError::Transport(format!("decode clone response: {e}")))?;
+        if !wrapped.agents.is_empty() {
+            return Ok(wrapped.agents);
+        }
+        if let Some(agent) = wrapped.agent {
+            return Ok(vec![agent]);
+        }
+        Ok(Vec::new())
+    }
+
     /// Opens a run and returns before the first token.
     ///
     /// Only the response head is awaited here. The server writes an SSE
