@@ -231,9 +231,7 @@ async fn run_acs_destination_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, 
     let plan = client
         .create_acs_draft_plan(&stack, args.name.as_deref())
         .await?;
-    eprintln!(
-        "ACS draft plan created for stack {stack} (Pending — approve before deploy)"
-    );
+    eprintln!("ACS draft plan created for stack {stack} (Pending — approve before deploy)");
     Ok(plan)
 }
 
