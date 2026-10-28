@@ -285,6 +285,82 @@ async fn client_execute_parses_execution_queued() {
 }
 
 #[tokio::test]
+async fn client_list_plan_executions_and_retry_job() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans/plan-external/executions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "executions": [{
+                "execution_id": "exec-9",
+                "status": "failed",
+                "jobs_total": 1,
+                "jobs_succeeded": 0,
+                "jobs_failed": 1,
+                "jobs": [{
+                    "id": "job-1",
+                    "status": "failed",
+                    "retry_count": 1,
+                    "host": "idx-1"
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/executions/exec-9"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "execution_id": "exec-9",
+            "status": "failed",
+            "jobs_total": 1,
+            "jobs_succeeded": 0,
+            "jobs_failed": 1,
+            "jobs": [{
+                "id": "job-1",
+                "status": "failed",
+                "retry_count": 1,
+                "host": "idx-1"
+            }]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/executions/exec-9/jobs/job-1/retry"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "job-1",
+            "status": "queued",
+            "retry_count": 2,
+            "host": "idx-1"
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plans/plan-external/retry"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "execution_id": "exec-10",
+            "plan_id": "plan-external",
+            "status": "queued",
+            "jobs_total": 1
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = Client::new(base, "tools-token".to_string());
+    let listed = client.list_plan_executions("plan-external").await.unwrap();
+    assert_eq!(listed[0].execution_id, "exec-9");
+    assert_eq!(listed[0].jobs[0].retry_count, 1);
+
+    let summary = client.get_execution("exec-9").await.unwrap();
+    assert_eq!(summary.jobs.len(), 1);
+
+    let job = client.retry_execution_job("exec-9", "job-1").await.unwrap();
+    assert_eq!(job.retry_count, 2);
+
+    let queued = client.retry_plan("plan-external").await.unwrap();
+    assert_eq!(queued.execution_id, "exec-10");
+}
+
+#[tokio::test]
 async fn client_revert_parses_pending_inverse_plan() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

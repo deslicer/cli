@@ -73,6 +73,20 @@ pub struct ExecutionQueued {
     pub jobs_total: i64,
 }
 
+/// Per-host (or per-item) job row from an execution payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionJob {
+    pub id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub retry_count: i64,
+    #[serde(default)]
+    pub host: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 /// Observer `ExecutionSummary` (subset) from `GET /api/v1/executions/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionSummary {
@@ -89,6 +103,8 @@ pub struct ExecutionSummary {
     pub jobs_partial: i64,
     #[serde(default)]
     pub jobs_timed_out: i64,
+    #[serde(default)]
+    pub jobs: Vec<ExecutionJob>,
 }
 
 impl ExecutionSummary {

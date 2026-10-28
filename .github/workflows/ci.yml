@@ -143,7 +143,7 @@ jobs:
           for cmd in auth change groups inventory init docs completion update enroll worker; do
             "$BIN" "$cmd" --help
           done
-          for sub in plan show approve reject deploy revert verify status; do
+          for sub in plan show approve reject deploy revert jobs retry verify status; do
             "$BIN" change "$sub" --help
           done
           for sub in create list revoke; do
