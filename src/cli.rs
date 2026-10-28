@@ -72,6 +72,9 @@ pub enum Command {
     /// Model catalogue and BYOK
     #[command(subcommand)]
     Models(crate::commands::models::ModelsCmd),
+    /// Billing usage and credits (read-only)
+    #[command(subcommand)]
+    Billing(crate::commands::billing::BillingCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -162,6 +165,7 @@ impl Cli {
             Command::Remediate(cmd) => crate::commands::remediate::dispatch(ctx, cmd).await,
             Command::License(cmd) => crate::commands::license::dispatch(ctx, cmd).await,
             Command::Models(cmd) => crate::commands::models::dispatch(ctx, cmd).await,
+            Command::Billing(cmd) => crate::commands::billing::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
