@@ -66,6 +66,9 @@ pub enum Command {
     /// Remediate analyse / draft (draft plan id)
     #[command(subcommand)]
     Remediate(crate::commands::remediate::RemediateCmd),
+    /// Tenant license status and bind
+    #[command(subcommand)]
+    License(crate::commands::license::LicenseCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -154,6 +157,7 @@ impl Cli {
             Command::Skill(cmd) => crate::commands::skill::dispatch(ctx, cmd).await,
             Command::Catalog(cmd) => crate::commands::catalog::dispatch(ctx, cmd).await,
             Command::Remediate(cmd) => crate::commands::remediate::dispatch(ctx, cmd).await,
+            Command::License(cmd) => crate::commands::license::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
