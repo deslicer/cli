@@ -104,7 +104,7 @@ async fn bundle_flow_client(ctx: &Ctx, args: &Args) -> Result<Client, CliError> 
         ctx.observer_api_url.clone(),
         crate::observer_token::api_token(),
     ) {
-        return Ok(Client::new(base, TokenSource::static_token(token)));
+        return Ok(Client::new(base, TokenSource::static_token(token)).with_api_token_auth());
     }
 
     match authenticate(ctx, args.environment.as_deref(), None).await {

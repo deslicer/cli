@@ -32,7 +32,9 @@ pub use types::{
     PlanProgress, PlanValidationFinding, PlanValidationReport,
 };
 
-use http_errors::{map_observer_error, parse_retry_after_header, retry_delay};
+use http_errors::{
+    map_observer_error_with_auth, parse_retry_after_header, retry_delay, AuthRejectionKind,
+};
 
 pub(crate) use http_errors::{error_message, parse_retry_after_header as retry_after_header};
 use reqwest::Method;
@@ -47,6 +49,7 @@ pub struct Client {
     http: reqwest::Client,
     ci_platform: Option<crate::ci::CiPlatform>,
     environment: Option<String>,
+    auth_rejection: AuthRejectionKind,
 }
 
 impl Client {
@@ -57,6 +60,7 @@ impl Client {
             http: crate::http::client(),
             ci_platform: None,
             environment: None,
+            auth_rejection: AuthRejectionKind::Oidc,
         }
     }
 
@@ -71,6 +75,21 @@ impl Client {
     pub fn with_environment(mut self, environment: Option<String>) -> Self {
         self.environment = environment;
         self
+    }
+
+    /// Label Observer 401s as API-token failures (direct URL + `DESLICER_API_TOKEN`).
+    pub fn with_api_token_auth(mut self) -> Self {
+        self.auth_rejection = AuthRejectionKind::ApiToken;
+        self
+    }
+
+    pub(crate) fn map_http_error(
+        &self,
+        status: reqwest::StatusCode,
+        body: &str,
+        retry_after_secs: Option<u64>,
+    ) -> CliError {
+        map_observer_error_with_auth(status, body, retry_after_secs, self.auth_rejection)
     }
 
     /// CI proxy: create a draft plan bound to this repo/commit and trigger
@@ -161,7 +180,7 @@ impl Client {
 
         if !status.is_success() {
             let body_text = String::from_utf8_lossy(&body).into_owned();
-            return Err(map_observer_error(status, &body_text, retry_after));
+            return Err(self.map_http_error(status, &body_text, retry_after));
         }
 
         serde_json::from_slice(&body)
@@ -374,7 +393,7 @@ impl Client {
         if status == reqwest::StatusCode::CONFLICT {
             return Ok(true);
         }
-        Err(map_observer_error(status, &body_text, None))
+        Err(self.map_http_error(status, &body_text, None))
     }
 
     pub async fn create_enrollment_token(
@@ -498,7 +517,7 @@ impl Client {
             }
 
             let body_text = String::from_utf8_lossy(&bytes).into_owned();
-            return Err(map_observer_error(status, &body_text, retry_after));
+            return Err(self.map_http_error(status, &body_text, retry_after));
         }
     }
 

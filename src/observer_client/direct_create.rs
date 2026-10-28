@@ -2,7 +2,7 @@ use reqwest::Method;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::http_errors::{is_duplicate_plan_error, map_observer_error};
+use super::http_errors::is_duplicate_plan_error;
 use super::types;
 use super::Client;
 use crate::errors::CliError;
@@ -47,7 +47,7 @@ impl Client {
                 .await;
         }
         if !status.is_success() {
-            return Err(map_observer_error(status, &body_text, None));
+            return Err(self.map_http_error(status, &body_text, None));
         }
         parse_created_plan(&body_text)
     }

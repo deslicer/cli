@@ -90,7 +90,8 @@ fn client_from_observer_token(
     };
     let client = Client::new(observer_api_url, TokenSource::static_token(token))
         .with_ci_platform(platform)
-        .with_environment(environment.map(str::to_string));
+        .with_environment(environment.map(str::to_string))
+        .with_api_token_auth();
     Ok((AuthenticatedSession { platform, backend }, client))
 }
 

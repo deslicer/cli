@@ -79,6 +79,7 @@ fn redact_bearer_tokens(text: &mut String) {
 pub fn cli_error_kind(err: &CliError) -> &'static str {
     match err {
         CliError::OidcRejected(_) => "oidc",
+        CliError::ApiTokenRejected(_) => "api_token",
         CliError::RepoNotAllowlisted(_) => "auth",
         CliError::EnvironmentNotBound(_) => "auth",
         CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => "auth",
@@ -104,10 +105,16 @@ pub fn cli_error_json(err: &CliError) -> Value {
         "kind": cli_error_kind(err),
         "message": message,
     });
-    if let CliError::Other(msg) = err {
-        if msg.contains("not logged in") {
+    match err {
+        CliError::Other(msg) if msg.contains("not logged in") => {
             body["hint"] = json!("run auth login and approve the code in the portal");
         }
+        CliError::ApiTokenRejected(_) => {
+            body["hint"] = json!(
+                "mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login"
+            );
+        }
+        _ => {}
     }
     json!({ "error": body })
 }
@@ -232,5 +239,17 @@ mod tests {
         let value = cli_error_json(&err);
         assert_eq!(value["error"]["kind"], "auth");
         assert!(value["error"]["hint"].is_string());
+    }
+
+    #[test]
+    fn api_token_rejected_json_is_not_oidc() {
+        let err = CliError::ApiTokenRejected("HTTP 401 Unauthorized".into());
+        let value = cli_error_json(&err);
+        assert_eq!(value["error"]["kind"], "api_token");
+        assert!(value["error"]["hint"]
+            .as_str()
+            .unwrap()
+            .contains("DESLICER_API_TOKEN"));
+        assert!(!value["error"]["message"].as_str().unwrap().contains("OIDC"));
     }
 }
