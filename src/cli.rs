@@ -75,6 +75,9 @@ pub enum Command {
     /// Billing usage and credits (read-only)
     #[command(subcommand)]
     Billing(crate::commands::billing::BillingCmd),
+    /// Org roles, teams, switch, and plan settings
+    #[command(subcommand)]
+    Org(crate::commands::org::OrgCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -166,6 +169,7 @@ impl Cli {
             Command::License(cmd) => crate::commands::license::dispatch(ctx, cmd).await,
             Command::Models(cmd) => crate::commands::models::dispatch(ctx, cmd).await,
             Command::Billing(cmd) => crate::commands::billing::dispatch(ctx, cmd).await,
+            Command::Org(cmd) => crate::commands::org::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,

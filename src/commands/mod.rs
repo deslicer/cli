@@ -13,6 +13,7 @@ pub mod init;
 pub mod inventory;
 pub mod license;
 pub mod models;
+pub mod org;
 pub mod pipeline;
 pub mod remediate;
 pub mod repo;
