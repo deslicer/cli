@@ -15,4 +15,5 @@ pub mod repo;
 pub mod routine;
 pub mod skill;
 pub mod update;
+pub mod upgrade;
 pub mod worker;
