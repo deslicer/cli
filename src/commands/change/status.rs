@@ -1,6 +1,7 @@
 use clap::Args as ClapArgs;
 use std::time::{Duration, Instant};
 
+use crate::commands::change::jobs::{format_job_line, load_execution_with_jobs};
 use crate::commands::change::lifecycle::{is_terminal_lifecycle, plan_status_exit_code};
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::diff_summary::diff_counts_from_observer_value;
@@ -21,6 +22,14 @@ pub struct Args {
     /// Maximum seconds to wait for rollout progress while `progress_status` is `partial`.
     #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECS)]
     pub timeout_secs: u64,
+
+    /// Also print per-job state (one-shot; skips progress polling).
+    #[arg(long)]
+    pub jobs: bool,
+
+    /// Prefer this execution id when `--jobs` is set.
+    #[arg(long)]
+    pub execution_id: Option<String>,
 }
 
 async fn load_diff(client: &Client, plan: &ChangePlan) -> Option<crate::diff_summary::DiffCounts> {
@@ -76,6 +85,28 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     } else {
         None
     };
+
+    // `--jobs` is a one-shot inspector: never enter the partial-progress poll loop.
+    if args.jobs {
+        let progress = progress_best_effort(&client, &args.plan_id).await;
+        let code = finish(plan.as_ref(), &progress, diff.as_ref());
+        match load_execution_with_jobs(&client, &args.plan_id, args.execution_id.as_deref()).await {
+            Ok(summary) => {
+                if summary.jobs.is_empty() {
+                    eprintln!(
+                        "(no per-job rows for execution {}; jobs_total={})",
+                        summary.execution_id, summary.jobs_total
+                    );
+                } else {
+                    for job in &summary.jobs {
+                        println!("{}", format_job_line(job));
+                    }
+                }
+            }
+            Err(err) => eprintln!("could not load jobs: {err}"),
+        }
+        return code;
+    }
 
     if let Some(ref p) = plan {
         if is_terminal_lifecycle(&p.status) {

@@ -87,6 +87,8 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **change** | `deslicer change reject` | Reject a pending plan |
 | **change** | `deslicer change deploy` | Execute an approved plan |
 | **change** | `deslicer change revert` | Create a Pending inverse plan from a completed plan (dry-run unless `--yes`) |
+| **change** | `deslicer change jobs` | List per-job state and retry_count for a plan execution |
+| **change** | `deslicer change retry` | Retry failed plan/job execution (dry-run unless `--yes`) |
 | **change** | `deslicer change validate` | Validate an existing persisted plan |
 | **change** | `deslicer change verify` | Verify deployment outcome |
 | **change** | `deslicer change status` | Poll plan/execution status |

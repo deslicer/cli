@@ -72,6 +72,8 @@ async fn change_status_not_started_returns_immediately() {
         Args {
             plan_id: PLAN_ID.to_string(),
             timeout_secs: 60,
+            jobs: false,
+            execution_id: None,
         },
     )
     .await;
@@ -123,6 +125,8 @@ async fn change_status_partial_polls_until_terminal() {
         Args {
             plan_id: PLAN_ID.to_string(),
             timeout_secs: 60,
+            jobs: false,
+            execution_id: None,
         },
     )
     .await;
@@ -163,6 +167,8 @@ async fn change_status_failed_plan_skips_progress_polling() {
         Args {
             plan_id: PLAN_ID.to_string(),
             timeout_secs: 60,
+            jobs: false,
+            execution_id: None,
         },
     )
     .await;
@@ -203,6 +209,8 @@ async fn change_status_compile_failed_exits_nonzero() {
         Args {
             plan_id: PLAN_ID.to_string(),
             timeout_secs: 60,
+            jobs: false,
+            execution_id: None,
         },
     )
     .await;

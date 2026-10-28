@@ -28,8 +28,8 @@ pub use enrollment::{
 pub use inventory::InventoryGroup;
 pub use repo::{GithubRepoRow, ListReposResponse, ProvisionRepoRequest, ProvisionRepoResponse};
 pub use types::{
-    BundleUploaded, ChangePlan, ExecutionQueued, ExecutionSummary, HostGroup, OrchestratedPlan,
-    PlanProgress, PlanValidationFinding, PlanValidationReport,
+    BundleUploaded, ChangePlan, ExecutionJob, ExecutionQueued, ExecutionSummary, HostGroup,
+    OrchestratedPlan, PlanProgress, PlanValidationFinding, PlanValidationReport,
 };
 
 use http_errors::{
@@ -327,6 +327,37 @@ impl Client {
     pub async fn get_execution(&self, execution_id: &str) -> Result<ExecutionSummary, CliError> {
         let path = format!("api/v1/executions/{execution_id}");
         self.get_json(&path).await
+    }
+
+    /// Recent executions for a plan (newest first when the server orders that way).
+    pub async fn list_plan_executions(
+        &self,
+        plan_id: &str,
+    ) -> Result<Vec<ExecutionSummary>, CliError> {
+        #[derive(Deserialize)]
+        struct ListExecutionsResponse {
+            #[serde(default)]
+            executions: Vec<ExecutionSummary>,
+        }
+        let path = format!("api/v1/plans/{plan_id}/executions");
+        let resp: ListExecutionsResponse = self.get_json(&path).await?;
+        Ok(resp.executions)
+    }
+
+    /// Retry all failed jobs for a plan (`POST /api/v1/plans/{id}/retry`).
+    pub async fn retry_plan(&self, plan_id: &str) -> Result<ExecutionQueued, CliError> {
+        let path = format!("api/v1/plans/{plan_id}/retry");
+        self.request_json(Method::POST, &path, None::<&()>).await
+    }
+
+    /// Retry one execution job (`POST /api/v1/executions/{id}/jobs/{job_id}/retry`).
+    pub async fn retry_execution_job(
+        &self,
+        execution_id: &str,
+        job_id: &str,
+    ) -> Result<ExecutionJob, CliError> {
+        let path = format!("api/v1/executions/{execution_id}/jobs/{job_id}/retry");
+        self.request_json(Method::POST, &path, None::<&()>).await
     }
 
     /// Dry-run diff persisted by the compile-runner (internal plan row id).
