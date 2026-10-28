@@ -141,6 +141,7 @@ See [docs/installation.md](docs/installation.md) and [docs/quickstart.md](docs/q
 
 - [Architecture](docs/architecture.md) — how the CLI integrates with DAP and deslicer-ai
 - [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
+- [Plan-runner E2E](docs/plan-runner-e2e.md) — enroll → worker → draft → approve smoke runbook
 - [Bundle flow](docs/bundle-flow.md) — GitHub-App-free plans from a local directory
 - [Agent runs](docs/agent-runs.md) — run a deslicer-ai agent from a terminal or a pipeline
 - [CI outputs](docs/ci-outputs.md) — output variables per command and CI platform

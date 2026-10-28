@@ -21,6 +21,11 @@ source = "docs/repo-init-and-enroll.md"
 dest = "02-repo-init-and-enroll.md"
 
 [[page]]
+id = "plan-runner"
+source = "docs/plan-runner-e2e.md"
+dest = "02a-plan-runner-e2e.md"
+
+[[page]]
 id = "install"
 source = "docs/installation.md"
 dest = "03-installation.md"
