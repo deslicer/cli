@@ -19,12 +19,14 @@ mod mappings;
 mod registry;
 mod repo;
 mod types;
+mod upgrade;
 
 pub use acs::{AcsObserveReport, AcsStack, CredentialTestResult, SplunkCredential};
 pub use app_provenance::InventoryApp;
 pub use catalog::CatalogEntry;
 pub use mappings::EnvironmentAppMapping;
 pub use registry::{parse_registry_app_ref, RegistryAppRef};
+pub use upgrade::UpgradeStatus;
 
 pub use bootstrap::{
     BootstrapTemplateFile, BootstrapTemplates, CreateEnvironmentBindingRequest, GithubInstallation,

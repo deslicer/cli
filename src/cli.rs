@@ -89,6 +89,9 @@ pub enum Command {
     Completion(crate::commands::completion::Args),
     /// Update the deslicer binary to the latest release
     Update(crate::commands::update::Args),
+    /// Splunk package upgrade intent (plan / flapping-gate status)
+    #[command(subcommand)]
+    Upgrade(crate::commands::upgrade::UpgradeCmd),
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
@@ -157,6 +160,7 @@ impl Cli {
             Command::Repo(cmd) => crate::commands::repo::dispatch(ctx, cmd).await,
             Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(ctx, args).await,
+            Command::Upgrade(cmd) => crate::commands::upgrade::dispatch(ctx, cmd).await,
         }
     }
 }
