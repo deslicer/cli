@@ -219,7 +219,9 @@ deslicer change deploy --plan-id "$PLAN_ID"
 deslicer change verify --plan-id "$PLAN_ID"
 ```
 
-See [quickstart.md](quickstart.md) for the complete plan lifecycle and
-[environments.md](environments.md) for environment-file rules.
+See [quickstart.md](quickstart.md) for the complete plan lifecycle,
+[plan-runner-e2e.md](plan-runner-e2e.md) for the enroll → worker → draft →
+approve smoke runbook, and [environments.md](environments.md) for
+environment-file rules.
 
 Canonical contract: DAP `docs/components/dap/cli-repo-init-and-enroll-spec.md`.

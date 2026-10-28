@@ -140,12 +140,16 @@ jobs:
           BIN=./target/debug/deslicer
           "$BIN" --help
           "$BIN" --version
-          for cmd in auth change groups inventory init docs completion update; do
+          for cmd in auth change groups inventory init docs completion update enroll worker; do
             "$BIN" "$cmd" --help
           done
           for sub in plan show approve reject deploy verify status; do
             "$BIN" change "$sub" --help
           done
+          for sub in create list revoke; do
+            "$BIN" enroll "$sub" --help
+          done
+          "$BIN" worker instructions --help
 
   installer:
     name: Installer lint

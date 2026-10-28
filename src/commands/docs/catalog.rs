@@ -56,6 +56,16 @@ pub const TOPICS: &[Topic] = &[
         sync: true,
     },
     Topic {
+        id: "plan-runner",
+        aliases: &["plan-runner-e2e", "e2e"],
+        title: "Plan-runner E2E",
+        summary: "enroll → worker → draft plan → approve smoke runbook",
+        source_file: "docs/plan-runner-e2e.md",
+        dest_file: "02a-plan-runner-e2e.md",
+        anchor: None,
+        sync: true,
+    },
+    Topic {
         id: "install",
         aliases: &["installation"],
         title: "Installation",

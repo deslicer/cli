@@ -190,6 +190,7 @@ deslicer change show                          # list recent plans
 
 ## Where to next
 
+- [plan-runner-e2e.md](plan-runner-e2e.md) — enroll → worker → draft → approve smoke runbook
 - [bundle-flow.md](bundle-flow.md) — the GitHub-App-free flow in depth
 - [ci-outputs.md](ci-outputs.md) — output variables the CLI writes for pipeline steps
 - [environments.md](environments.md) — the `.deslicer/environments/` convention
