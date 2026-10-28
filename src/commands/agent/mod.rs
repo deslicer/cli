@@ -4,6 +4,7 @@ use crate::Ctx;
 
 mod argv;
 mod client;
+mod clone;
 pub(crate) mod http_errors;
 mod ids;
 mod list;
@@ -27,6 +28,8 @@ pub enum AgentCmd {
     List(list::Args),
     /// List recent runs started by this session
     Ls(ls::Args),
+    /// Clone an agent (and optional --bulk ids); dry-run unless --yes
+    Clone(clone::Args),
     /// Run an agent and stream its answer
     Run(run::Args),
     /// Read the output of a run that is already going
@@ -41,6 +44,7 @@ pub async fn dispatch(ctx: Ctx, cmd: AgentCmd) -> i32 {
     match cmd {
         AgentCmd::List(args) => list::run(ctx, args).await,
         AgentCmd::Ls(args) => ls::run(ctx, args).await,
+        AgentCmd::Clone(args) => clone::run(ctx, args).await,
         AgentCmd::Run(args) => run::run(ctx, args).await,
         AgentCmd::Logs(args) => logs::run(ctx, args).await,
         AgentCmd::Resume(args) => resume::run(ctx, args).await,

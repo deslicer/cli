@@ -162,6 +162,9 @@ jobs:
           for sub in list import; do
             "$BIN" skill "$sub" --help
           done
+          for sub in list ls clone run logs resume repl; do
+            "$BIN" agent "$sub" --help
+          done
           for sub in create list revoke; do
             "$BIN" enroll "$sub" --help
           done
