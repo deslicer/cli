@@ -57,6 +57,9 @@ pub enum Command {
     /// DAI routines (list, enable/disable, run, runs, report)
     #[command(subcommand)]
     Routine(crate::commands::routine::RoutineCmd),
+    /// Skills marketplace (list, import)
+    #[command(subcommand)]
+    Skill(crate::commands::skill::SkillCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -139,6 +142,7 @@ impl Cli {
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
             Command::Acs(cmd) => crate::commands::acs::dispatch(ctx, cmd).await,
             Command::Routine(cmd) => crate::commands::routine::dispatch(ctx, cmd).await,
+            Command::Skill(cmd) => crate::commands::skill::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
