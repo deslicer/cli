@@ -4,7 +4,7 @@ use crate::Ctx;
 
 mod argv;
 mod client;
-mod http_errors;
+pub(crate) mod http_errors;
 mod ids;
 mod list;
 mod logs;

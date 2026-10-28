@@ -54,6 +54,9 @@ pub enum Command {
     /// Splunk Cloud ACS stacks, credentials, and observe (read-only)
     #[command(subcommand)]
     Acs(crate::commands::acs::AcsCmd),
+    /// DAI routines (list, enable/disable, run, runs, report)
+    #[command(subcommand)]
+    Routine(crate::commands::routine::RoutineCmd),
     /// List host groups (`id` or exact `name` for `change plan --target-group`)
     #[command(subcommand)]
     Groups(crate::commands::groups::GroupsCmd),
@@ -135,6 +138,7 @@ impl Cli {
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
             Command::Acs(cmd) => crate::commands::acs::dispatch(ctx, cmd).await,
+            Command::Routine(cmd) => crate::commands::routine::dispatch(ctx, cmd).await,
             Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
             Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,

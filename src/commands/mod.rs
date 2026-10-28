@@ -11,5 +11,6 @@ pub mod init;
 pub mod inventory;
 pub mod pipeline;
 pub mod repo;
+pub mod routine;
 pub mod update;
 pub mod worker;
