@@ -11,6 +11,7 @@ pub mod groups;
 pub mod init;
 pub mod inventory;
 pub mod pipeline;
+pub mod remediate;
 pub mod repo;
 pub mod routine;
 pub mod skill;

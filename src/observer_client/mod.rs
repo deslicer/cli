@@ -17,6 +17,7 @@ mod http_errors;
 mod inventory;
 mod mappings;
 mod registry;
+mod remediate;
 mod repo;
 mod types;
 mod upgrade;
@@ -26,6 +27,7 @@ pub use app_provenance::InventoryApp;
 pub use catalog::CatalogEntry;
 pub use mappings::EnvironmentAppMapping;
 pub use registry::{parse_registry_app_ref, RegistryAppRef};
+pub use remediate::{RemediateAnalysis, RemediateDraft};
 pub use upgrade::UpgradeStatus;
 
 pub use bootstrap::{
