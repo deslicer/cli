@@ -88,8 +88,6 @@ fn format_cloned_human(agents: &[AgentSummary]) -> String {
 mod tests {
     use clap::CommandFactory;
 
-    use super::*;
-
     #[test]
     fn help_mentions_bulk_and_yes() {
         let mut cmd = crate::cli::Cli::command();
