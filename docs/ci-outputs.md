@@ -67,7 +67,7 @@ preview section when labels are present) when `GITHUB_STEP_SUMMARY` is set.
 | `fully_completed_items` | Items applied on every target host |
 | `diff_*` | Same keys as verify when a persisted dry-run diff exists |
 
-When `plan_status` is a terminal failure (`failed`, `compile_failed`, `rejected`, `expired`), the command exits **14** after writing outputs. Use `--timeout` (default 60s) to cap waiting while `progress_status` is `partial`.
+When `plan_status` is a terminal failure (`failed`, `compile_failed`, `rejected`, `expired`), the command exits **14** after writing outputs. Use `--timeout-secs` (default 60s) to cap waiting while `progress_status` is `partial`.
 
 ### `change validate`
 
