@@ -165,6 +165,8 @@ jobs:
           for sub in list ls clone run logs resume repl; do
             "$BIN" agent "$sub" --help
           done
+          "$BIN" inventory apps --help
+          "$BIN" inventory apps adopt --help
           for sub in create list revoke; do
             "$BIN" enroll "$sub" --help
           done
