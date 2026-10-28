@@ -190,6 +190,7 @@ passes it on stdin (`--token-stdin`). `--embed-token` requires a TTY and
 
 ```text
 deslicer repo bootstrap --installation ID --name REPO [--description TEXT] [--yes]
+deslicer repo bootstrap --installation ID --check [--name REPO] [--repo-id ID] [--dir PATH]
 deslicer repo refresh   --installation ID --repo-id ID
 deslicer repo status    --installation ID
 ```
@@ -199,6 +200,26 @@ These commands wrap the existing GitHub App routes. They require
 organization, name, and `private` visibility and does not create the
 repository. GitLab, Azure DevOps, and Bitbucket never call provision;
 use `deslicer init --provider` for those hosts.
+
+### Auth layers (read this before workshop dry-runs)
+
+| Layer | Who authenticates | Purpose |
+| --- | --- | --- |
+| **Provision / admin** | Device session → Observer uses the GitHub App installation | `repo bootstrap|refresh|status` |
+| **Operator git push** | Your GitHub user / `gh` credentials | First push / clone of the new repo |
+| **CI plan / workflow** | Path A OIDC (`id-token: write`) or Path A2 `DESLICER_API_TOKEN` + `OBSERVER_API_URL` | Actions run; CLI never writes Environment secrets |
+
+`--check` is read-only readiness for the App surface (installation linked, optional
+repo bootstrap PR / workflow sync, optional local OIDC workflow scan). It does
+**not** install push credentials, mint workflow tokens, set DAP secrets, or
+dispatch workflows. Dual-mode “CLI token vs App for push+trigger” remains an
+open product decision; document the three layers above until that lands.
+
+```bash
+deslicer repo bootstrap --installation "$INSTALLATION_ID" --check
+deslicer repo bootstrap --installation "$INSTALLATION_ID" --check \
+  --name splunk-config --dir .
+```
 
 ## First-plan check
 

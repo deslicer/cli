@@ -77,7 +77,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **enroll** | `deslicer enroll list` | List tokens (never reprints the secret) |
 | **enroll** | `deslicer enroll revoke` | Revoke a token by UUID `--jti` |
 | **worker** | `deslicer worker instructions` | Print a worker install recipe (`--format`, `--product`, `--channel`) |
-| **repo** | `deslicer repo bootstrap` | Create a private GitHub App org repo (dry-run unless `--yes`) |
+| **repo** | `deslicer repo bootstrap` | Create a private GitHub App org repo (dry-run unless `--yes`; `--check` for readiness) |
 | **repo** | `deslicer repo refresh` | Open a workflow refresh pull request |
 | **repo** | `deslicer repo status` | List linked repos and bootstrap job fields |
 | | `deslicer completion bash\|zsh\|fish` | Print shell completions to stdout |
