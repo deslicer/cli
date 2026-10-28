@@ -140,7 +140,7 @@ jobs:
           BIN=./target/debug/deslicer
           "$BIN" --help
           "$BIN" --version
-          for cmd in auth change acs routine skill catalog remediate license models groups inventory environments init docs completion update upgrade enroll worker; do
+          for cmd in auth change acs routine skill catalog remediate license models billing groups inventory environments init docs completion update upgrade enroll worker; do
             "$BIN" "$cmd" --help
           done
           for sub in plan show approve reject deploy revert jobs retry verify status; do
@@ -177,6 +177,9 @@ jobs:
           "$BIN" models list --help
           "$BIN" models byok status --help
           "$BIN" models byok set --help
+          for sub in usage credits; do
+            "$BIN" billing "$sub" --help
+          done
           for sub in list ls clone run logs resume repl; do
             "$BIN" agent "$sub" --help
           done

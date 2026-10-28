@@ -1,6 +1,7 @@
 pub mod acs;
 pub mod agent;
 pub mod auth;
+pub mod billing;
 pub mod catalog;
 pub mod change;
 pub mod completion;
