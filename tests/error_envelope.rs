@@ -44,7 +44,14 @@ fn last_stderr_json(stderr: &str) -> serde_json::Value {
 fn output_json_flag_accepted() {
     let _guard = env_lock();
     let output = cli_bin()
-        .args(["--ci-platform", "local", "--output", "json", "groups", "list"])
+        .args([
+            "--ci-platform",
+            "local",
+            "--output",
+            "json",
+            "groups",
+            "list",
+        ])
         .output()
         .expect("run");
     assert_ne!(
