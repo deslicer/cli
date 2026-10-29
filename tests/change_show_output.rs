@@ -58,9 +58,8 @@ async fn single_output_human_without_json_metadata() {
     single(&server).await;
     let config = TempDir::new().unwrap();
     // Piped stdout defaults to JSON (#221); request human explicitly.
-    let text = stdout(
-        command(&server, &config).args(["--output", "human", "--plan-id", "external-id"]),
-    );
+    let text =
+        stdout(command(&server, &config).args(["--output", "human", "--plan-id", "external-id"]));
     assert!(text.contains("Plan ID: external-id"), "{text}");
     assert!(text.contains("Status: pending_approval"));
     assert!(text.contains("Name: Update Splunk app"));
