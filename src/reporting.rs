@@ -89,6 +89,7 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::BackendUnavailable(_) => "transport",
         CliError::Transport(_) => "transport",
         CliError::PlanNotFound(_) => "plan",
+        CliError::EndpointNotAvailable(_) => "endpoint",
         CliError::HumanApprovalRequired(_) => "approval",
         CliError::AgentRunFailed(_) => "agent",
         CliError::ValidationModelUnavailable

@@ -19,6 +19,7 @@ pub(crate) fn map_observer_error_with_auth(
     body: &str,
     retry_after_secs: Option<u64>,
     auth: AuthRejectionKind,
+    request_path: &str,
 ) -> CliError {
     let message = error_message(body, status);
     if let Some(error) = validation_error(body) {
@@ -43,7 +44,7 @@ pub(crate) fn map_observer_error_with_auth(
                 CliError::Other(forbidden_message(body))
             }
         }
-        404 => CliError::PlanNotFound(message),
+        404 => map_not_found(request_path, body, message),
         409 => crate::change_management::map_http_conflict(
             body,
             message,
@@ -55,6 +56,42 @@ pub(crate) fn map_observer_error_with_auth(
         500..=599 => CliError::BackendUnavailable(status.to_string()),
         _ => CliError::Other(message),
     }
+}
+
+/// Only a plan *lookup* 404 (GET/HEAD the plan resource itself) is "plan not
+/// found". A generic 404 on catalog/upgrade/license/executions means the
+/// Observer host does not expose that route — see issue #183.
+fn map_not_found(request_path: &str, body: &str, message: String) -> CliError {
+    if is_explicit_plan_not_found(body) || is_plan_lookup_path(request_path) {
+        CliError::PlanNotFound(message)
+    } else {
+        CliError::EndpointNotAvailable(message)
+    }
+}
+
+fn is_explicit_plan_not_found(body: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return false;
+    };
+    ["error", "detail", "message"]
+        .iter()
+        .filter_map(|key| value.get(*key).and_then(|field| field.as_str()))
+        .any(|text| {
+            let lowered = text.to_ascii_lowercase();
+            lowered == "plan_not_found"
+                || lowered.contains("plan not found")
+                || lowered.contains("plan does not exist")
+        })
+}
+
+/// `api/v1/plans/{id}` or `v1/plans/{id}` — no further path segments.
+fn is_plan_lookup_path(path: &str) -> bool {
+    let path = path.split('?').next().unwrap_or(path).trim_matches('/');
+    let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+    matches!(
+        parts.as_slice(),
+        ["api", "v1", "plans", id] | ["v1", "plans", id] if !id.is_empty()
+    )
 }
 
 fn validation_error(body: &str) -> Option<CliError> {
@@ -200,6 +237,7 @@ mod tests {
             r#"{"error":"repo_not_allowlisted"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
 
         assert!(matches!(err, CliError::RepoNotAllowlisted(_)));
@@ -213,6 +251,7 @@ mod tests {
             r#"{"error":"forbidden","message":"repository is not allowlisted"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
 
         assert!(matches!(err, CliError::RepoNotAllowlisted(_)));
@@ -225,6 +264,7 @@ mod tests {
             r#"{"error":"identity_attestation_required","message":"attestation required"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
 
         match err {
@@ -240,6 +280,7 @@ mod tests {
             r#"{"error":"compile_failed"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
 
         match err {
@@ -255,6 +296,7 @@ mod tests {
             r#"{"error":"worker_plane_not_enabled"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         match err {
             CliError::Other(message) => {
@@ -271,6 +313,7 @@ mod tests {
             r#"{"error":"duplicate_plan","message":"An active plan already exists for this repository and commit SHA"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         match err {
             CliError::Other(message) => {
@@ -288,6 +331,7 @@ mod tests {
             r#"{"error":"ambiguous_environment","message":"multiple environments"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         match err {
             CliError::AmbiguousBinding(message) => {
@@ -304,6 +348,7 @@ mod tests {
             r#"{"error":"git_backed_mode_enabled","message":"This tenant uses git-backed change management."}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         match &err {
             CliError::GitBackedChangeManagement(message) => {
@@ -322,6 +367,7 @@ mod tests {
             r#"{"error":"validation_timeout"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         assert!(matches!(timeout, CliError::ValidationTimeout));
 
@@ -330,6 +376,7 @@ mod tests {
             r#"{"error":"model_unavailable"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         assert!(matches!(model, CliError::ValidationModelUnavailable));
     }
@@ -341,6 +388,7 @@ mod tests {
             r#"{"error":"invalid_plan_id"}"#,
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         assert!(matches!(err, CliError::InvalidInput(_)));
         assert_eq!(err.exit_code(), 2);
@@ -353,6 +401,7 @@ mod tests {
             "",
             None,
             AuthRejectionKind::Oidc,
+            "",
         );
         match &err {
             CliError::OidcRejected(message) => {
@@ -371,6 +420,7 @@ mod tests {
             "",
             None,
             AuthRejectionKind::ApiToken,
+            "",
         );
         match &err {
             CliError::ApiTokenRejected(message) => {
@@ -383,5 +433,67 @@ mod tests {
         assert!(text.contains("API token rejected"));
         assert!(text.contains("DESLICER_API_TOKEN"));
         assert!(!text.contains("OIDC"));
+    }
+
+    #[test]
+    fn plan_lookup_404_stays_plan_not_found() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            r#"{"detail":"Not Found"}"#,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/missing-plan",
+        );
+        assert!(matches!(err, CliError::PlanNotFound(_)));
+        assert_eq!(err.exit_code(), 11);
+    }
+
+    #[test]
+    fn plan_subresource_404_is_endpoint_not_available() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            r#"{"detail":"Not Found"}"#,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/done/executions",
+        );
+        assert!(matches!(err, CliError::EndpointNotAvailable(_)));
+        assert_eq!(err.exit_code(), 15);
+        assert!(err.to_string().contains("endpoint not available"));
+    }
+
+    #[test]
+    fn catalog_404_is_endpoint_not_available() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            r#"{"detail":"Not Found"}"#,
+            None,
+            AuthRejectionKind::ApiToken,
+            "api/v1/catalog",
+        );
+        assert!(matches!(err, CliError::EndpointNotAvailable(_)));
+        assert_eq!(err.exit_code(), 15);
+    }
+
+    #[test]
+    fn explicit_plan_not_found_code_wins_on_any_path() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            r#"{"error":"plan_not_found","message":"no such plan"}"#,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/x/diff",
+        );
+        assert!(matches!(err, CliError::PlanNotFound(_)));
+        assert_eq!(err.exit_code(), 11);
+    }
+
+    #[test]
+    fn plan_lookup_path_helper_rejects_subresources() {
+        assert!(is_plan_lookup_path("api/v1/plans/abc"));
+        assert!(is_plan_lookup_path("/v1/plans/abc?environment=show"));
+        assert!(!is_plan_lookup_path("api/v1/plans/abc/executions"));
+        assert!(!is_plan_lookup_path("api/v1/catalog"));
+        assert!(!is_plan_lookup_path("api/v1/plans"));
     }
 }

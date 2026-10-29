@@ -47,7 +47,7 @@ impl Client {
                 .await;
         }
         if !status.is_success() {
-            return Err(self.map_http_error(status, &body_text, None));
+            return Err(self.map_http_error(status, &body_text, None, "api/v1/plans"));
         }
         parse_created_plan(&body_text)
     }
