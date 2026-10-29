@@ -18,9 +18,15 @@ async fn run(dir: &Path, observer: &str, args: &[&str]) -> Output {
     tokio::task::spawn_blocking(move || {
         let home = dir.join("home");
         std::fs::create_dir_all(&home).unwrap();
-        Command::new(env!("CARGO_BIN_EXE_deslicer"))
-            .env_clear()
-            .env("HOME", &home)
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_deslicer"));
+        cmd.env_clear();
+        // Windows sockets need SystemRoot (and friends) to initialise.
+        for key in ["SystemRoot", "SYSTEMROOT", "windir", "TEMP", "TMP"] {
+            if let Ok(v) = std::env::var(key) {
+                cmd.env(key, v);
+            }
+        }
+        cmd.env("HOME", &home)
             .env("PATH", std::env::var("PATH").unwrap_or_default())
             .env("OBSERVER_API_URL", format!("{observer}/"))
             .env("DESLICER_API_TOKEN", "dap_tools_test_key")
