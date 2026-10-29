@@ -76,12 +76,18 @@ fn is_explicit_plan_not_found(body: &str) -> bool {
     ["error", "detail", "message"]
         .iter()
         .filter_map(|key| value.get(*key).and_then(|field| field.as_str()))
-        .any(|text| {
-            let lowered = text.to_ascii_lowercase();
-            lowered == "plan_not_found"
-                || lowered.contains("plan not found")
-                || lowered.contains("plan does not exist")
-        })
+        .any(is_plan_absent_text)
+}
+
+/// Observer plan-lock helpers return `Plan <uuid> not found` (UUID between the
+/// words), which does not contain the contiguous substring "plan not found".
+fn is_plan_absent_text(text: &str) -> bool {
+    let lowered = text.to_ascii_lowercase();
+    let trimmed = lowered.trim();
+    trimmed == "plan_not_found"
+        || trimmed.contains("plan not found")
+        || trimmed.contains("plan does not exist")
+        || (trimmed.starts_with("plan ") && trimmed.ends_with(" not found"))
 }
 
 /// `api/v1/plans/{id}` or `v1/plans/{id}` — no further path segments.
@@ -489,11 +495,66 @@ mod tests {
     }
 
     #[test]
+    fn approve_404_with_observer_plan_absent_message_is_plan_not_found() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            r#"{"error":"not_found","message":"Plan 00000000-0000-0000-0000-000000000000 not found"}"#,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/00000000-0000-0000-0000-000000000000/approve",
+        );
+        assert!(matches!(err, CliError::PlanNotFound(_)), "got {err:?}");
+        assert_eq!(err.exit_code(), 11);
+        assert!(err.to_string().contains("plan not found"));
+        assert!(!err.to_string().contains("endpoint not available"));
+    }
+
+    #[test]
+    fn approve_404_without_plan_wording_stays_endpoint_not_available() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            r#"{"error":"not_found","message":"Not Found"}"#,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/00000000-0000-0000-0000-000000000000/approve",
+        );
+        assert!(
+            matches!(err, CliError::EndpointNotAvailable(_)),
+            "got {err:?}"
+        );
+        assert_eq!(err.exit_code(), 15);
+    }
+
+    #[test]
+    fn catalog_404_html_stays_endpoint_not_available() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            "<!DOCTYPE html><html><body>404</body></html>",
+            None,
+            AuthRejectionKind::ApiToken,
+            "api/v1/catalog",
+        );
+        assert!(matches!(err, CliError::EndpointNotAvailable(_)));
+        assert_eq!(err.exit_code(), 15);
+    }
+
+    #[test]
     fn plan_lookup_path_helper_rejects_subresources() {
         assert!(is_plan_lookup_path("api/v1/plans/abc"));
         assert!(is_plan_lookup_path("/v1/plans/abc?environment=show"));
         assert!(!is_plan_lookup_path("api/v1/plans/abc/executions"));
         assert!(!is_plan_lookup_path("api/v1/catalog"));
         assert!(!is_plan_lookup_path("api/v1/plans"));
+    }
+
+    #[test]
+    fn plan_absent_text_matches_uuid_between_words() {
+        assert!(is_plan_absent_text(
+            "Plan 00000000-0000-0000-0000-000000000000 not found"
+        ));
+        assert!(is_plan_absent_text("plan not found"));
+        assert!(is_plan_absent_text("plan_not_found"));
+        assert!(!is_plan_absent_text("not_found"));
+        assert!(!is_plan_absent_text("Not Found"));
     }
 }
