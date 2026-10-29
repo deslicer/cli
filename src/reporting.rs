@@ -197,6 +197,7 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::EndpointNotAvailable(_) => "endpoint",
         CliError::HumanApprovalRequired(_) => "approval",
         CliError::AgentRunFailed(_) => "agent",
+        CliError::DeviceSessionRequired(_) => "auth",
         CliError::ValidationModelUnavailable
         | CliError::ValidationTimeout
         | CliError::ValidationUnavailable => "validation",
@@ -222,6 +223,7 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
         CliError::EndpointNotAvailable(_) => "endpoint.not_available",
         CliError::HumanApprovalRequired(_) => "approval.required",
         CliError::AgentRunFailed(_) => "agent.run_failed",
+        CliError::DeviceSessionRequired(_) => "auth.device_session_required",
         CliError::ValidationModelUnavailable => "validation.model_unavailable",
         CliError::ValidationTimeout => "validation.timeout",
         CliError::ValidationUnavailable => "validation.unavailable",
@@ -234,6 +236,7 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
 pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
     match err {
         CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
+        CliError::DeviceSessionRequired(_) => Some("deslicer auth login"),
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
         _ => None,
     }
@@ -243,6 +246,9 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
     match err {
         CliError::Other(msg) if msg.contains("not logged in") => {
             Some("run auth login and approve the code in the portal")
+        }
+        CliError::DeviceSessionRequired(_) => {
+            Some("run deslicer auth login and approve the code in the portal")
         }
         CliError::ApiTokenRejected(_) => {
             Some("mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login")
@@ -523,6 +529,21 @@ mod tests {
             .unwrap()
             .contains("DESLICER_API_TOKEN"));
         assert!(!value["error"]["message"].as_str().unwrap().contains("OIDC"));
+    }
+
+    #[test]
+    fn device_session_required_json_envelope() {
+        let err = CliError::DeviceSessionRequired(
+            "no active device session. Run `deslicer auth login` first".into(),
+        );
+        let value = cli_error_json(&err);
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["error"]["code"], "auth.device_session_required");
+        assert_eq!(value["error"]["kind"], "auth");
+        assert_eq!(value["error"]["exit_code"], 4);
+        assert_eq!(value["error"]["next_command"], "deslicer auth login");
+        assert!(value["error"]["hint"].is_string());
+        assert_eq!(value["error"]["retryable"], false);
     }
 
     #[test]

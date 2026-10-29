@@ -43,6 +43,11 @@ pub enum CliError {
     HumanApprovalRequired(String),
     #[error("agent run failed: {0}")]
     AgentRunFailed(String),
+    /// Command needs an interactive device session (`deslicer auth login`), not
+    /// a static API token. Distinct from "not logged in" so agents get a stable
+    /// `auth.device_session_required` code (issue #234).
+    #[error("{0}")]
+    DeviceSessionRequired(String),
     #[error("plan validation model unavailable")]
     ValidationModelUnavailable,
     #[error("plan validation timed out")]
@@ -58,7 +63,9 @@ pub enum CliError {
 impl CliError {
     pub fn exit_code(&self) -> i32 {
         match self {
-            CliError::OidcRejected(_) | CliError::ApiTokenRejected(_) => 4,
+            CliError::OidcRejected(_)
+            | CliError::ApiTokenRejected(_)
+            | CliError::DeviceSessionRequired(_) => 4,
             CliError::RepoNotAllowlisted(_) => 5,
             CliError::EnvironmentNotBound(_) => 6,
             CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => 7,
@@ -132,6 +139,7 @@ mod tests {
             CliError::EndpointNotAvailable("x".into()),
             CliError::HumanApprovalRequired("x".into()),
             CliError::AgentRunFailed("x".into()),
+            CliError::DeviceSessionRequired("no active device session".into()),
             CliError::ValidationModelUnavailable,
             CliError::ValidationTimeout,
             CliError::ValidationUnavailable,
@@ -181,6 +189,7 @@ mod tests {
                 | CliError::EndpointNotAvailable(_)
                 | CliError::HumanApprovalRequired(_)
                 | CliError::AgentRunFailed(_)
+                | CliError::DeviceSessionRequired(_)
                 | CliError::ValidationModelUnavailable
                 | CliError::ValidationTimeout
                 | CliError::ValidationUnavailable
@@ -188,5 +197,14 @@ mod tests {
                 | CliError::Other(_) => err.exit_code(),
             };
         }
+    }
+
+    #[test]
+    fn device_session_required_exits_4() {
+        let err = CliError::DeviceSessionRequired(
+            "no active device session. Run `deslicer auth login` first".into(),
+        );
+        assert_eq!(err.exit_code(), 4);
+        assert!(!err.retryable());
     }
 }

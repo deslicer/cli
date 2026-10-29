@@ -62,7 +62,7 @@ pub struct ModelsClient {
 impl ModelsClient {
     pub fn from_ctx(ctx: &Ctx) -> Result<Self, CliError> {
         let session = load_active_session()?.ok_or_else(|| {
-            CliError::Other(
+            CliError::DeviceSessionRequired(
                 "no active device session. Run `deslicer auth login` first \
                  (models are not available with a static API token)."
                     .into(),

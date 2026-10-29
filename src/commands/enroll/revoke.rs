@@ -26,7 +26,7 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     let jti = parse_jti(&args.jti)?;
     let (session, client) = authenticate(&ctx, None, None).await?;
     if !session.is_device_session() {
-        return Err(CliError::Other(
+        return Err(CliError::DeviceSessionRequired(
             "`enroll revoke` requires `deslicer auth login` (device session)".into(),
         ));
     }
