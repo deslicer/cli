@@ -6,7 +6,8 @@ use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::commands::auth::format::{
     print_output, whoami_ci_human, whoami_device_human, whoami_none_human, whoami_token_human,
 };
-use crate::commands::pipeline::map_cli_error;
+use crate::commands::pipeline::{authenticate, map_cli_error};
+use crate::errors::CliError;
 use crate::reporting::{emit_oidc_error, oidc_exit_code};
 use crate::Ctx;
 
@@ -15,7 +16,7 @@ pub struct Args {}
 
 pub async fn run(ctx: Ctx, _args: Args) -> i32 {
     match AuthCredentialResolver::new(&ctx).resolve() {
-        Ok(AuthCredential::DirectObserver { .. }) => print_direct_whoami(&ctx),
+        Ok(AuthCredential::DirectObserver { .. }) => print_direct_whoami(ctx).await,
         Ok(AuthCredential::CiOidc { platform }) => print_ci_whoami(&ctx, platform).await,
         Ok(AuthCredential::Device(session) | AuthCredential::ExpiredDevice(session)) => {
             print_device_whoami(&ctx, &session)
@@ -25,19 +26,47 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
     }
 }
 
-fn print_direct_whoami(ctx: &Ctx) -> i32 {
-    let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
-    print_output(
-        ctx.log_format,
-        &json!({
-            "ok": true,
-            "logged_in": true,
-            "identity": "observer_api_token",
-            "observer_api_url": url,
-        }),
-        &whoami_token_human(url),
-    );
-    0
+/// Probe Observer with the static API token so a rejected key is not reported
+/// as logged in (issue #209). `GET api/v1/groups` is a cheap authenticated read.
+async fn print_direct_whoami(ctx: Ctx) -> i32 {
+    let url = ctx
+        .observer_api_url
+        .as_ref()
+        .map(|u| u.as_str().to_string());
+    let (_session, client) = match authenticate(&ctx, None, None).await {
+        Ok(pair) => pair,
+        Err(err) => return map_cli_error(ctx.log_format, err),
+    };
+    match client.list_groups().await {
+        Ok(_) => {
+            print_output(
+                ctx.log_format,
+                &json!({
+                    "ok": true,
+                    "logged_in": true,
+                    "identity": "observer_api_token",
+                    "observer_api_url": url,
+                }),
+                &whoami_token_human(url.as_deref()),
+            );
+            0
+        }
+        Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
+            print_output(
+                ctx.log_format,
+                &json!({
+                    "ok": false,
+                    "logged_in": false,
+                    "identity": "none",
+                    "observer_api_url": url,
+                    "hint": "DESLICER_API_TOKEN was rejected by Observer",
+                }),
+                &whoami_none_human(),
+            );
+            map_cli_error(ctx.log_format, err)
+        }
+        Err(err) => map_cli_error(ctx.log_format, err),
+    }
 }
 
 async fn print_ci_whoami(ctx: &Ctx, platform: CiPlatform) -> i32 {

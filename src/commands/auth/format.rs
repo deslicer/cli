@@ -78,8 +78,10 @@ pub fn workspace_label<'a>(tenant_id: &'a str, tenant_slug: Option<&'a str>) -> 
 
 pub fn status_token_human(observer_api_url: Option<&str>) -> String {
     match observer_api_url {
-        Some(url) => format!("Identity: observer_api_token\nBackend: {url}\n"),
-        None => "Identity: observer_api_token\n".to_string(),
+        Some(url) => {
+            format!("Identity: observer_api_token\nToken: present (not verified)\nBackend: {url}\n")
+        }
+        None => "Identity: observer_api_token\nToken: present (not verified)\n".to_string(),
     }
 }
 
