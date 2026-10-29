@@ -73,18 +73,33 @@ pub struct ExecutionQueued {
     pub jobs_total: i64,
 }
 
-/// Per-host (or per-item) job row from an execution payload.
+/// Per-host job row from Observer `JobSummary` (`GET /api/v1/executions/{id}`).
+///
+/// Observer sends `job_id` and `hostname`; `id` / `host` stay accepted as
+/// aliases for older payloads. `retry_count` counts manual operator retries;
+/// `attempt` is the delivery attempt for the current run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionJob {
+    #[serde(alias = "job_id")]
     pub id: String,
     #[serde(default)]
     pub status: String,
     #[serde(default)]
     pub retry_count: i64,
     #[serde(default)]
+    pub attempt: Option<i64>,
+    #[serde(default, alias = "hostname")]
     pub host: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub failure_reason: Option<String>,
+    #[serde(default)]
+    pub phase_group_id: Option<String>,
+    #[serde(default)]
+    pub queued_at: Option<String>,
+    #[serde(default)]
+    pub completed_at: Option<String>,
 }
 
 /// Observer `ExecutionSummary` (subset) from `GET /api/v1/executions/{id}`.
