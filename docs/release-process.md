@@ -74,6 +74,11 @@ version as-is (even if `feat` commits in the same window would imply a higher
 bump). Explicit `workflow_dispatch` bumps (`patch` / `minor` / `major`) still
 compute from the last tag when Cargo is not already ahead.
 
+If a bump PR for the same tag is already open, later runs force-refresh that
+PR's branch from `main` instead of opening another one. Cut release runs are
+serialised (`concurrency: cut-release`) and only main-branch Quality Gate runs
+trigger it, so PR gates no longer show up as skipped Cut release runs.
+
 ## Step 2 — release.yml (automatic)
 
 ### Build matrix
