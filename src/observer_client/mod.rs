@@ -1,9 +1,9 @@
 //! HTTP client for the Observer API, reached either directly (mgmt plane)
 //! or through the deslicer-ai CI proxy (`/api/cli/observer/…`).
 //!
-//! The client is contract-agnostic about the base URL: `join_api_path` keeps
-//! the proxy prefix when the base carries a trailing slash, so the same
-//! request paths work in both modes.
+//! The client is contract-agnostic about the base URL: `http::join_api_path`
+//! preserves a path prefix whether or not the base ends with `/`, so the same
+//! request paths work for a direct Observer root and the DAI CLI proxy.
 
 mod acs;
 mod app_provenance;
@@ -635,10 +635,7 @@ impl Client {
     }
 
     fn request_url(&self, path: &str) -> Result<url::Url, CliError> {
-        let mut url = self
-            .base
-            .join(path)
-            .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))?;
+        let mut url = crate::http::join_api_path(&self.base, path)?;
         crate::http::assert_url_allowed(&url)?;
         if let Some(env) = &self.environment {
             url.query_pairs_mut().append_pair("environment", env);
@@ -660,6 +657,7 @@ fn parse_change_plan_body(bytes: &[u8]) -> Result<ChangePlan, CliError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use url::Url;
 
     #[test]
     fn parses_wrapped_approve_response() {
@@ -667,5 +665,27 @@ mod tests {
         let plan = parse_change_plan_body(body).expect("plan");
         assert_eq!(plan.external_id(), "ext");
         assert_eq!(plan.status, "approved_unsigned");
+    }
+
+    #[test]
+    fn request_url_preserves_proxy_prefix_without_trailing_slash() {
+        let base = Url::parse("https://staging-api.deslicer.ai/api/cli/observer").expect("url");
+        let client = Client::new(base, "tok".to_string());
+        let url = client.request_url("api/v1/groups").expect("join");
+        assert_eq!(
+            url.as_str(),
+            "https://staging-api.deslicer.ai/api/cli/observer/api/v1/groups"
+        );
+    }
+
+    #[test]
+    fn request_url_preserves_proxy_prefix_with_trailing_slash() {
+        let base = Url::parse("https://staging-api.deslicer.ai/api/cli/observer/").expect("url");
+        let client = Client::new(base, "tok".to_string());
+        let url = client.request_url("api/v1/groups").expect("join");
+        assert_eq!(
+            url.as_str(),
+            "https://staging-api.deslicer.ai/api/cli/observer/api/v1/groups"
+        );
     }
 }

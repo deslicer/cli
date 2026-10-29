@@ -70,9 +70,7 @@ async fn file_sha256_matches(path: &Path, expected_sha256: &str) -> Result<bool,
 }
 
 async fn fetch_tool_bytes(base: &url::Url, token: &str) -> Result<Vec<u8>, CliError> {
-    let url = base
-        .join("api/v1/tools/download")
-        .map_err(|e| CliError::Transport(format!("invalid download URL: {e}")))?;
+    let url = crate::http::join_api_path(base, "api/v1/tools/download")?;
     crate::http::assert_url_allowed(&url)?;
 
     let response = crate::http::client()

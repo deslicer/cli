@@ -488,6 +488,27 @@ async fn client_get_plan_404_maps_to_exit_11() {
 }
 
 #[tokio::test]
+async fn client_preserves_proxy_path_prefix_without_trailing_slash() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/cli/observer/api/v1/groups"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // No trailing slash — Url::join would otherwise drop `observer`.
+    let base = url::Url::parse(&format!("{}/api/cli/observer", server.uri())).unwrap();
+    assert!(
+        !base.as_str().ends_with('/'),
+        "repro requires a base without trailing slash"
+    );
+    let client = Client::new(base, "tools-token".to_string());
+    let groups = client.list_groups().await.expect("groups");
+    assert!(groups.is_empty());
+}
+
+#[tokio::test]
 async fn client_catalog_404_maps_to_exit_15_not_plan_not_found() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

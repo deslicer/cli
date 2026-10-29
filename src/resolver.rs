@@ -151,8 +151,7 @@ fn repo_from_ci(platform: CiPlatform) -> Option<String> {
 }
 
 fn join_api_path(base: &url::Url, path: &str) -> Result<url::Url, CliError> {
-    base.join(path)
-        .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))
+    crate::http::join_api_path(base, path)
 }
 
 fn map_resolver_error(
