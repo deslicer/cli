@@ -233,6 +233,8 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
 
 pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
     match err {
+        // Already inside auth login / non-interactive — pointing back at login is useless.
+        CliError::Other(msg) if msg.contains("without a TTY") => None,
         CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
         _ => None,
@@ -241,6 +243,9 @@ pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
 
 pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
     match err {
+        CliError::Other(msg) if msg.contains("without a TTY") => {
+            Some("set OBSERVER_API_URL and DESLICER_API_TOKEN, or run auth login from a TTY")
+        }
         CliError::Other(msg) if msg.contains("not logged in") => {
             Some("run auth login and approve the code in the portal")
         }

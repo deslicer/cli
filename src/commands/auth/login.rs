@@ -3,9 +3,11 @@ use serde_json::json;
 
 use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
 use crate::commands::auth::format::{login_human, print_output};
-use crate::commands::pipeline::{authenticate, map_cli_error};
+use crate::commands::auth::probe::identity_probe_forbidden;
+use crate::commands::pipeline::{authenticate, map_cli_error, AuthenticatedSession};
 use crate::errors::CliError;
 use crate::interactive;
+use crate::observer_client::Client;
 use crate::token_store::{CompositeTokenStore, TokenStore};
 use crate::Ctx;
 
@@ -33,18 +35,32 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     }
 
     match authenticate(&ctx, args.environment.as_deref(), None).await {
-        Ok((session, _client)) => {
-            print_login(
-                ctx,
-                session.platform.header_value(),
-                session.backend.observer_api_url.as_str(),
-                &session.backend.resolution_path,
-                &session.backend.audience,
-            );
-            0
-        }
+        Ok((session, client)) => confirm_login(ctx, session, client).await,
         Err(err) => map_cli_error(ctx.log_format, err),
     }
+}
+
+/// For static API tokens, probe `GET /me` before claiming "Logged in" (issue #237 / #217).
+async fn confirm_login(ctx: Ctx, session: AuthenticatedSession, client: Client) -> i32 {
+    if session.is_observer_api_token() {
+        match client.get_me().await {
+            Ok(_) => {}
+            Err(err) if identity_probe_forbidden(&err) => {}
+            Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
+                return map_cli_error(ctx.log_format, err);
+            }
+            Err(err) => return map_cli_error(ctx.log_format, err),
+        }
+    }
+
+    print_login(
+        ctx,
+        session.platform.header_value(),
+        session.backend.observer_api_url.as_str(),
+        &session.backend.resolution_path,
+        &session.backend.audience,
+    );
+    0
 }
 
 async fn device_login(ctx: Ctx) -> i32 {
@@ -69,10 +85,13 @@ async fn device_login(ctx: Ctx) -> i32 {
 }
 
 fn local_login_error() -> CliError {
+    // Prefix with "not logged in" so exit_code → 4 / auth.not_logged_in.
+    // Avoid the substring "OIDC" so reporting does not mis-label this as auth.oidc
+    // (issue #237). Hint names DESLICER_API_TOKEN via cli_error_hint.
     CliError::Other(
-        "cannot run interactive device login without a TTY (CI=1 or non-interactive stdout/stdin). \
-         For automation, set OBSERVER_API_URL and DESLICER_API_TOKEN, or use real CI OIDC \
-         with --ci-platform github|gitlab|azure|bitbucket."
+        "not logged in: cannot run interactive device login without a TTY \
+         (CI=1 or non-interactive stdout/stdin). Set OBSERVER_API_URL and \
+         DESLICER_API_TOKEN for automation, or run from a real terminal."
             .into(),
     )
 }
