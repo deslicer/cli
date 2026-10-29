@@ -53,16 +53,32 @@ fn stdout(cmd: &mut Command) -> String {
 }
 
 #[tokio::test]
-async fn single_defaults_to_human_without_json_metadata() {
+async fn single_output_human_without_json_metadata() {
     let server = MockServer::start().await;
     single(&server).await;
     let config = TempDir::new().unwrap();
-    let text = stdout(command(&server, &config).args(["--plan-id", "external-id"]));
+    // Piped stdout defaults to JSON (#221); request human explicitly.
+    let text = stdout(
+        command(&server, &config).args(["--output", "human", "--plan-id", "external-id"]),
+    );
     assert!(text.contains("Plan ID: external-id"), "{text}");
     assert!(text.contains("Status: pending_approval"));
     assert!(text.contains("Name: Update Splunk app"));
     assert!(text.contains("Summary: Two configuration changes"));
     assert!(!text.contains('{'), "{text}");
+}
+
+#[tokio::test]
+async fn single_piped_defaults_to_json() {
+    let server = MockServer::start().await;
+    single(&server).await;
+    let config = TempDir::new().unwrap();
+    let text = stdout(command(&server, &config).args(["--plan-id", "external-id"]));
+    let records: Vec<Value> = serde_json::Deserializer::from_str(&text)
+        .into_iter()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(records[0], plan());
 }
 
 #[tokio::test]
@@ -97,10 +113,10 @@ async fn empty_list_has_a_human_message_but_json_stays_an_array() {
         .await;
     let config = TempDir::new().unwrap();
     assert_eq!(
-        stdout(&mut command(&server, &config)),
+        stdout(command(&server, &config).args(["--output", "human"])),
         "No change plans found.\n"
     );
-    let text = stdout(command(&server, &config).args(["--log-format", "json"]));
+    let text = stdout(command(&server, &config).args(["--output", "json"]));
     assert_eq!(serde_json::from_str::<Value>(&text).unwrap(), json!([]));
 }
 
@@ -155,7 +171,7 @@ async fn human_github_without_output_file_does_not_fall_back_to_json() {
     let config = TempDir::new().unwrap();
     let text = stdout(
         command(&server, &config)
-            .args(["--plan-id", "external-id"])
+            .args(["--output", "human", "--plan-id", "external-id"])
             .env("GITHUB_ACTIONS", "true"),
     );
     assert!(text.contains("Plan ID: external-id"));
@@ -186,7 +202,7 @@ async fn human_preserves_other_ci_sinks_without_json_fallback() {
     let dotenv = config.path().join("gitlab.env");
     let text = stdout(
         command(&server, &config)
-            .args(["--plan-id", "external-id"])
+            .args(["--output", "human", "--plan-id", "external-id"])
             .env("GITLAB_CI", "true")
             .env("DESLICER_DOTENV_PATH", &dotenv),
     );
@@ -196,19 +212,19 @@ async fn human_preserves_other_ci_sinks_without_json_fallback() {
         .contains("plan_id=external-id\n"));
     let text = stdout(
         command(&server, &config)
-            .args(["--plan-id", "external-id"])
+            .args(["--output", "human", "--plan-id", "external-id"])
             .env("GITLAB_CI", "true"),
     );
     assert!(!text.contains('{'));
     let text = stdout(
         command(&server, &config)
-            .args(["--plan-id", "external-id"])
+            .args(["--output", "human", "--plan-id", "external-id"])
             .env("TF_BUILD", "true"),
     );
     assert!(text.contains("##vso[task.setvariable variable=plan_id]external-id"));
     let text = stdout(
         command(&server, &config)
-            .args(["--plan-id", "external-id"])
+            .args(["--output", "human", "--plan-id", "external-id"])
             .env("BITBUCKET_BUILD_NUMBER", "1")
             .env("BITBUCKET_PIPE_STORAGE_DIR", config.path()),
     );
@@ -226,7 +242,7 @@ async fn human_single_reports_ci_write_failure() {
     single(&server).await;
     let config = TempDir::new().unwrap();
     let result = command(&server, &config)
-        .args(["--plan-id", "external-id"])
+        .args(["--output", "human", "--plan-id", "external-id"])
         .env("GITHUB_ACTIONS", "true")
         .env("GITHUB_OUTPUT", config.path())
         .output()
