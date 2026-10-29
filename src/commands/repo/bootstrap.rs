@@ -382,22 +382,21 @@ fn print_check_results(
 
 fn validate_args(args: &Args) -> Result<(), CliError> {
     if args.installation <= 0 {
-        return Err(CliError::Other(
+        return Err(CliError::InvalidInput(
             "--installation must be a positive GitHub App installation id".into(),
         ));
     }
     if args.check && args.yes {
-        return Err(CliError::Other(
+        return Err(CliError::InvalidInput(
             "--check and --yes are mutually exclusive".into(),
         ));
     }
     if !args.check {
-        let name = args
-            .name
-            .as_deref()
-            .ok_or_else(|| CliError::Other("--name is required unless --check is set".into()))?;
+        let name = args.name.as_deref().ok_or_else(|| {
+            CliError::InvalidInput("--name is required unless --check is set".into())
+        })?;
         if !valid_repo_name(name) {
-            return Err(CliError::Other(
+            return Err(CliError::InvalidInput(
                 "--name must be letters, digits, dots, hyphens, or underscores (1–100; not '.' or '..')"
                     .into(),
             ));
@@ -405,7 +404,7 @@ fn validate_args(args: &Args) -> Result<(), CliError> {
     } else if let Some(name) = args.name.as_deref() {
         // Allow org/name or short name for focus matching.
         if name.is_empty() {
-            return Err(CliError::Other("--name must not be empty".into()));
+            return Err(CliError::InvalidInput("--name must not be empty".into()));
         }
     }
     if let Some(description) = args.description.as_deref() {
@@ -413,16 +412,18 @@ fn validate_args(args: &Args) -> Result<(), CliError> {
     }
     if let Some(repo_id) = args.repo_id {
         if !args.check {
-            return Err(CliError::Other(
+            return Err(CliError::InvalidInput(
                 "--repo-id is only valid with --check".into(),
             ));
         }
         if repo_id <= 0 {
-            return Err(CliError::Other("--repo-id must be positive".into()));
+            return Err(CliError::InvalidInput("--repo-id must be positive".into()));
         }
     }
     if args.dir.is_some() && !args.check {
-        return Err(CliError::Other("--dir is only valid with --check".into()));
+        return Err(CliError::InvalidInput(
+            "--dir is only valid with --check".into(),
+        ));
     }
     Ok(())
 }
@@ -458,7 +459,7 @@ pub(crate) fn valid_repo_name(name: &str) -> bool {
 
 fn validate_description(description: &str) -> Result<(), CliError> {
     if description.len() > MAX_DESCRIPTION_LEN || description.chars().any(char::is_control) {
-        return Err(CliError::Other(
+        return Err(CliError::InvalidInput(
             "--description must be at most 350 characters with no control characters".into(),
         ));
     }
@@ -553,6 +554,7 @@ mod tests {
         })
         .expect_err("mutex");
         assert!(err.to_string().contains("mutually exclusive"));
+        assert_eq!(err.exit_code(), 2);
 
         let err = validate_args(&Args {
             installation: 1,
@@ -565,6 +567,24 @@ mod tests {
         })
         .expect_err("name");
         assert!(err.to_string().contains("--name is required"));
+        assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn installation_zero_is_usage_exit_2() {
+        let err = validate_args(&Args {
+            installation: 0,
+            name: None,
+            description: None,
+            yes: false,
+            check: true,
+            repo_id: None,
+            dir: None,
+        })
+        .expect_err("installation");
+        assert!(err.to_string().contains("positive"));
+        assert_eq!(err.exit_code(), 2);
+        assert!(matches!(err, CliError::InvalidInput(_)));
     }
 
     #[test]
