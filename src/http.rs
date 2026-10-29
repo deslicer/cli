@@ -96,6 +96,72 @@ fn ensure_directory_base(base: &Url) -> Url {
     with_slash
 }
 
+const MAX_RAW_ERROR_BODY_CHARS: usize = 200;
+
+/// Operator-facing summary of an HTTP error body.
+///
+/// JSON payloads keep their `detail` / `message` / `error` field. HTML and other
+/// non-JSON bodies are truncated so a portal 404 page does not flood stderr or
+/// `--log-format json` output.
+pub fn http_error_message(body: &str, status: reqwest::StatusCode) -> String {
+    http_error_message_with_path(body, status, None)
+}
+
+/// Like [`http_error_message`], optionally including the request path (no host).
+pub fn http_error_message_with_path(
+    body: &str,
+    status: reqwest::StatusCode,
+    request_path: Option<&str>,
+) -> String {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
+        for key in ["detail", "message", "error"] {
+            if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
+                if !text.is_empty() {
+                    return text.to_string();
+                }
+            }
+        }
+    }
+
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return format!("HTTP {status}");
+    }
+
+    let mut parts = vec![format!("HTTP {status}")];
+    if looks_like_html(trimmed) {
+        parts.push("content-type text/html".into());
+        if let Some(path) = request_path.map(str::trim).filter(|p| !p.is_empty()) {
+            parts.push(format!("path {path}"));
+        }
+        // Drop the HTML body entirely — even a 200-char prefix is noisy markup.
+        parts
+            .push("Is OBSERVER_API_URL (or DESLICER_API_URL) pointing at the Observer API?".into());
+        return parts.join("; ");
+    }
+
+    if let Some(path) = request_path.map(str::trim).filter(|p| !p.is_empty()) {
+        parts.push(format!("path {path}"));
+    }
+    let snippet = truncate_chars(trimmed, MAX_RAW_ERROR_BODY_CHARS);
+    format!("{}: {snippet}", parts.join("; "))
+}
+
+fn looks_like_html(body: &str) -> bool {
+    let lowered = body.to_ascii_lowercase();
+    let trimmed = lowered.trim_start();
+    trimmed.starts_with('<') || trimmed.contains("<!doctype") || trimmed.contains("<html")
+}
+
+fn truncate_chars(text: &str, max_chars: usize) -> String {
+    let mut truncated = text.chars().take(max_chars).collect::<String>();
+    if text.chars().count() > max_chars {
+        truncated.push('…');
+    }
+    // Collapse runs of whitespace so a minified HTML page stays readable.
+    truncated.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn is_loopback_host(url: &Url) -> bool {
     match url.host() {
         Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
@@ -232,5 +298,55 @@ mod tests {
         let base = parse("https://observer.example.test");
         let joined = join_api_path(&base, "api/v1/me").expect("join");
         assert_eq!(joined.as_str(), "https://observer.example.test/api/v1/me");
+    }
+
+    #[test]
+    fn http_error_message_keeps_json_fields() {
+        let msg = http_error_message(
+            r#"{"error":"not_found","message":"Plan abc not found"}"#,
+            reqwest::StatusCode::NOT_FOUND,
+        );
+        assert_eq!(msg, "Plan abc not found");
+    }
+
+    #[test]
+    fn http_error_message_drops_html_404_body() {
+        let html = format!(
+            "<!DOCTYPE html><html lang=\"en\" data-scroll-behavior=\"smooth\"><body>{}</body></html>",
+            "x".repeat(4_000)
+        );
+        let msg = http_error_message_with_path(
+            &html,
+            reqwest::StatusCode::NOT_FOUND,
+            Some("api/v1/groups"),
+        );
+        assert!(msg.contains("HTTP 404 Not Found"));
+        assert!(msg.contains("content-type text/html"));
+        assert!(msg.contains("path api/v1/groups"));
+        assert!(msg.contains("OBSERVER_API_URL"));
+        assert!(!msg.contains("data-scroll-behavior"));
+        assert!(!msg.contains("<!DOCTYPE"));
+        assert!(msg.len() < 250);
+    }
+
+    #[test]
+    fn http_error_message_drops_html_without_path() {
+        // oidc_exchange / resolver call http_error_message without a path.
+        let html = "<!DOCTYPE html><html><body>not found</body></html>";
+        let msg = http_error_message(html, reqwest::StatusCode::NOT_FOUND);
+        assert!(msg.contains("HTTP 404 Not Found"));
+        assert!(msg.contains("content-type text/html"));
+        assert!(msg.contains("OBSERVER_API_URL"));
+        assert!(!msg.contains("<!DOCTYPE"));
+        assert!(!msg.contains("<html"));
+    }
+
+    #[test]
+    fn http_error_message_truncates_plain_non_json_body() {
+        let body = "plain ".repeat(80);
+        let msg = http_error_message(&body, reqwest::StatusCode::BAD_GATEWAY);
+        assert!(msg.contains("HTTP 502 Bad Gateway"));
+        assert!(msg.contains('…'));
+        assert!(msg.len() < 280);
     }
 }

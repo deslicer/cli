@@ -21,7 +21,7 @@ pub(crate) fn map_observer_error_with_auth(
     auth: AuthRejectionKind,
     request_path: &str,
 ) -> CliError {
-    let message = error_message(body, status);
+    let message = error_message_with_path(body, status, request_path);
     if let Some(error) = validation_error(body) {
         return error;
     }
@@ -128,20 +128,11 @@ pub(crate) fn is_duplicate_plan_error(body: &str) -> bool {
 }
 
 pub(crate) fn error_message(body: &str, status: reqwest::StatusCode) -> String {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
-        for key in ["detail", "message", "error"] {
-            if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
-                if !text.is_empty() {
-                    return text.to_string();
-                }
-            }
-        }
-    }
-    if body.trim().is_empty() {
-        format!("HTTP {status}")
-    } else {
-        body.trim().to_string()
-    }
+    crate::http::http_error_message(body, status)
+}
+
+fn error_message_with_path(body: &str, status: reqwest::StatusCode, request_path: &str) -> String {
+    crate::http::http_error_message_with_path(body, status, Some(request_path))
 }
 
 fn mentions_environment(text: &str) -> bool {
@@ -554,5 +545,58 @@ mod tests {
         assert!(is_plan_absent_text("plan_not_found"));
         assert!(!is_plan_absent_text("not_found"));
         assert!(!is_plan_absent_text("Not Found"));
+    }
+
+    #[test]
+    fn html_404_body_is_sanitized_not_dumped() {
+        let html = format!(
+            "<!DOCTYPE html><html lang=\"en\" data-scroll-behavior=\"smooth\"><head><title>404</title></head><body>{}</body></html>",
+            "missing ".repeat(800)
+        );
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            &html,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/groups",
+        );
+        let CliError::EndpointNotAvailable(message) = err else {
+            panic!("expected EndpointNotAvailable");
+        };
+        assert!(message.contains("HTTP 404"));
+        assert!(message.contains("content-type text/html"));
+        assert!(message.contains("path api/v1/groups"));
+        assert!(message.contains("OBSERVER_API_URL"));
+        assert!(!message.contains("data-scroll-behavior"));
+        assert!(!message.contains("<!DOCTYPE"));
+        assert!(message.len() < 250);
+    }
+
+    #[test]
+    fn plan_lookup_html_404_message_is_sanitized_not_dumped() {
+        // change status against a portal HTML 404 used to embed KBs of markup in
+        // "plan not found: <!DOCTYPE html>…". Sanitization must apply on plan
+        // lookup paths too, not only EndpointNotAvailable routes.
+        let html = format!(
+            "<!DOCTYPE html><html lang=\"en\" data-scroll-behavior=\"smooth\"><body>{}</body></html>",
+            "missing ".repeat(800)
+        );
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            &html,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/00000000-0000-0000-0000-000000000000",
+        );
+        let CliError::PlanNotFound(message) = err else {
+            panic!("expected PlanNotFound");
+        };
+        assert!(message.contains("HTTP 404"));
+        assert!(message.contains("content-type text/html"));
+        assert!(message.contains("path api/v1/plans/"));
+        assert!(message.contains("OBSERVER_API_URL"));
+        assert!(!message.contains("<!DOCTYPE"));
+        assert!(!message.contains("data-scroll-behavior"));
+        assert!(message.len() < 250);
     }
 }
