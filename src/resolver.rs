@@ -170,7 +170,7 @@ fn map_resolver_error(
                 CliError::RepoNotAllowlisted(message)
             }
         }
-        404 => CliError::PlanNotFound(message),
+        404 => CliError::EndpointNotAvailable(message),
         409 => crate::change_management::map_http_conflict(body, message, false),
         429 => CliError::RateLimited {
             retry_after_secs: retry_after_secs.unwrap_or(30),

@@ -69,6 +69,7 @@ deslicer-ai or Observer. Unset it when the migration error is shown.
 | **12** | Human approval required | Plan approval needs a verified human identity | Approve in the Deslicer portal, or gate the CI job with a GitHub Environment that requires reviewers |
 | **13** | Agent run failed | An interactive or one-shot agent run failed | Inspect the agent run logs |
 | **14** | Plan lifecycle failed | `change status` observed a terminal failure plan status (`failed`, `compile_failed`, `rejected`, `expired`) | Inspect the plan in the portal; fix compile errors or reject reason before retrying |
+| **15** | Endpoint not available | Observer returned 404 for a route that is not a plan lookup (missing or older backend) | Upgrade Observer, or use a host that exposes the command; do not treat this as a missing plan |
 | **20** | Validation blocked | Plan validation returned blocking findings | Review findings; update the plan before approval |
 | **21** | Validation warning | Warnings were found with `--fail-on warning` | Review warnings or use the default `--fail-on block` policy |
 | **22** | Validation model unavailable | No allowed validation model could be resolved | Configure the tenant validation model and provider |

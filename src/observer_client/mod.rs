@@ -105,8 +105,15 @@ impl Client {
         status: reqwest::StatusCode,
         body: &str,
         retry_after_secs: Option<u64>,
+        request_path: &str,
     ) -> CliError {
-        map_observer_error_with_auth(status, body, retry_after_secs, self.auth_rejection)
+        map_observer_error_with_auth(
+            status,
+            body,
+            retry_after_secs,
+            self.auth_rejection,
+            request_path,
+        )
     }
 
     /// CI proxy: create a draft plan bound to this repo/commit and trigger
@@ -197,7 +204,12 @@ impl Client {
 
         if !status.is_success() {
             let body_text = String::from_utf8_lossy(&body).into_owned();
-            return Err(self.map_http_error(status, &body_text, retry_after));
+            return Err(self.map_http_error(
+                status,
+                &body_text,
+                retry_after,
+                "api/v1/plan-sources/bundles",
+            ));
         }
 
         serde_json::from_slice(&body)
@@ -447,7 +459,12 @@ impl Client {
         if status == reqwest::StatusCode::CONFLICT {
             return Ok(true);
         }
-        Err(self.map_http_error(status, &body_text, None))
+        Err(self.map_http_error(
+            status,
+            &body_text,
+            None,
+            "api/v1/admin/ci-environment-bindings",
+        ))
     }
 
     pub async fn create_enrollment_token(
@@ -571,7 +588,7 @@ impl Client {
             }
 
             let body_text = String::from_utf8_lossy(&bytes).into_owned();
-            return Err(self.map_http_error(status, &body_text, retry_after));
+            return Err(self.map_http_error(status, &body_text, retry_after, path));
         }
     }
 

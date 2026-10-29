@@ -29,6 +29,12 @@ pub enum CliError {
     #[error("plan not found: {0}")]
     PlanNotFound(String),
     #[error(
+        "endpoint not available on this backend: {0}\n\
+         This Observer host does not expose that API route. \
+         Upgrade Observer or point DESLICER_API_URL / OBSERVER_API_URL at a host that supports the command."
+    )]
+    EndpointNotAvailable(String),
+    #[error(
         "human approval required: {0}\n\
          Plan approval needs a verified human identity. Either approve the plan \
          in the Deslicer portal, or gate the CI job with a GitHub Environment \
@@ -62,6 +68,7 @@ impl CliError {
             CliError::BackendUnavailable(_) | CliError::Transport(_) => 10,
             CliError::PlanNotFound(_) => 11,
             CliError::HumanApprovalRequired(_) => 12,
+            CliError::EndpointNotAvailable(_) => 15,
             CliError::AgentRunFailed(_) => 13,
             CliError::ValidationModelUnavailable => 22,
             CliError::ValidationTimeout => 23,

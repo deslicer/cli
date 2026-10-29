@@ -479,6 +479,48 @@ async fn client_get_plan_404_maps_to_exit_11() {
     assert_eq!(err.exit_code(), 11);
 }
 
+#[tokio::test]
+async fn client_catalog_404_maps_to_exit_15_not_plan_not_found() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/catalog"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "detail": "Not Found"
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = Client::new(base, "tools-token".to_string());
+    let err = client.list_catalog().await.unwrap_err();
+
+    assert!(
+        matches!(err, CliError::EndpointNotAvailable(_)),
+        "expected EndpointNotAvailable, got {err:?}"
+    );
+    assert_eq!(err.exit_code(), 15);
+    assert!(!err.to_string().contains("plan not found"));
+}
+
+#[tokio::test]
+async fn client_plan_executions_404_maps_to_exit_15() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans/done/executions"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "detail": "Not Found"
+        })))
+        .mount(&server)
+        .await;
+
+    let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = Client::new(base, "tools-token".to_string());
+    let err = client.list_plan_executions("done").await.unwrap_err();
+
+    assert!(matches!(err, CliError::EndpointNotAvailable(_)));
+    assert_eq!(err.exit_code(), 15);
+}
+
 /// Proxy mode: an expired CI OIDC JWT triggers a 401; the client must fetch
 /// a fresh JWT from the CI platform token service and retry once.
 #[tokio::test]
