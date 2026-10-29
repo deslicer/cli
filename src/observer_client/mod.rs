@@ -27,7 +27,9 @@ pub use acs::{
     validate_acs_environment, AcsCredential, AcsObserveReport, AcsObservedObject, AcsStack,
     CredentialTestResult, SplunkCredential,
 };
-pub use app_provenance::InventoryApp;
+pub use app_provenance::{
+    flatten_installed, AdoptAppRequest, AdoptedApp, AppHostRef, InsightsApp, InventoryApp,
+};
 pub use catalog::CatalogEntry;
 pub use license::{LicenseBindResult, LicenseStatus};
 pub use mappings::{find_mapping, EnvironmentAppMapping, MappingUpsert};
