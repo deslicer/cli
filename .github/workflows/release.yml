@@ -249,3 +249,8 @@ jobs:
     with:
       base64-subjects: ${{ needs.hashes.outputs.hashes }}
       upload-assets: true
+      # The tag ref only exists when this workflow is triggered by a tag push.
+      # Via workflow_call (cut-release, event workflow_run on main) or
+      # workflow_dispatch, github.ref is a branch, so the generator's
+      # upload-assets job is skipped unless the tag is passed explicitly.
+      upload-tag-name: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
