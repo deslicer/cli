@@ -9,8 +9,9 @@ push to main ──► Quality Gate
        │
        ▼ (success, and there is something to ship)
   cut-release.yml ──► plan bump from conventional commits
-       │               or use Cargo.toml if it is already ahead
-       │               tag vX.Y.Z
+       │               or tag Cargo.toml as-is if already ahead
+       │               bump via release/* PR (never push main)
+       │               tag vX.Y.Z when Cargo matches
        ▼
   release.yml ──► build 5 targets + SHA256 sidecars
        │          cosign keyless signatures (Sigstore OIDC)
@@ -66,9 +67,12 @@ Tag pattern **`v*.*.*`** still triggers `.github/workflows/release.yml`.
 `GITHUB_TOKEN` tag pushes from `cut-release.yml` do not retrigger it; that
 path calls `release.yml` via `workflow_call`.
 
-If main is protected and the bot cannot push a version-bump commit, the job
-opens a `release/vX.Y.Z` PR instead. Merging that PR makes the next Cut
-release run tag the already-bumped version.
+When a conventional-commit bump is needed, Cut release **never** pushes the
+bump commit to `main`. It always opens a `release/vX.Y.Z` PR. Merging that PR
+leaves `Cargo.toml` ahead of the last tag; the next Cut release run tags that
+version as-is (even if `feat` commits in the same window would imply a higher
+bump). Explicit `workflow_dispatch` bumps (`patch` / `minor` / `major`) still
+compute from the last tag when Cargo is not already ahead.
 
 ## Step 2 — release.yml (automatic)
 

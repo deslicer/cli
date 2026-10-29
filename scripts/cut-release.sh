@@ -105,6 +105,15 @@ apply_version() {
   mv "${tmp}" "${ROOT}/Cargo.lock"
 }
 
+# Auto mode: a merge that already bumped Cargo.toml ahead of the last tag
+# (e.g. chore(release) PR) must be tagged as-is. Do not climb further from
+# feat/fix commits that landed in the same window — that caused #186, where
+# Cargo.toml was 1.7.2 but plan computed 1.8.0 and tried to push main.
+should_tag_cargo_as_is() {
+  local bump="$1" cargo="$2" last="$3"
+  [ "${bump}" = auto ] && [ -n "${last}" ] && version_gt "${cargo}" "${last}"
+}
+
 plan_release() {
   local bump="${1:-auto}"
   local cargo last_tag last decided next reason
@@ -113,6 +122,15 @@ plan_release() {
   last_tag="$(latest_stable_tag || true)"
   last="$(tag_version "${last_tag}")"
 
+  if should_tag_cargo_as_is "${bump}" "${cargo}" "${last}"; then
+    emit should_release true
+    emit needs_bump false
+    emit version "${cargo}"
+    emit tag "v${cargo}"
+    emit reason "Cargo.toml ${cargo} is ahead of ${last_tag}; tagging as-is"
+    return
+  fi
+
   if [ "${bump}" = auto ]; then
     decided="$(decide_bump "$(commit_subjects_since "${last_tag}")")"
   else
@@ -120,14 +138,6 @@ plan_release() {
   fi
 
   if [ "${decided}" = skip ]; then
-    if [ -n "${last}" ] && version_gt "${cargo}" "${last}"; then
-      emit should_release true
-      emit needs_bump false
-      emit version "${cargo}"
-      emit tag "v${cargo}"
-      emit reason "Cargo.toml ${cargo} is ahead of ${last_tag}"
-      return
-    fi
     emit should_release false
     emit needs_bump false
     emit version "${cargo}"
