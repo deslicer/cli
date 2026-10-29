@@ -8,7 +8,7 @@ use crate::commands::auth::format::{
 };
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::errors::CliError;
-use crate::reporting::{emit_oidc_error, oidc_exit_code};
+use crate::reporting::{emit_cli_error, emit_oidc_error, oidc_exit_code};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
@@ -129,38 +129,36 @@ async fn print_ci_whoami(ctx: &Ctx, platform: CiPlatform) -> i32 {
 }
 
 fn print_device_whoami(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
-    let logged_in = session.is_active();
+    if !session.is_active() {
+        // Expired session → auth exit 4 + envelope (issue #236), not exit 1
+        // with a non-envelope document on stdout.
+        return emit_cli_error(ctx.log_format, &not_logged_in_error());
+    }
     let output = device_whoami_json(session);
     print_output(
         ctx.log_format,
         &output,
         &whoami_device_human(
-            logged_in,
+            true,
             &session.display_name,
             &session.tenant_id,
             &session.expires_at,
             session.tenant_slug.as_deref(),
         ),
     );
-    if logged_in {
-        0
-    } else {
-        1
-    }
+    0
 }
 
 fn print_no_identity(ctx: &Ctx) -> i32 {
-    print_output(
-        ctx.log_format,
-        &json!({
-            "ok": false,
-            "logged_in": false,
-            "identity": "none",
-            "hint": "run auth login and approve the code in the portal",
-        }),
-        &whoami_none_human(),
-    );
-    1
+    // No credential → auth exit 4 with the error envelope on stderr.
+    // Do not print a non-envelope JSON status document on stdout (issue #236).
+    emit_cli_error(ctx.log_format, &not_logged_in_error())
+}
+
+fn not_logged_in_error() -> CliError {
+    CliError::Other(
+        "not logged in. Run `deslicer auth login` and approve the code in the portal".into(),
+    )
 }
 
 fn device_whoami_json(session: &crate::token_store::StoredSession) -> serde_json::Value {

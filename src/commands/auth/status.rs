@@ -114,6 +114,8 @@ async fn print_ci_status(ctx: Ctx, args: Args, platform: CiPlatform) -> i32 {
 }
 
 fn print_no_identity(ctx: &Ctx) -> i32 {
+    // Status is a query: report logged_in:false and exit 0 (issue #236).
+    // Contrast `auth whoami`, which treats the same state as auth exit 4.
     print_output(
         ctx.log_format,
         &json!({
@@ -124,7 +126,7 @@ fn print_no_identity(ctx: &Ctx) -> i32 {
         }),
         &status_none_human(),
     );
-    1
+    0
 }
 
 fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
@@ -167,11 +169,8 @@ fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -
         human.push_str(&format!("Warning: {warning}\n"));
     }
     print_output(ctx.log_format, &output, &human);
-    if logged_in {
-        0
-    } else {
-        1
-    }
+    // Expired device session is still a successful status query (exit 0).
+    0
 }
 
 /// Warn when the CLI flag/env API URL drifts from the portal that issued the session.
