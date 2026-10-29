@@ -52,6 +52,8 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
             0
         }
         Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
+            // Single document only: do not also emit_cli_error (that printed a
+            // second JSON object on stderr and broke `--log-format json` parsers).
             print_output(
                 ctx.log_format,
                 &json!({
@@ -63,7 +65,7 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
                 }),
                 &whoami_none_human(),
             );
-            map_cli_error(ctx.log_format, err)
+            err.exit_code()
         }
         Err(err) => map_cli_error(ctx.log_format, err),
     }
