@@ -1,147 +1,225 @@
-//! App provenance / insights apps (inventory apps list + adopt).
+//! Fleet apps inventory (`GET /api/v1/insights/apps`) and adopt
+//! (`POST /api/v1/app-provenance/adopt`).
+//!
+//! Observer returns one row per app with `installed_on` / `missing_from`
+//! host lists (DAI #2858 host filter is applied client-side on those lists).
+//! The CLI flattens that to one row per (app, host).
 
 use serde::{Deserialize, Serialize};
 
 use super::Client;
 use crate::errors::CliError;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Observer `insights/apps` pages hold at most 2000 apps.
+const APPS_PAGE_LIMIT: i64 = 2000;
+/// Safety stop for pagination (2000 × 50 = 100k apps).
+const MAX_APPS_PAGES: usize = 50;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppHostRef {
+    pub host_id: String,
+    #[serde(default)]
+    pub hostname: Option<String>,
+    #[serde(default)]
+    pub observed_version: Option<String>,
+}
+
+impl AppHostRef {
+    /// Match by hostname (case-insensitive) or exact host UUID.
+    pub fn matches(&self, needle: &str) -> bool {
+        let needle = needle.trim();
+        self.host_id.eq_ignore_ascii_case(needle)
+            || self
+                .hostname
+                .as_deref()
+                .is_some_and(|h| h.eq_ignore_ascii_case(needle))
+    }
+}
+
+/// Observer `AppInventoryItem`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct InsightsApp {
+    #[serde(default)]
+    pub app_name: String,
+    #[serde(default)]
+    pub installed_on: Vec<AppHostRef>,
+    #[serde(default)]
+    pub missing_from: Vec<AppHostRef>,
+    #[serde(default)]
+    pub observed_version: Option<String>,
+    #[serde(default)]
+    pub last_seen: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct InsightsAppsPage {
+    #[serde(default)]
+    apps: Vec<InsightsApp>,
+    #[serde(default)]
+    total: i64,
+}
+
+/// One flattened (app, host) row printed by `inventory apps`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InventoryApp {
-    /// Observer sometimes omits `name` or sends `app_name` (insights vs
-    /// provenance). Keep decode tolerant so list does not fail as transport.
-    #[serde(default, alias = "app_name")]
-    pub name: Option<String>,
+    pub name: String,
     #[serde(default)]
     pub version: Option<String>,
+    pub host: String,
+    pub host_id: String,
     #[serde(default)]
-    pub host: Option<String>,
+    pub last_seen: Option<String>,
+}
+
+/// Flatten Observer rows to one row per installed host, keeping only hosts in
+/// `keep` when it is set.
+pub fn flatten_installed(
+    apps: &[InsightsApp],
+    keep: &dyn Fn(&AppHostRef) -> bool,
+) -> Vec<InventoryApp> {
+    let mut rows = Vec::new();
+    for app in apps {
+        for host in app.installed_on.iter().filter(|h| keep(h)) {
+            rows.push(InventoryApp {
+                name: app.app_name.clone(),
+                version: host
+                    .observed_version
+                    .clone()
+                    .or_else(|| app.observed_version.clone()),
+                host: host
+                    .hostname
+                    .clone()
+                    .unwrap_or_else(|| host.host_id.clone()),
+                host_id: host.host_id.clone(),
+                last_seen: app.last_seen.clone(),
+            });
+        }
+    }
+    rows
+}
+
+/// Body for `POST /api/v1/app-provenance/adopt` (Observer denies unknown fields).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AdoptAppRequest {
+    pub scope: String,
+    pub app_name: String,
+    pub host_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inventory_group_id: Option<String>,
+    /// `managed` = adopt as Git-managed.
+    pub management_mode: String,
+    pub content_source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+}
+
+/// Observer `AppProvenanceItem` (subset).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdoptedApp {
+    pub id: String,
+    pub app_name: String,
+    pub scope: String,
     #[serde(default)]
-    pub inventory_group: Option<String>,
+    pub host_id: Option<String>,
     #[serde(default)]
-    pub status: Option<String>,
+    pub inventory_group_id: Option<String>,
+    pub management_mode: String,
+    #[serde(default)]
+    pub content_source: Option<String>,
     #[serde(default)]
     pub source_path: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct AppsListResponse {
-    #[serde(default)]
-    apps: Vec<InventoryApp>,
-    #[serde(default)]
-    items: Vec<InventoryApp>,
-}
-
 impl Client {
-    /// List apps from insights / provenance, optionally filtered by host or group.
-    pub async fn list_inventory_apps(
-        &self,
-        host: Option<&str>,
-        group: Option<&str>,
-    ) -> Result<Vec<InventoryApp>, CliError> {
-        let mut path = String::from("api/v1/insights/apps");
-        let mut query = Vec::new();
-        if let Some(host) = host {
-            query.push(format!("host={}", encode_query(host)));
-        }
-        if let Some(group) = group {
-            query.push(format!("group={}", encode_query(group)));
-        }
-        if !query.is_empty() {
-            path.push('?');
-            path.push_str(&query.join("&"));
-        }
-
-        match self.fetch_apps_list(&path).await {
-            Ok(apps) => Ok(apps),
-            Err(primary) => {
-                // Fallback to app-provenance list when insights is unavailable.
-                let mut fallback = String::from("api/v1/app-provenance");
-                if !query.is_empty() {
-                    fallback.push('?');
-                    fallback.push_str(&query.join("&"));
-                }
-                self.fetch_apps_list(&fallback).await.or(Err(primary))
+    /// All apps from `GET /api/v1/insights/apps`, following `limit`/`offset`.
+    pub async fn list_insights_apps(&self) -> Result<Vec<InsightsApp>, CliError> {
+        let mut all = Vec::new();
+        for page in 0..MAX_APPS_PAGES {
+            let offset = page as i64 * APPS_PAGE_LIMIT;
+            let path = format!("api/v1/insights/apps?limit={APPS_PAGE_LIMIT}&offset={offset}");
+            let bytes = self
+                .request_bytes(reqwest::Method::GET, &path, None::<&()>)
+                .await?;
+            let page: InsightsAppsPage = serde_json::from_slice(&bytes)
+                .map_err(|e| CliError::Transport(format!("invalid insights/apps JSON: {e}")))?;
+            let got = page.apps.len() as i64;
+            all.extend(page.apps);
+            if got < APPS_PAGE_LIMIT || offset + got >= page.total {
+                return Ok(all);
             }
         }
+        Ok(all)
     }
 
-    /// Adopt a live app into provenance / environment mapping for a host.
+    /// Bind a live app to provenance (`management_mode=managed` = Git-managed).
+    /// Observer requires admin scope and a verified human (device login).
     pub async fn adopt_inventory_app(
         &self,
-        app: &str,
-        host: &str,
-        group: Option<&str>,
-    ) -> Result<InventoryApp, CliError> {
-        #[derive(Serialize)]
-        struct Body<'a> {
-            app: &'a str,
-            host: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            inventory_group: Option<&'a str>,
-        }
+        body: &AdoptAppRequest,
+    ) -> Result<AdoptedApp, CliError> {
         self.request_json(
             reqwest::Method::POST,
             "api/v1/app-provenance/adopt",
-            Some(&Body {
-                app,
-                host,
-                inventory_group: group,
-            }),
+            Some(body),
         )
         .await
     }
-
-    async fn fetch_apps_list(&self, path: &str) -> Result<Vec<InventoryApp>, CliError> {
-        let bytes = self
-            .request_bytes(reqwest::Method::GET, path, None::<&()>)
-            .await?;
-        if let Ok(list) = serde_json::from_slice::<Vec<InventoryApp>>(&bytes) {
-            return Ok(list);
-        }
-        let wrapped: AppsListResponse = serde_json::from_slice(&bytes)
-            .map_err(|e| CliError::Transport(format!("invalid apps JSON: {e}")))?;
-        if !wrapped.apps.is_empty() {
-            Ok(wrapped.apps)
-        } else {
-            Ok(wrapped.items)
-        }
-    }
-}
-
-fn encode_query(raw: &str) -> String {
-    raw.chars()
-        .map(|c| match c {
-            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
-            _ => format!("%{:02X}", u32::from(c)),
-        })
-        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const OBSERVER_PAGE: &str = r#"{"apps":[
+        {"app_name":"TA-nix","installed_on":[
+            {"host_id":"11111111-1111-4111-8111-111111111111","hostname":"idx1","observed_version":"9.0.0"},
+            {"host_id":"22222222-2222-4222-8222-222222222222","hostname":"sh1"}],
+         "missing_from":[],"total_enrolled":2,"coverage_pct":100.0,"stanza_count":4,
+         "last_seen":"2026-10-29T08:00:00Z","observed_version":"9.0.1"}],
+        "total_enrolled_hosts":2,"total":1,"limit":2000,"offset":0}"#;
+
     #[test]
-    fn decodes_apps_when_name_is_omitted() {
-        let raw = r#"{"apps":[{"version":"1.0","host":"idx1","status":"discovered"}]}"#;
-        let wrapped: AppsListResponse = serde_json::from_str(raw).expect("decode");
-        assert_eq!(wrapped.apps.len(), 1);
-        assert_eq!(wrapped.apps[0].name, None);
-        assert_eq!(wrapped.apps[0].host.as_deref(), Some("idx1"));
+    fn decodes_observer_apps_response() {
+        let page: InsightsAppsPage = serde_json::from_str(OBSERVER_PAGE).expect("decode");
+        assert_eq!(page.total, 1);
+        assert_eq!(page.apps[0].installed_on.len(), 2);
     }
 
     #[test]
-    fn decodes_app_name_alias() {
-        let raw = r#"{"items":[{"app_name":"ta_nix","host":"sh1"}]}"#;
-        let wrapped: AppsListResponse = serde_json::from_str(raw).expect("decode");
-        assert_eq!(wrapped.items[0].name.as_deref(), Some("ta_nix"));
+    fn flattens_and_filters_by_host() {
+        let page: InsightsAppsPage = serde_json::from_str(OBSERVER_PAGE).unwrap();
+        let all = flatten_installed(&page.apps, &|_| true);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].version.as_deref(), Some("9.0.0"));
+        assert_eq!(all[1].version.as_deref(), Some("9.0.1"));
+        let sh = flatten_installed(&page.apps, &|h| h.matches("SH1"));
+        assert_eq!(sh.len(), 1);
+        assert_eq!(sh[0].host_id, "22222222-2222-4222-8222-222222222222");
     }
 
     #[test]
-    fn decodes_bare_array_without_name() {
-        let raw = r#"[{"host":"idx1","inventory_group":"indexers"}]"#;
-        let list: Vec<InventoryApp> = serde_json::from_str(raw).expect("decode");
-        assert_eq!(list.len(), 1);
-        assert!(list[0].name.is_none());
+    fn adopt_body_matches_observer_fields() {
+        let body = AdoptAppRequest {
+            scope: "apps".into(),
+            app_name: "TA-nix".into(),
+            host_id: "h".into(),
+            inventory_group_id: None,
+            management_mode: "managed".into(),
+            content_source: "git_tree".into(),
+            source_path: None,
+        };
+        let v = serde_json::to_value(&body).unwrap();
+        let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "app_name",
+                "content_source",
+                "host_id",
+                "management_mode",
+                "scope"
+            ]
+        );
     }
 }
