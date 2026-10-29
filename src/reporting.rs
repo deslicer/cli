@@ -348,12 +348,20 @@ pub fn emit_oidc_error(format: LogFormat, err: &OidcError) -> i32 {
     code
 }
 
-pub fn emit_clap_error(format: LogFormat, err: &clap::Error) -> i32 {
-    let code = match err.kind() {
-        ErrorKind::DisplayHelp | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => 0,
-        ErrorKind::DisplayVersion => 0,
+/// Exit code for clap parse/help errors.
+///
+/// Explicit `--help` / `--version` stay 0. A bare group with no subcommand
+/// (or a missing required argument) is usage failure → exit 2, even when clap
+/// prints help via `DisplayHelpOnMissingArgumentOrSubcommand`.
+pub fn clap_error_exit_code(err: &clap::Error) -> i32 {
+    match err.kind() {
+        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => 0,
         _ => 2,
-    };
+    }
+}
+
+pub fn emit_clap_error(format: LogFormat, err: &clap::Error) -> i32 {
+    let code = clap_error_exit_code(err);
     if code == 0 {
         // Help/version stay human on stdout even when the default format is JSON.
         if let Err(print_err) = ignore_broken_pipe(err.print()) {
@@ -523,5 +531,49 @@ mod tests {
         assert!(ignore_broken_pipe(Err(io::Error::from(io::ErrorKind::BrokenPipe))).is_ok());
         let err = ignore_broken_pipe(Err(io::Error::from(io::ErrorKind::PermissionDenied)));
         assert_eq!(err.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn bare_groups_are_usage_exit_2() {
+        use clap::Parser;
+
+        use crate::cli::Cli;
+
+        for argv in [
+            &["deslicer", "change"][..],
+            &["deslicer", "acs", "stacks"][..],
+            &["deslicer", "models", "byok"][..],
+            &["deslicer", "org", "settings"][..],
+            &["deslicer"][..],
+        ] {
+            let Err(err) = Cli::try_parse_from(argv) else {
+                panic!("expected clap error for {argv:?}");
+            };
+            assert_eq!(
+                err.kind(),
+                ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
+                "{argv:?}"
+            );
+            assert_eq!(clap_error_exit_code(&err), 2, "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn explicit_help_and_version_stay_exit_0() {
+        use clap::Parser;
+
+        use crate::cli::Cli;
+
+        let Err(help) = Cli::try_parse_from(["deslicer", "change", "--help"]) else {
+            panic!("expected help error");
+        };
+        assert_eq!(help.kind(), ErrorKind::DisplayHelp);
+        assert_eq!(clap_error_exit_code(&help), 0);
+
+        let Err(version) = Cli::try_parse_from(["deslicer", "--version"]) else {
+            panic!("expected version error");
+        };
+        assert_eq!(version.kind(), ErrorKind::DisplayVersion);
+        assert_eq!(clap_error_exit_code(&version), 0);
     }
 }
