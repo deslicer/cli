@@ -7,7 +7,10 @@ use crate::errors::CliError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventoryApp {
-    pub name: String,
+    /// Observer sometimes omits `name` or sends `app_name` (insights vs
+    /// provenance). Keep decode tolerant so list does not fail as transport.
+    #[serde(default, alias = "app_name")]
+    pub name: Option<String>,
     #[serde(default)]
     pub version: Option<String>,
     #[serde(default)]
@@ -112,4 +115,33 @@ fn encode_query(raw: &str) -> String {
             _ => format!("%{:02X}", u32::from(c)),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_apps_when_name_is_omitted() {
+        let raw = r#"{"apps":[{"version":"1.0","host":"idx1","status":"discovered"}]}"#;
+        let wrapped: AppsListResponse = serde_json::from_str(raw).expect("decode");
+        assert_eq!(wrapped.apps.len(), 1);
+        assert_eq!(wrapped.apps[0].name, None);
+        assert_eq!(wrapped.apps[0].host.as_deref(), Some("idx1"));
+    }
+
+    #[test]
+    fn decodes_app_name_alias() {
+        let raw = r#"{"items":[{"app_name":"ta_nix","host":"sh1"}]}"#;
+        let wrapped: AppsListResponse = serde_json::from_str(raw).expect("decode");
+        assert_eq!(wrapped.items[0].name.as_deref(), Some("ta_nix"));
+    }
+
+    #[test]
+    fn decodes_bare_array_without_name() {
+        let raw = r#"[{"host":"idx1","inventory_group":"indexers"}]"#;
+        let list: Vec<InventoryApp> = serde_json::from_str(raw).expect("decode");
+        assert_eq!(list.len(), 1);
+        assert!(list[0].name.is_none());
+    }
 }

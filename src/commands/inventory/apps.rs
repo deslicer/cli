@@ -132,7 +132,7 @@ async fn adopt_run(ctx: Ctx, args: AdoptArgs) -> i32 {
             LogFormat::Human => {
                 println!(
                     "adopted {} on {} (group {})",
-                    app.name,
+                    app.name.as_deref().unwrap_or(&args.app),
                     app.host.as_deref().unwrap_or(&args.host),
                     app.inventory_group
                         .as_deref()
@@ -154,7 +154,7 @@ fn format_apps_human(apps: &[InventoryApp]) -> String {
     for app in apps {
         lines.push(format!(
             "{}  {}  {}  {}  {}  {}",
-            app.name,
+            app.name.as_deref().unwrap_or("-"),
             app.version.as_deref().unwrap_or("-"),
             app.host.as_deref().unwrap_or("-"),
             app.inventory_group.as_deref().unwrap_or("-"),
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn human_list_rows() {
         let text = format_apps_human(&[InventoryApp {
-            name: "ta_nix".into(),
+            name: Some("ta_nix".into()),
             version: Some("1.0".into()),
             host: Some("idx1".into()),
             inventory_group: Some("indexers".into()),
@@ -183,6 +183,19 @@ mod tests {
         }]);
         assert!(text.contains("ta_nix"));
         assert!(text.contains("idx1"));
+    }
+
+    #[test]
+    fn human_list_tolerates_missing_name() {
+        let text = format_apps_human(&[InventoryApp {
+            name: None,
+            version: None,
+            host: Some("idx1".into()),
+            inventory_group: None,
+            status: None,
+            source_path: None,
+        }]);
+        assert!(text.contains("-  -  idx1"));
     }
 
     #[test]
