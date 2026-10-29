@@ -218,3 +218,64 @@ async fn change_status_compile_failed_exits_nonzero() {
 
     std::env::remove_var("DESLICER_API_TOKEN"); // pragma: allowlist secret
 }
+
+#[tokio::test]
+async fn change_status_jobs_propagates_plan_load_failure() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    std::env::set_var("DESLICER_API_TOKEN", "bad-token"); // pragma: allowlist secret
+
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/api/v1/plans/{PLAN_ID}")))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "error": "oidc_rejected",
+            "message": "oidc_rejected"
+        })))
+        .mount(&observer)
+        .await;
+
+    let code = run(
+        direct_ctx(&observer),
+        Args {
+            plan_id: PLAN_ID.to_string(),
+            timeout_secs: 60,
+            jobs: true,
+            execution_id: None,
+        },
+    )
+    .await;
+    assert_eq!(code, 4, "auth failure with --jobs must not exit 0");
+
+    std::env::remove_var("DESLICER_API_TOKEN"); // pragma: allowlist secret
+}
+
+#[tokio::test]
+async fn change_status_jobs_propagates_plan_not_found() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    std::env::set_var("DESLICER_API_TOKEN", "test-token"); // pragma: allowlist secret
+
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/api/v1/plans/{PLAN_ID}")))
+        .and(header("Authorization", "Bearer test-token"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "error": "not_found",
+            "message": "Plan not found"
+        })))
+        .mount(&observer)
+        .await;
+
+    let code = run(
+        direct_ctx(&observer),
+        Args {
+            plan_id: PLAN_ID.to_string(),
+            timeout_secs: 60,
+            jobs: true,
+            execution_id: None,
+        },
+    )
+    .await;
+    assert_eq!(code, 11);
+
+    std::env::remove_var("DESLICER_API_TOKEN"); // pragma: allowlist secret
+}
