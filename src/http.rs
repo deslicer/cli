@@ -73,6 +73,29 @@ pub fn assert_url_allowed(url: &Url) -> Result<(), CliError> {
     }
 }
 
+/// Join an API-relative path onto a configured base URL.
+///
+/// `Url::join` follows RFC 3986 and replaces the final path segment when the
+/// base has no trailing slash (`…/observer` + `api/v1/groups` → `…/api/v1/groups`).
+/// Observer and DAI bases are directories (direct root or `/api/cli/observer`), so
+/// both `…/observer` and `…/observer/` must preserve the prefix.
+pub fn join_api_path(base: &Url, path: &str) -> Result<Url, CliError> {
+    let base = ensure_directory_base(base);
+    let path = path.trim_start_matches('/');
+    base.join(path)
+        .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))
+}
+
+fn ensure_directory_base(base: &Url) -> Url {
+    if base.path().ends_with('/') {
+        return base.clone();
+    }
+    let mut with_slash = base.clone();
+    let path = format!("{}/", with_slash.path());
+    with_slash.set_path(&path);
+    with_slash
+}
+
 fn is_loopback_host(url: &Url) -> bool {
     match url.host() {
         Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
@@ -172,5 +195,42 @@ mod tests {
     #[test]
     fn request_timeout_allows_cold_create_window() {
         assert_eq!(REQUEST_TIMEOUT, Duration::from_secs(120));
+    }
+
+    #[test]
+    fn join_api_path_keeps_prefix_without_trailing_slash() {
+        let base = parse("https://staging-api.deslicer.ai/api/cli/observer");
+        let joined = join_api_path(&base, "api/v1/groups").expect("join");
+        assert_eq!(
+            joined.as_str(),
+            "https://staging-api.deslicer.ai/api/cli/observer/api/v1/groups"
+        );
+    }
+
+    #[test]
+    fn join_api_path_keeps_prefix_with_trailing_slash() {
+        let base = parse("https://staging-api.deslicer.ai/api/cli/observer/");
+        let joined = join_api_path(&base, "api/v1/groups").expect("join");
+        assert_eq!(
+            joined.as_str(),
+            "https://staging-api.deslicer.ai/api/cli/observer/api/v1/groups"
+        );
+    }
+
+    #[test]
+    fn join_api_path_strips_leading_slash_on_relative_path() {
+        let base = parse("https://api.deslicer.ai/api/cli/observer");
+        let joined = join_api_path(&base, "/api/v1/plans/abc").expect("join");
+        assert_eq!(
+            joined.as_str(),
+            "https://api.deslicer.ai/api/cli/observer/api/v1/plans/abc"
+        );
+    }
+
+    #[test]
+    fn join_api_path_root_base_without_trailing_slash() {
+        let base = parse("https://observer.example.test");
+        let joined = join_api_path(&base, "api/v1/me").expect("join");
+        assert_eq!(joined.as_str(), "https://observer.example.test/api/v1/me");
     }
 }

@@ -19,9 +19,7 @@ pub async fn exchange(
     platform: CiPlatform,
     environment: Option<&str>,
 ) -> Result<String, CliError> {
-    let url = observer_api_url
-        .join("api/v1/auth/ci-oidc")
-        .map_err(|e| CliError::Transport(format!("invalid URL join: {e}")))?;
+    let url = crate::http::join_api_path(observer_api_url, "api/v1/auth/ci-oidc")?;
     crate::http::assert_url_allowed(&url)?;
 
     let body = match environment {
