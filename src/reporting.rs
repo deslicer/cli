@@ -27,6 +27,9 @@ where
         .into_iter()
         .map(|s| s.as_ref().to_string_lossy().into_owned());
     while let Some(arg) = args.next() {
+        if arg == "--json" {
+            return LogFormat::Json;
+        }
         if arg == "--log-format" {
             if let Some(value) = args.next() {
                 return parse_log_format_value(&value);

@@ -1,136 +1,73 @@
-use clap::Args as ClapArgs;
-use serde_json::json;
-
+use super::{output_format, print_json, rolling_request, RollingArgs};
 use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
-use crate::output::emit_change_plan;
+use crate::errors::CliError;
+use crate::observer_client::UpgradePlanCreated;
 use crate::Ctx;
 
-#[derive(ClapArgs)]
-pub struct Args {
-    /// Splunk package name to upgrade
-    #[arg(long, required = true)]
-    pub package: String,
-
-    /// Target package version
-    #[arg(long, required = true)]
-    pub target_version: String,
-
-    /// Optional inventory group targets (comma-separated)
-    #[arg(long, value_delimiter = ',', num_args = 1..)]
-    pub targets: Vec<String>,
-
-    #[arg(long)]
-    pub name: Option<String>,
-
-    #[arg(long)]
-    pub environment: Option<String>,
-
-    /// Create the Pending upgrade plan. Without this flag, print a dry-run and exit.
-    #[arg(long)]
-    pub yes: bool,
+pub async fn run(ctx: Ctx, args: RollingArgs) -> i32 {
+    let format = output_format(&ctx, args.json);
+    match run_inner(&ctx, &args, format).await {
+        Ok(code) => code,
+        Err(err) => map_cli_error(format, err),
+    }
 }
 
-pub async fn run(ctx: Ctx, args: Args) -> i32 {
-    if !args.yes {
-        match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
-                    "dry_run": true,
-                    "action": "upgrade_plan",
-                    "package": args.package,
-                    "target_version": args.target_version,
-                    "targets": args.targets,
-                    "will_auto_approve": false,
-                })
-            ),
-            LogFormat::Human => println!(
-                "dry-run: would create a Pending Splunk upgrade plan (package {}) → {}\n\
-                 check `deslicer upgrade status` for flapping-gate; pass --yes to create, then `deslicer change approve`",
-                args.package, args.target_version
-            ),
-        }
-        return 0;
-    }
+pub(crate) fn next_steps(plan_id: &str) -> Vec<String> {
+    vec![
+        format!("deslicer change approve --plan-id {plan_id}"),
+        format!("deslicer change deploy --plan-id {plan_id}"),
+    ]
+}
 
-    let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
-        Ok(pair) => pair,
-        Err(err) => return map_cli_error(ctx.log_format, err),
-    };
-    match client
-        .create_upgrade_plan(
-            Some(&args.package),
-            Some(&args.target_version),
-            &args.targets,
-            args.name.as_deref(),
-        )
-        .await
-    {
-        Ok(plan) => {
-            eprintln!("upgrade plan created (Pending — approve before deploy)");
-            emit_change_plan(&plan)
+async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i32, CliError> {
+    super::validate_version(&args.to_version)?;
+    let (_session, client) = authenticate(ctx, args.environment.as_deref(), None).await?;
+    let body = rolling_request(&client, args).await?;
+    let plan = client.create_upgrade_plan(&body).await?;
+    Ok(match format {
+        LogFormat::Json => print_json(&serde_json::json!({
+            "plan_id": plan.plan_id,
+            "status": "pending_approval",
+            "next_steps": next_steps(&plan.plan_id),
+            "plan": plan,
+        })),
+        LogFormat::Human => {
+            print!("{}", format_human(&plan));
+            0
         }
-        Err(err) => map_cli_error(ctx.log_format, err),
-    }
+    })
+}
+
+fn format_human(plan: &UpgradePlanCreated) -> String {
+    let steps = next_steps(&plan.plan_id);
+    format!(
+        "plan_id: {}\nupgrade plan created ({} → {}, {} host(s), {} phase(s)); Pending, nothing was approved or deployed\nnext: {}\n  then: {}\n",
+        plan.plan_id,
+        plan.family,
+        plan.to_version,
+        plan.host_ids.len(),
+        plan.phase_ids.len(),
+        steps[0],
+        steps[1]
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use clap::{CommandFactory, Parser};
-
-    use crate::cli::Cli;
+    use super::*;
 
     #[test]
-    fn help_requires_package_target_and_yes() {
-        let mut cmd = crate::cli::Cli::command();
-        let upgrade = cmd.find_subcommand_mut("upgrade").expect("upgrade");
-        let plan = upgrade.find_subcommand_mut("plan").expect("plan");
-        let mut buf = Vec::new();
-        plan.write_long_help(&mut buf).expect("help");
-        let help = String::from_utf8(buf).expect("utf8");
-        assert!(help.contains("--package"));
-        assert!(help.contains("--target-version"));
-        assert!(help.contains("--yes"));
-        assert!(help.contains("Pending") || help.contains("flapping"));
-    }
-
-    #[test]
-    fn missing_package_and_version_is_usage_error() {
-        let Err(err) = Cli::try_parse_from(["deslicer", "upgrade", "plan"]) else {
-            panic!("expected usage error");
-        };
-        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
-    }
-
-    #[test]
-    fn package_without_target_version_is_usage_error() {
-        let Err(err) = Cli::try_parse_from(["deslicer", "upgrade", "plan", "--package", "splunk"])
-        else {
-            panic!("expected usage error");
-        };
-        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
-    }
-
-    #[test]
-    fn required_args_parse_for_dry_run() {
-        let cli = Cli::try_parse_from([
-            "deslicer",
-            "upgrade",
-            "plan",
-            "--package",
-            "splunk",
-            "--target-version",
-            "9.3.0",
-        ])
-        .expect("parse");
-        match cli.command {
-            crate::cli::Command::Upgrade(crate::commands::upgrade::UpgradeCmd::Plan(args)) => {
-                assert_eq!(args.package, "splunk");
-                assert_eq!(args.target_version, "9.3.0");
-                assert!(!args.yes);
-            }
-            _ => panic!("expected upgrade plan"),
-        }
+    fn human_prints_plan_id_and_next_step() {
+        let plan: UpgradePlanCreated = serde_json::from_value(serde_json::json!({
+            "plan_id": "p-1", "family": "upgrade_non_clustered", "catalog_revision": "r",
+            "applied_overlay_ids": [], "phase_group_ids": [], "phase_ids": ["a"],
+            "host_ids": ["h"], "filename": "splunk.tgz", "sha256": "x",
+            "staged_path": "/opt", "to_version": "9.4.1"
+        }))
+        .unwrap();
+        let text = format_human(&plan);
+        assert!(text.starts_with("plan_id: p-1\n"));
+        assert!(text.contains("deslicer change approve --plan-id p-1"));
     }
 }
