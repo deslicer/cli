@@ -320,21 +320,33 @@ mod tests {
             reqwest::StatusCode::NOT_FOUND,
             Some("api/v1/groups"),
         );
-        assert!(msg.contains("HTTP 404 Not Found"), "{msg}");
-        assert!(msg.contains("content-type text/html"), "{msg}");
-        assert!(msg.contains("path api/v1/groups"), "{msg}");
-        assert!(msg.contains("OBSERVER_API_URL"), "{msg}");
-        assert!(!msg.contains("data-scroll-behavior"), "{msg}");
-        assert!(!msg.contains("<!DOCTYPE"), "{msg}");
-        assert!(msg.len() < 250, "message too long: {}", msg.len());
+        assert!(msg.contains("HTTP 404 Not Found"));
+        assert!(msg.contains("content-type text/html"));
+        assert!(msg.contains("path api/v1/groups"));
+        assert!(msg.contains("OBSERVER_API_URL"));
+        assert!(!msg.contains("data-scroll-behavior"));
+        assert!(!msg.contains("<!DOCTYPE"));
+        assert!(msg.len() < 250);
+    }
+
+    #[test]
+    fn http_error_message_drops_html_without_path() {
+        // oidc_exchange / resolver call http_error_message without a path.
+        let html = "<!DOCTYPE html><html><body>not found</body></html>";
+        let msg = http_error_message(html, reqwest::StatusCode::NOT_FOUND);
+        assert!(msg.contains("HTTP 404 Not Found"));
+        assert!(msg.contains("content-type text/html"));
+        assert!(msg.contains("OBSERVER_API_URL"));
+        assert!(!msg.contains("<!DOCTYPE"));
+        assert!(!msg.contains("<html"));
     }
 
     #[test]
     fn http_error_message_truncates_plain_non_json_body() {
         let body = "plain ".repeat(80);
         let msg = http_error_message(&body, reqwest::StatusCode::BAD_GATEWAY);
-        assert!(msg.contains("HTTP 502 Bad Gateway"), "{msg}");
-        assert!(msg.contains('…'), "{msg}");
-        assert!(msg.len() < 280, "message too long: {}", msg.len());
+        assert!(msg.contains("HTTP 502 Bad Gateway"));
+        assert!(msg.contains('…'));
+        assert!(msg.len() < 280);
     }
 }

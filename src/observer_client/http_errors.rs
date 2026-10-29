@@ -557,18 +557,46 @@ mod tests {
             reqwest::StatusCode::NOT_FOUND,
             &html,
             None,
-            AuthRejectionKind::ApiToken,
+            AuthRejectionKind::Oidc,
             "api/v1/groups",
         );
-        assert!(matches!(err, CliError::EndpointNotAvailable(_)));
-        let text = err.to_string();
-        assert!(text.contains("endpoint not available"), "{text}");
-        assert!(text.contains("HTTP 404"), "{text}");
-        assert!(text.contains("content-type text/html"), "{text}");
-        assert!(text.contains("path api/v1/groups"), "{text}");
-        assert!(text.contains("OBSERVER_API_URL"), "{text}");
-        assert!(!text.contains("data-scroll-behavior"), "{text}");
-        assert!(!text.contains("<!DOCTYPE"), "{text}");
-        assert!(text.len() < 500, "error still too long: {}", text.len());
+        let CliError::EndpointNotAvailable(message) = err else {
+            panic!("expected EndpointNotAvailable");
+        };
+        assert!(message.contains("HTTP 404"));
+        assert!(message.contains("content-type text/html"));
+        assert!(message.contains("path api/v1/groups"));
+        assert!(message.contains("OBSERVER_API_URL"));
+        assert!(!message.contains("data-scroll-behavior"));
+        assert!(!message.contains("<!DOCTYPE"));
+        assert!(message.len() < 250);
+    }
+
+    #[test]
+    fn plan_lookup_html_404_message_is_sanitized_not_dumped() {
+        // change status against a portal HTML 404 used to embed KBs of markup in
+        // "plan not found: <!DOCTYPE html>…". Sanitization must apply on plan
+        // lookup paths too, not only EndpointNotAvailable routes.
+        let html = format!(
+            "<!DOCTYPE html><html lang=\"en\" data-scroll-behavior=\"smooth\"><body>{}</body></html>",
+            "missing ".repeat(800)
+        );
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            &html,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/00000000-0000-0000-0000-000000000000",
+        );
+        let CliError::PlanNotFound(message) = err else {
+            panic!("expected PlanNotFound");
+        };
+        assert!(message.contains("HTTP 404"));
+        assert!(message.contains("content-type text/html"));
+        assert!(message.contains("path api/v1/plans/"));
+        assert!(message.contains("OBSERVER_API_URL"));
+        assert!(!message.contains("<!DOCTYPE"));
+        assert!(!message.contains("data-scroll-behavior"));
+        assert!(message.len() < 250);
     }
 }
