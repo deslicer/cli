@@ -41,8 +41,18 @@ test_plan_when_cargo_already_ahead() {
   pass "plan helpers"
 }
 
+test_should_tag_cargo_as_is() {
+  should_tag_cargo_as_is auto 1.7.2 1.7.1 || fail "auto + cargo ahead"
+  should_tag_cargo_as_is auto 1.7.2 1.7.2 && fail "equal is not ahead"
+  should_tag_cargo_as_is auto 1.7.1 1.7.2 && fail "cargo behind"
+  should_tag_cargo_as_is minor 1.7.2 1.7.1 && fail "explicit bump ignores cargo-ahead shortcut"
+  should_tag_cargo_as_is auto 1.7.2 "" && fail "no last tag"
+  pass "should_tag_cargo_as_is"
+}
+
 test_bump_semver
 test_decide_bump
 test_version_gt
 test_plan_when_cargo_already_ahead
+test_should_tag_cargo_as_is
 echo "cut-release tests passed"
