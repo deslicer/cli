@@ -75,6 +75,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let mut plan = match client.get_plan(&args.plan_id).await {
         Ok(plan) => Some(plan),
         Err(err) => {
+            // `--jobs` is a one-shot inspector: do not emit a placeholder success
+            // object when the plan itself failed to load (issue #207).
+            if args.jobs {
+                return map_cli_error(ctx.log_format, err);
+            }
             eprintln!("could not load plan lifecycle status: {err}");
             None
         }
@@ -103,6 +108,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                     }
                 }
             }
+            // Jobs are additive; keep the plan-status exit code when only jobs fail.
             Err(err) => eprintln!("could not load jobs: {err}"),
         }
         return code;
