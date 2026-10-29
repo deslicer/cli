@@ -1,6 +1,7 @@
 use clap::Args as ClapArgs;
 
 use crate::ci::{self, CiPlatform, AUDIENCE};
+use crate::commands::change::acs_inputs::resolve_acs_plan_inputs;
 use crate::commands::change::plan_env::resolve_plan_environment;
 use crate::commands::change::plan_name::resolve_plan_name;
 use crate::commands::pipeline::{
@@ -8,7 +9,9 @@ use crate::commands::pipeline::{
 };
 use crate::errors::CliError;
 use crate::observer_client::{ChangePlan, Client, OrchestratedPlan};
-use crate::output::{emit_change_plan, emit_change_plan_with_diff, emit_change_plans};
+use crate::output::{
+    emit_change_plan, emit_change_plan_ci_outputs, emit_change_plan_with_diff, emit_change_plans,
+};
 use crate::pr_preview::{labels_for_plan_context, resolve_changed_paths, PrPreviewLabels};
 use crate::token_source::TokenSource;
 use crate::Ctx;
@@ -61,8 +64,14 @@ pub struct Args {
     pub changed_paths: Option<String>,
 
     /// Destination for non-git plans. ACS: `acs-stack:<stack-name>` creates a
-    /// Pending ACS draft (never auto-approves). Mutually exclusive with
-    /// `--source-dir` / `--from-registry`.
+    /// Pending Cloud ACS plan (never auto-approves). The environment comes from
+    /// `--environment`, else the active session's tenant slug, else the only
+    /// `.deslicer/environments/*.yml`; the CLI prints which one it used. Apps
+    /// come from that file's `inventory_group: <stack>` (or `cloud`, or the
+    /// only group with apps) and the `source_path` directories it lists.
+    /// Exits 2 when the environment or apps cannot be resolved; an empty apps
+    /// list is never sent. Mutually exclusive with `--source-dir` /
+    /// `--from-registry`.
     #[arg(
         long,
         value_name = "SPEC",
@@ -83,6 +92,10 @@ pub struct Args {
         conflicts_with_all = ["source_dir", "destination"]
     )]
     pub from_registry: Option<String>,
+
+    /// Print one JSON object with `plan_id` (and ACS item counts) on stdout.
+    #[arg(long)]
+    pub json: bool,
 }
 
 use super::lifecycle::{is_compile_failure, is_still_compiling};
@@ -245,11 +258,54 @@ async fn run_acs_destination_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, 
         .expect("caller checks destination");
     let stack = parse_acs_stack_destination(spec)?;
     let environment = resolve_plan_environment(ctx, args.environment.as_deref())?;
+    let origin = if args.environment.is_some() {
+        "--environment"
+    } else {
+        "session tenant slug / single environment file"
+    };
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let roots = crate::environment_paths::search_roots_for(&cwd);
+    let inputs = resolve_acs_plan_inputs(&stack, environment.as_deref(), &roots)?;
+    eprintln!(
+        "environment {} resolved from {origin} ({}); inventory_group {}; {} app(s): {}",
+        inputs.request.environment_name,
+        inputs.environment_file.display(),
+        inputs.inventory_group,
+        inputs.request.apps.len(),
+        inputs
+            .request
+            .apps
+            .iter()
+            .map(|a| a.app_name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     let (_session, client) = authenticate(ctx, environment.as_deref(), None).await?;
-    let plan = client
-        .create_acs_draft_plan(&stack, args.name.as_deref())
+    let outcome = client
+        .create_acs_project_plan(&stack, args.name.as_deref(), &inputs.request)
         .await?;
-    eprintln!("ACS draft plan created for stack {stack} (Pending — approve before deploy)");
+    let plan = outcome.as_change_plan();
+    eprintln!(
+        "ACS plan {} for stack {stack}: {} item(s), status {} (approve before deploy)",
+        plan.external_id(),
+        outcome.projected.item_count,
+        plan.status
+    );
+    if args.json {
+        let out = serde_json::json!({
+            "plan_id": plan.external_id(),
+            "id": plan.id,
+            "status": plan.status,
+            "stack": stack,
+            "environment_name": inputs.request.environment_name,
+            "environment_file": inputs.environment_file.display().to_string(),
+            "inventory_group": inputs.inventory_group,
+            "apps": inputs.request.apps.iter().map(|a| &a.app_name).collect::<Vec<_>>(),
+            "item_count": outcome.projected.item_count,
+            "items": outcome.projected.items,
+        });
+        println!("{out}");
+    }
     Ok(plan)
 }
 
@@ -313,6 +369,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
     if args.destination.is_some() {
         return match run_acs_destination_plan(&ctx, &args).await {
+            Ok(plan) if args.json => emit_change_plan_ci_outputs(&plan),
             Ok(plan) => emit_change_plan(&plan),
             Err(err) => map_cli_error(ctx.log_format, err),
         };

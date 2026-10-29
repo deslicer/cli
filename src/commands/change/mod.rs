@@ -2,6 +2,7 @@ use clap::Subcommand;
 
 use crate::Ctx;
 
+mod acs_inputs;
 pub mod approve;
 pub mod deploy;
 pub mod jobs;
