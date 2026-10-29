@@ -54,27 +54,16 @@ deslicer-ai or Observer. Unset it when the migration error is shown.
 
 ## Exit codes
 
+The canonical table (including **14**, **20**, **21**, and retryable hints) lives
+in [exit-codes.md](exit-codes.md). OIDC / token failures are exit **4**.
+
 | Code | Name | Typical cause | Fix |
 |------|------|---------------|-----|
-| **0** | OK | Command succeeded | — |
-| **1** | Generic error | Unexpected failure (network parse, internal error) | Re-run with `--log-format json`; check stderr |
-| **4** | Auth rejected | OIDC JWT invalid/expired/wrong audience, or `DESLICER_API_TOKEN` rejected by Observer | For CI OIDC: verify audience is `https://api.deslicer.ai`, refresh the job token, check clock skew. For direct URL+token: mint a tools-scope API key in the portal or run `deslicer auth login` |
+| **4** | Auth rejected | OIDC JWT invalid/expired/wrong audience, `DESLICER_API_TOKEN` rejected, or not logged in | For CI OIDC: verify audience is `https://api.deslicer.ai`, refresh the job token, check clock skew. For direct URL+token: mint a tools-scope API key in the portal. For local use: run `deslicer auth login` |
 | **5** | Repo not allowlisted | Repository not registered for this tenant/environment | Add repo allowlist in Deslicer portal → CI integrations |
 | **6** | Env not bound | Named environment has no CI binding for this repo | Create binding in portal or pick a bound environment name |
-| **7** | Ambiguous binding | Multiple bindings match (same repo + environment) | Deduplicate bindings in portal; use UUID-named env file (see [environments.md](environments.md)) |
 | **8** | Unsupported platform | CI platform not recognized and no `--ci-platform` override | Set `--ci-platform` explicitly; see [installation.md](installation.md) |
-| **9** | Rate limited | deslicer-ai or Observer returned 429 | Retry with backoff; reduce concurrent jobs |
 | **10** | Backend unavailable | resolve-backend or Observer unreachable | Check `DESLICER_API_URL`; verify Observer health; use `OBSERVER_API_URL` air-gap override if approved |
-| **11** | Plan not found | Plan ID does not exist or wrong tenant | Verify plan ID and environment; confirm auth succeeded first |
-| **12** | Human approval required | Plan approval needs a verified human identity | Approve in the Deslicer portal, or gate the CI job with a GitHub Environment that requires reviewers |
-| **13** | Agent run failed | An interactive or one-shot agent run failed | Inspect the agent run logs |
-| **14** | Plan lifecycle failed | `change status` observed a terminal failure plan status (`failed`, `compile_failed`, `rejected`, `expired`) | Inspect the plan in the portal; fix compile errors or reject reason before retrying |
-| **15** | Endpoint not available | Observer returned 404 for a route that is not a plan lookup (missing or older backend) | Upgrade Observer, or use a host that exposes the command; do not treat this as a missing plan |
-| **20** | Validation blocked | Plan validation returned blocking findings | Review findings; update the plan before approval |
-| **21** | Validation warning | Warnings were found with `--fail-on warning` | Review warnings or use the default `--fail-on block` policy |
-| **22** | Validation model unavailable | No allowed validation model could be resolved | Configure the tenant validation model and provider |
-| **23** | Validation timeout | Validation exceeded its bounded execution time | Retry; reduce plan size if the timeout repeats |
-| **24** | Validation unavailable | Validation service/specs failed or the stored verdict is `error` | Check DAI validation configuration and retry |
 
 ---
 
