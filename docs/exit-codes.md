@@ -38,6 +38,9 @@ even though exit **4** is the auth class; agents may poll.
 
 - Most failures come from `CliError` variants in `src/errors.rs`. An exhaustiveness
   test asserts every variant maps to a row above.
+- **2** covers clap usage errors, including bare groups with no subcommand
+  (`deslicer change`, `acs stacks`, …). Clap may still print help; the process
+  exits 2. Explicit `--help` / `--version` stay exit 0.
 - **14** is emitted by `change status` when the plan lifecycle is a terminal
   failure (`failed`, `compile_failed`, `rejected`, `expired`), not as a
   `CliError` variant.
