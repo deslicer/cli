@@ -27,7 +27,8 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
 }
 
 /// Probe Observer with the static API token so a rejected key is not reported
-/// as logged in (issue #209). `GET api/v1/groups` is a cheap authenticated read.
+/// as logged in (issue #209). Uses `GET api/v1/me` (identity), not a resource
+/// read like groups — a valid narrowly scoped key must not look logged-out.
 async fn print_direct_whoami(ctx: Ctx) -> i32 {
     let url = ctx
         .observer_api_url
@@ -37,20 +38,11 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
         Ok(pair) => pair,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
-    match client.list_groups().await {
-        Ok(_) => {
-            print_output(
-                ctx.log_format,
-                &json!({
-                    "ok": true,
-                    "logged_in": true,
-                    "identity": "observer_api_token",
-                    "observer_api_url": url,
-                }),
-                &whoami_token_human(url.as_deref()),
-            );
-            0
-        }
+    match client.get_me().await {
+        Ok(_) => print_token_logged_in(&ctx, url.as_deref()),
+        // 403: auth accepted the bearer; insufficient scope / forbid is not
+        // "not logged in" (that is 401 → ApiTokenRejected / OidcRejected only).
+        Err(err) if identity_probe_forbidden(&err) => print_token_logged_in(&ctx, url.as_deref()),
         Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
             // Single document only: do not also emit_cli_error (that printed a
             // second JSON object on stderr and broke `--log-format json` parsers).
@@ -68,6 +60,39 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
             err.exit_code()
         }
         Err(err) => map_cli_error(ctx.log_format, err),
+    }
+}
+
+fn print_token_logged_in(ctx: &Ctx, url: Option<&str>) -> i32 {
+    print_output(
+        ctx.log_format,
+        &json!({
+            "ok": true,
+            "logged_in": true,
+            "identity": "observer_api_token",
+            "observer_api_url": url,
+        }),
+        &whoami_token_human(url),
+    );
+    0
+}
+
+/// True when Observer returned HTTP 403 for the identity probe.
+///
+/// Scope/forbid proves the bearer was authenticated; only 401 maps to
+/// `ApiTokenRejected` / `OidcRejected` (not logged in, exit 4).
+fn identity_probe_forbidden(err: &CliError) -> bool {
+    match err {
+        CliError::Other(msg) => {
+            let lower = msg.to_ascii_lowercase();
+            lower.contains("forbidden") || lower.contains("http 403")
+        }
+        // Other 403 classifiers from `map_observer_error_with_auth` still mean
+        // the token was accepted before the forbid reason was applied.
+        CliError::HumanApprovalRequired(_)
+        | CliError::EnvironmentNotBound(_)
+        | CliError::RepoNotAllowlisted(_) => true,
+        _ => false,
     }
 }
 
@@ -178,5 +203,21 @@ mod tests {
 
         let without = device_whoami_json(&session(None));
         assert!(without["tenant_slug"].is_null());
+    }
+
+    #[test]
+    fn identity_probe_forbidden_detects_403_not_401() {
+        assert!(identity_probe_forbidden(&CliError::Other(
+            "observer request forbidden (HTTP 403)".into()
+        )));
+        assert!(identity_probe_forbidden(&CliError::Other(
+            "forbidden".into()
+        )));
+        assert!(!identity_probe_forbidden(&CliError::ApiTokenRejected(
+            "HTTP 401 Unauthorized".into()
+        )));
+        assert!(!identity_probe_forbidden(&CliError::OidcRejected(
+            "oidc_rejected".into()
+        )));
     }
 }
