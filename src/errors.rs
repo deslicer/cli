@@ -73,10 +73,31 @@ impl CliError {
             CliError::ValidationModelUnavailable => 22,
             CliError::ValidationTimeout => 23,
             CliError::ValidationUnavailable => 24,
+            // Auth-class messages historically stuffed into Other (issue #220).
+            CliError::Other(msg) if msg.contains("not logged in") => 4,
             CliError::Other(_) => 1,
         }
     }
+
+    /// Whether agents should retry this failure class.
+    pub fn retryable(&self) -> bool {
+        matches!(
+            self,
+            CliError::RateLimited { .. }
+                | CliError::BackendUnavailable(_)
+                | CliError::Transport(_)
+                | CliError::ValidationModelUnavailable
+                | CliError::ValidationTimeout
+                | CliError::ValidationUnavailable
+        )
+    }
 }
+
+/// Process exit codes published for agents (see `docs/exit-codes.md`).
+/// Includes codes emitted outside `CliError` (14 lifecycle, 20/21 validation).
+pub const PUBLISHED_EXIT_CODES: &[i32] = &[
+    0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 130,
+];
 
 impl From<crate::ci::OidcError> for CliError {
     fn from(err: crate::ci::OidcError) -> Self {
@@ -85,6 +106,87 @@ impl From<crate::ci::OidcError> for CliError {
             crate::ci::OidcError::Http(msg) => CliError::Transport(msg),
             crate::ci::OidcError::Unsupported(msg) => CliError::UnsupportedPlatform(msg),
             crate::ci::OidcError::Other(msg) => CliError::Other(msg),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_errors() -> Vec<CliError> {
+        vec![
+            CliError::OidcRejected("x".into()),
+            CliError::ApiTokenRejected("x".into()),
+            CliError::RepoNotAllowlisted("x".into()),
+            CliError::EnvironmentNotBound("x".into()),
+            CliError::AmbiguousBinding("x".into()),
+            CliError::GitBackedChangeManagement("x".into()),
+            CliError::UnsupportedPlatform("x".into()),
+            CliError::InvalidInput("x".into()),
+            CliError::RateLimited {
+                retry_after_secs: 1,
+            },
+            CliError::BackendUnavailable("503".into()),
+            CliError::PlanNotFound("x".into()),
+            CliError::EndpointNotAvailable("x".into()),
+            CliError::HumanApprovalRequired("x".into()),
+            CliError::AgentRunFailed("x".into()),
+            CliError::ValidationModelUnavailable,
+            CliError::ValidationTimeout,
+            CliError::ValidationUnavailable,
+            CliError::Transport("x".into()),
+            CliError::Other("not logged in".into()),
+            CliError::Other("unexpected boom".into()),
+        ]
+    }
+
+    #[test]
+    fn not_logged_in_exits_4() {
+        let err = CliError::Other(
+            "not logged in. Run `deslicer auth login` and approve the code in the portal".into(),
+        );
+        assert_eq!(err.exit_code(), 4);
+        assert!(!err.retryable());
+    }
+
+    #[test]
+    fn every_cli_error_variant_maps_to_published_exit_code() {
+        for err in sample_errors() {
+            let code = err.exit_code();
+            assert!(
+                PUBLISHED_EXIT_CODES.contains(&code),
+                "undocumented exit {code} for {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn exit_code_match_is_exhaustive_for_variants() {
+        // Force a compile error when a new CliError variant is added without
+        // updating exit_code() — mirror the production match arms.
+        for err in sample_errors() {
+            let _ = match &err {
+                CliError::OidcRejected(_)
+                | CliError::ApiTokenRejected(_)
+                | CliError::RepoNotAllowlisted(_)
+                | CliError::EnvironmentNotBound(_)
+                | CliError::AmbiguousBinding(_)
+                | CliError::GitBackedChangeManagement(_)
+                | CliError::UnsupportedPlatform(_)
+                | CliError::InvalidInput(_)
+                | CliError::RateLimited { .. }
+                | CliError::BackendUnavailable(_)
+                | CliError::PlanNotFound(_)
+                | CliError::EndpointNotAvailable(_)
+                | CliError::HumanApprovalRequired(_)
+                | CliError::AgentRunFailed(_)
+                | CliError::ValidationModelUnavailable
+                | CliError::ValidationTimeout
+                | CliError::ValidationUnavailable
+                | CliError::Transport(_)
+                | CliError::Other(_) => err.exit_code(),
+            };
         }
     }
 }

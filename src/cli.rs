@@ -12,7 +12,8 @@ use crate::ci::CiPlatform;
         env!("DESLICER_GIT_SHA"),
         ")"
     ),
-    about
+    about,
+    after_help = "Exit codes: see docs/exit-codes.md in the deslicer/cli repository."
 )]
 pub struct Cli {
     /// API base URL used for resolve-backend and OIDC exchange.

@@ -142,4 +142,4 @@ Omitting `--environment` asks deslicer-ai for every bound environment and create
 validation adds `20` (blocked), `21` (warning when configured), `22` (model
 unavailable), `23` (timeout), and `24` (validation unavailable). `change status`
 exits **14** when the plan lifecycle status is a terminal failure. The full table
-lives in [oidc-troubleshooting.md](oidc-troubleshooting.md#exit-codes).
+lives in [exit-codes.md](exit-codes.md).

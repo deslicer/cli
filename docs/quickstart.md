@@ -194,4 +194,5 @@ deslicer change show                          # list recent plans
 - [bundle-flow.md](bundle-flow.md) — the GitHub-App-free flow in depth
 - [ci-outputs.md](ci-outputs.md) — output variables the CLI writes for pipeline steps
 - [environments.md](environments.md) — the `.deslicer/environments/` convention
-- [oidc-troubleshooting.md](oidc-troubleshooting.md) — exit codes and per-platform OIDC fixes
+- [exit-codes.md](exit-codes.md) — process exit-code contract for agents
+- [oidc-troubleshooting.md](oidc-troubleshooting.md) — per-platform OIDC fixes
