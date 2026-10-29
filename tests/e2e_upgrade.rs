@@ -192,7 +192,7 @@ async fn plan_prints_plan_id_and_next_step() {
         .await;
     let dir = tempfile::tempdir().unwrap();
 
-    let mut args = vec!["plan"];
+    let mut args = vec!["--output", "human", "plan"];
     args.extend_from_slice(ROLLING);
     let out = run(dir.path(), &server.uri(), &args).await;
     assert_eq!(
@@ -205,6 +205,8 @@ async fn plan_prints_plan_id_and_next_step() {
     assert!(text.starts_with(&format!("plan_id: {PLAN}")));
     assert!(text.contains(&format!("deslicer change approve --plan-id {PLAN}")));
 
+    let mut args = vec!["plan"];
+    args.extend_from_slice(ROLLING);
     args.push("--json");
     let out = run(dir.path(), &server.uri(), &args).await;
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
