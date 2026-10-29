@@ -70,6 +70,14 @@ async fn legacy_token_fails_consistently_without_network_transmission() {
 async fn direct_observer_credentials_take_precedence_over_legacy_token() {
     let observer = MockServer::start().await;
     Mock::given(method("GET"))
+        .and(path("/api/v1/me"))
+        .and(header("Authorization", "Bearer tools-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "tenant_id": "2fb5ef22-12ad-4d20-9e0f-4736f47953bb"
+        })))
+        .mount(&observer)
+        .await;
+    Mock::given(method("GET"))
         .and(path("/api/v1/groups"))
         .and(header("Authorization", "Bearer tools-key"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))

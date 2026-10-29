@@ -33,12 +33,14 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 fn print_direct_status(ctx: &Ctx, platform: CiPlatform) -> i32 {
     let audience = ci::AUDIENCE;
     let url = ctx.observer_api_url.as_ref().map(|u| u.as_str());
+    // Presence-only: verification lives in `auth whoami` (issue #209).
     print_output(
         ctx.log_format,
         &json!({
             "ok": true,
             "platform": platform.header_value(),
             "identity": "observer_api_token",
+            "token_verified": false,
             "observer_api_url": url,
             "resolution_path": crate::observer_token::RESOLUTION_PATH,
             "audience": audience,

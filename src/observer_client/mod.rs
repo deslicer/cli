@@ -404,6 +404,15 @@ impl Client {
         self.get_json(&path).await
     }
 
+    /// Identity probe (`GET api/v1/me`) for `auth whoami` (issue #209).
+    ///
+    /// Unlike `list_groups`, this is not a resource-scoped inventory read, so a
+    /// valid but narrowly scoped API key should not be mistaken for a rejected
+    /// token when groups listing would 403.
+    pub async fn get_me(&self) -> Result<serde_json::Value, CliError> {
+        self.get_json("api/v1/me").await
+    }
+
     /// Host groups for `change plan --target-group`.
     pub async fn list_groups(&self) -> Result<Vec<HostGroup>, CliError> {
         self.get_json("api/v1/groups").await
