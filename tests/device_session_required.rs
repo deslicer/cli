@@ -64,12 +64,14 @@ fn assert_device_session_required(argv: &[&str]) {
     );
     let v = last_stderr_json(&stderr);
     assert_eq!(v["schema_version"], 1, "{argv:?}");
-    assert_eq!(v["error"]["code"], "auth.device_session_required", "{argv:?}");
+    assert_eq!(
+        v["error"]["code"], "auth.device_session_required",
+        "{argv:?}"
+    );
     assert_eq!(v["error"]["kind"], "auth", "{argv:?}");
     assert_eq!(v["error"]["exit_code"], 4, "{argv:?}");
     assert_eq!(
-        v["error"]["next_command"],
-        "deslicer auth login",
+        v["error"]["next_command"], "deslicer auth login",
         "{argv:?}"
     );
     assert!(v["error"]["hint"].is_string(), "{argv:?}");
