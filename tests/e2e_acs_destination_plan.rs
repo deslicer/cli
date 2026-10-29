@@ -130,7 +130,13 @@ async fn unresolvable_environment_or_apps_exit_2_without_calling_observer() {
         .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let out = run(dir.path(), &observer.uri(), &["--environment", "prod"]).await;
+    // Piped stdout defaults to JSON (#221); request human for substring asserts.
+    let out = run(
+        dir.path(),
+        &observer.uri(),
+        &["--output", "human", "--environment", "prod"],
+    )
+    .await;
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("environment \"prod\" not found"));
 
@@ -139,7 +145,12 @@ async fn unresolvable_environment_or_apps_exit_2_without_calling_observer() {
         ".deslicer/environments/prod.yml",
         "destinations:\n  - inventory_group: cloud\n    apps: []\n",
     );
-    let out = run(dir.path(), &observer.uri(), &["--environment", "prod"]).await;
+    let out = run(
+        dir.path(),
+        &observer.uri(),
+        &["--output", "human", "--environment", "prod"],
+    )
+    .await;
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("no destination with source_path apps"));
 }
