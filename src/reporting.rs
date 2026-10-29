@@ -101,11 +101,15 @@ where
             output = Some(parse_log_format_value(value));
             continue;
         }
+        // Glued short form: only `-ojson` / `-ohuman` (not e.g. `-ops`).
         if let Some(value) = arg.strip_prefix("-o") {
-            if !value.is_empty() {
-                output = Some(parse_log_format_value(value));
+            match value.to_ascii_lowercase().as_str() {
+                "json" | "human" => {
+                    output = Some(parse_log_format_value(value));
+                    continue;
+                }
+                _ => {}
             }
-            continue;
         }
         if arg == "--log-format" {
             if let Some(value) = args.next() {
@@ -227,18 +231,6 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
     }
 }
 
-pub fn cli_error_retryable(err: &CliError) -> bool {
-    matches!(
-        err,
-        CliError::RateLimited { .. }
-            | CliError::BackendUnavailable(_)
-            | CliError::Transport(_)
-            | CliError::ValidationModelUnavailable
-            | CliError::ValidationTimeout
-            | CliError::ValidationUnavailable
-    )
-}
-
 pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
     match err {
         CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
@@ -290,7 +282,7 @@ pub fn cli_error_json(err: &CliError) -> Value {
         redact_secrets(&err.to_string()),
         cli_error_hint(err),
         cli_error_next_command(err),
-        cli_error_retryable(err),
+        err.retryable(),
         err.exit_code(),
     )
 }
@@ -457,6 +449,28 @@ mod tests {
     fn output_format_from_args_reads_output_flag() {
         let args = ["cli", "--output", "json", "groups", "list"];
         assert_eq!(output_format_from_args(args).unwrap(), LogFormat::Json);
+    }
+
+    #[test]
+    fn output_format_from_args_reads_short_o_forms() {
+        assert_eq!(
+            output_format_from_args(["cli", "-o", "json", "groups", "list"]).unwrap(),
+            LogFormat::Json
+        );
+        assert_eq!(
+            output_format_from_args(["cli", "-ohuman", "groups", "list"]).unwrap(),
+            LogFormat::Human
+        );
+    }
+
+    #[test]
+    fn output_format_from_args_ignores_ops_like_positionals() {
+        // `-ops` must not be swallowed as `-o` + `ps`.
+        let format = output_format_from_args(["cli", "-ops", "groups", "list"]).unwrap();
+        assert_eq!(
+            format,
+            resolve_output_format(None, false, None, io::stdout().is_terminal()).unwrap()
+        );
     }
 
     #[test]
