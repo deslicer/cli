@@ -52,9 +52,19 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     if let Some(job_id) = args.job.as_deref() {
         let summary =
             load_execution_with_jobs(&client, &args.plan_id, args.execution_id.as_deref()).await?;
-        let job = client
+        // Observer's retry response (`JobOperationResponse`) carries no
+        // `retry_count`; derive it from the job row we just read.
+        let prior_retries = summary
+            .jobs
+            .iter()
+            .find(|j| j.id == job_id)
+            .map(|j| j.retry_count);
+        let mut job = client
             .retry_execution_job(&summary.execution_id, job_id)
             .await?;
+        if let Some(prior) = prior_retries {
+            job.retry_count = job.retry_count.max(prior + 1);
+        }
         match ctx.log_format {
             LogFormat::Json => println!(
                 "{}",

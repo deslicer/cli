@@ -106,10 +106,20 @@ fn print_jobs(ctx: &Ctx, plan_id: &str, summary: &ExecutionSummary) {
 
 pub(crate) fn format_job_line(job: &ExecutionJob) -> String {
     let label = job.host.as_deref().or(job.name.as_deref()).unwrap_or("-");
-    format!(
+    let mut line = format!(
         "job {}  status {}  retries {}  {}",
         job.id, job.status, job.retry_count, label
-    )
+    );
+    if let Some(attempt) = job.attempt {
+        line.push_str(&format!("  attempt {attempt}"));
+    }
+    if let Some(phase) = job.phase_group_id.as_deref() {
+        line.push_str(&format!("  phase {phase}"));
+    }
+    if let Some(reason) = job.failure_reason.as_deref().filter(|r| !r.is_empty()) {
+        line.push_str(&format!("  reason: {reason}"));
+    }
+    line
 }
 
 #[cfg(test)]
@@ -124,10 +134,34 @@ mod tests {
             retry_count: 2,
             host: Some("idx-1".into()),
             name: None,
+            attempt: Some(1),
+            failure_reason: Some("disk full".into()),
+            phase_group_id: None,
+            queued_at: None,
+            completed_at: None,
         };
         let line = format_job_line(&job);
         assert!(line.contains("j1"));
         assert!(line.contains("retries 2"));
         assert!(line.contains("idx-1"));
+        assert!(line.contains("reason: disk full"));
+    }
+
+    #[test]
+    fn decodes_observer_job_summary_shape() {
+        // Shape of DAP `JobSummary` (observer-api models/executions.rs).
+        let raw = r#"{"execution_id":"e1","status":"failed","jobs_total":1,
+            "jobs":[{"job_id":"0b4f","host_id":null,"hostname":"idx-1",
+            "splunk_version":"9.4.1","status":"failed","attempt":3,"retry_count":2,
+            "worker_id":null,"failure_reason":"timeout","role_tier":1,
+            "phase_group_id":null,"queued_at":"2026-10-29T10:00:00Z",
+            "claimed_at":null,"completed_at":null}]}"#;
+        let summary: crate::observer_client::ExecutionSummary =
+            serde_json::from_str(raw).expect("JobSummary must decode");
+        let job = &summary.jobs[0];
+        assert_eq!(job.id, "0b4f");
+        assert_eq!(job.host.as_deref(), Some("idx-1"));
+        assert_eq!(job.retry_count, 2);
+        assert_eq!(job.attempt, Some(3));
     }
 }
