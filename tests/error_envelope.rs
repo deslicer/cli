@@ -5,6 +5,12 @@ use std::sync::Mutex;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn cli_bin() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_deslicer"));
     // Empty HOME so we never pick up a real device session and hang on the network.
@@ -15,6 +21,9 @@ fn cli_bin() -> Command {
         .env_remove("OBSERVER_API_URL")
         .env_remove("DESLICER_OUTPUT")
         .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
         .env_remove("DESLICER_CONFIG_DIR")
         .env_remove("DESLICER_TOKEN_STORE");
     cmd
@@ -33,9 +42,9 @@ fn last_stderr_json(stderr: &str) -> serde_json::Value {
 
 #[test]
 fn output_json_flag_accepted() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = env_lock();
     let output = cli_bin()
-        .args(["--output", "json", "groups", "list"])
+        .args(["--ci-platform", "local", "--output", "json", "groups", "list"])
         .output()
         .expect("run");
     assert_ne!(
@@ -51,9 +60,9 @@ fn output_json_flag_accepted() {
 
 #[test]
 fn short_o_json_flag_accepted() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = env_lock();
     let output = cli_bin()
-        .args(["-o", "json", "groups", "list"])
+        .args(["--ci-platform", "local", "-o", "json", "groups", "list"])
         .output()
         .expect("run");
     assert_ne!(output.status.code(), Some(2));
@@ -63,9 +72,12 @@ fn short_o_json_flag_accepted() {
 
 #[test]
 fn non_tty_defaults_to_json_error_envelope() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = env_lock();
     // Command::output() pipes stdout → not a TTY; must not require --json/--log-format.
-    let output = cli_bin().args(["groups", "list"]).output().expect("run");
+    let output = cli_bin()
+        .args(["--ci-platform", "local", "groups", "list"])
+        .output()
+        .expect("run");
     assert!(output.stdout.is_empty());
     let v = last_stderr_json(&String::from_utf8_lossy(&output.stderr));
     assert_eq!(v["schema_version"], 1);
@@ -84,9 +96,9 @@ fn non_tty_defaults_to_json_error_envelope() {
 
 #[test]
 fn deslicer_output_human_overrides_non_tty_default() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = env_lock();
     let output = cli_bin()
-        .args(["groups", "list"])
+        .args(["--ci-platform", "local", "groups", "list"])
         .env("DESLICER_OUTPUT", "human")
         .output()
         .expect("run");
@@ -103,9 +115,17 @@ fn deslicer_output_human_overrides_non_tty_default() {
 
 #[test]
 fn conflicting_output_flags_exit_2() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = env_lock();
     let output = cli_bin()
-        .args(["--output", "human", "--json", "groups", "list"])
+        .args([
+            "--ci-platform",
+            "local",
+            "--output",
+            "human",
+            "--json",
+            "groups",
+            "list",
+        ])
         .output()
         .expect("run");
     assert_eq!(output.status.code(), Some(2));
@@ -113,7 +133,7 @@ fn conflicting_output_flags_exit_2() {
 
 #[test]
 fn clap_usage_error_uses_envelope_with_output_json() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = env_lock();
     let output = cli_bin()
         .args(["--output", "json", "change", "approve"])
         .output()
