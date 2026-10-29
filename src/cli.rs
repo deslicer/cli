@@ -1,6 +1,9 @@
+use std::io::IsTerminal;
+
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::ci::CiPlatform;
+use crate::reporting::{emit_log_format_deprecation, emit_output_conflict, resolve_output_format};
 
 #[derive(Parser)]
 #[command(
@@ -33,9 +36,23 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = CiPlatformArg::Auto, global = true)]
     pub ci_platform: CiPlatformArg,
 
-    /// Human tables on stderr/stdout, or single-line JSON for automation.
-    #[arg(long, value_enum, default_value_t = LogFormat::Human, global = true)]
-    pub log_format: LogFormat,
+    /// Output format (`json` or `human`). Default: json when stdout is not a TTY.
+    #[arg(
+        short = 'o',
+        long = "output",
+        value_enum,
+        global = true,
+        env = "DESLICER_OUTPUT"
+    )]
+    pub output: Option<LogFormat>,
+
+    /// Emit JSON (alias for `--output json`).
+    #[arg(long, global = true, hide = true)]
+    pub json: bool,
+
+    /// Deprecated: prefer `--output` / `-o`.
+    #[arg(long, value_enum, global = true)]
+    pub log_format: Option<LogFormat>,
 
     #[command(subcommand)]
     pub command: Command,
@@ -149,11 +166,31 @@ pub struct Ctx {
 
 impl Cli {
     pub async fn run(self) -> i32 {
+        let stdout_is_tty = std::io::stdout().is_terminal();
+        let log_format =
+            match resolve_output_format(self.output, self.json, self.log_format, stdout_is_tty) {
+                Ok(format) => format,
+                Err(_) => {
+                    let fallback = if !stdout_is_tty
+                        || self.json
+                        || self.output == Some(LogFormat::Json)
+                        || self.log_format == Some(LogFormat::Json)
+                    {
+                        LogFormat::Json
+                    } else {
+                        LogFormat::Human
+                    };
+                    return emit_output_conflict(fallback);
+                }
+            };
+        if self.log_format.is_some() {
+            emit_log_format_deprecation();
+        }
         let ctx = Ctx {
             deslicer_api_url: self.deslicer_api_url,
             observer_api_url: self.observer_api_url,
             ci_override: self.ci_platform.as_override(),
-            log_format: self.log_format,
+            log_format,
         };
         if let Err(err) = crate::observer_token::ObserverTokenConfiguration::validate(&ctx) {
             return crate::reporting::emit_cli_error(ctx.log_format, &err);

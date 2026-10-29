@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 use clap::error::ErrorKind;
 use serde_json::{json, Value};
@@ -31,28 +31,112 @@ const SECRET_ENV_VARS: &[&str] = &[
     "SYSTEM_ACCESSTOKEN",
 ];
 
-/// Infer `--log-format` from argv before clap parses (for usage errors).
-pub fn log_format_from_args<I, S>(args: I) -> LogFormat
+/// Conflicting `--output` / `--json` / `--log-format` / `DESLICER_OUTPUT` values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputFormatConflict;
+
+/// Resolve the effective output format from explicit sources + TTY default.
+///
+/// Default is JSON when stdout is **not** a TTY (not keyed off `CI=true`).
+pub fn resolve_output_format(
+    output: Option<LogFormat>,
+    json_flag: bool,
+    log_format: Option<LogFormat>,
+    stdout_is_tty: bool,
+) -> Result<LogFormat, OutputFormatConflict> {
+    let mut selected: Option<LogFormat> = None;
+    let mut assign = |next: LogFormat| -> Result<(), OutputFormatConflict> {
+        if let Some(prev) = selected {
+            if prev != next {
+                return Err(OutputFormatConflict);
+            }
+        }
+        selected = Some(next);
+        Ok(())
+    };
+    if json_flag {
+        assign(LogFormat::Json)?;
+    }
+    if let Some(value) = output {
+        assign(value)?;
+    }
+    if let Some(value) = log_format {
+        assign(value)?;
+    }
+    Ok(selected.unwrap_or(if stdout_is_tty {
+        LogFormat::Human
+    } else {
+        LogFormat::Json
+    }))
+}
+
+/// Infer output format from argv (+ `DESLICER_OUTPUT`) before clap parses.
+///
+/// Used so clap usage errors honour `--output`/`--json`/`--log-format` and the
+/// non-TTY JSON default. On conflict, returns [`OutputFormatConflict`].
+pub fn output_format_from_args<I, S>(args: I) -> Result<LogFormat, OutputFormatConflict>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    let mut output = None;
+    let mut json_flag = false;
+    let mut log_format = None;
+
     let mut args = args
         .into_iter()
         .map(|s| s.as_ref().to_string_lossy().into_owned());
     while let Some(arg) = args.next() {
         if arg == "--json" {
-            return LogFormat::Json;
+            json_flag = true;
+            continue;
+        }
+        if arg == "--output" || arg == "-o" {
+            if let Some(value) = args.next() {
+                output = Some(parse_log_format_value(&value));
+            }
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--output=") {
+            output = Some(parse_log_format_value(value));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("-o") {
+            if !value.is_empty() {
+                output = Some(parse_log_format_value(value));
+            }
+            continue;
         }
         if arg == "--log-format" {
             if let Some(value) = args.next() {
-                return parse_log_format_value(&value);
+                log_format = Some(parse_log_format_value(&value));
             }
-        } else if let Some(value) = arg.strip_prefix("--log-format=") {
-            return parse_log_format_value(value);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--log-format=") {
+            log_format = Some(parse_log_format_value(value));
         }
     }
-    LogFormat::Human
+
+    if output.is_none() {
+        if let Ok(value) = std::env::var("DESLICER_OUTPUT") {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                output = Some(parse_log_format_value(trimmed));
+            }
+        }
+    }
+
+    resolve_output_format(output, json_flag, log_format, io::stdout().is_terminal())
+}
+
+/// Back-compat alias used by older call sites / tests.
+pub fn log_format_from_args<I, S>(args: I) -> LogFormat
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    output_format_from_args(args).unwrap_or(LogFormat::Human)
 }
 
 fn parse_log_format_value(value: &str) -> LogFormat {
@@ -117,34 +201,117 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
     }
 }
 
-pub fn cli_error_json(err: &CliError) -> Value {
-    let message = redact_secrets(&err.to_string());
-    let mut body = json!({
-        "kind": cli_error_kind(err),
-        "message": message,
-    });
+pub fn cli_error_code(err: &CliError) -> &'static str {
+    match err {
+        CliError::OidcRejected(_) => "auth.oidc_rejected",
+        CliError::ApiTokenRejected(_) => "auth.api_token_rejected",
+        CliError::RepoNotAllowlisted(_) => "auth.repo_not_allowlisted",
+        CliError::EnvironmentNotBound(_) => "auth.environment_not_bound",
+        CliError::AmbiguousBinding(_) => "auth.ambiguous_binding",
+        CliError::GitBackedChangeManagement(_) => "auth.git_backed_change_management",
+        CliError::UnsupportedPlatform(_) => "platform.unsupported",
+        CliError::InvalidInput(_) => "usage.invalid_input",
+        CliError::RateLimited { .. } => "transport.rate_limited",
+        CliError::BackendUnavailable(_) => "transport.backend_unavailable",
+        CliError::Transport(_) => "transport.error",
+        CliError::PlanNotFound(_) => "plan.not_found",
+        CliError::EndpointNotAvailable(_) => "endpoint.not_available",
+        CliError::HumanApprovalRequired(_) => "approval.required",
+        CliError::AgentRunFailed(_) => "agent.run_failed",
+        CliError::ValidationModelUnavailable => "validation.model_unavailable",
+        CliError::ValidationTimeout => "validation.timeout",
+        CliError::ValidationUnavailable => "validation.unavailable",
+        CliError::Other(msg) if msg.contains("not logged in") => "auth.not_logged_in",
+        CliError::Other(msg) if msg.contains("OIDC") => "auth.oidc",
+        CliError::Other(_) => "error.other",
+    }
+}
+
+pub fn cli_error_retryable(err: &CliError) -> bool {
+    matches!(
+        err,
+        CliError::RateLimited { .. }
+            | CliError::BackendUnavailable(_)
+            | CliError::Transport(_)
+            | CliError::ValidationModelUnavailable
+            | CliError::ValidationTimeout
+            | CliError::ValidationUnavailable
+    )
+}
+
+pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
+    match err {
+        CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
+        CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
+        _ => None,
+    }
+}
+
+pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
     match err {
         CliError::Other(msg) if msg.contains("not logged in") => {
-            body["hint"] = json!("run auth login and approve the code in the portal");
+            Some("run auth login and approve the code in the portal")
         }
         CliError::ApiTokenRejected(_) => {
-            body["hint"] = json!(
-                "mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login"
-            );
+            Some("mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login")
         }
-        _ => {}
+        _ => None,
     }
-    json!({ "error": body })
+}
+
+fn error_envelope(
+    code: &str,
+    kind: &str,
+    message: String,
+    hint: Option<&str>,
+    next_command: Option<&str>,
+    retryable: bool,
+    exit_code: i32,
+) -> Value {
+    json!({
+        "schema_version": 1,
+        "error": {
+            "code": code,
+            "kind": kind,
+            "message": message,
+            "hint": hint,
+            "next_command": next_command,
+            "retryable": retryable,
+            "exit_code": exit_code,
+            "details": {},
+        }
+    })
+}
+
+pub fn cli_error_json(err: &CliError) -> Value {
+    error_envelope(
+        cli_error_code(err),
+        cli_error_kind(err),
+        redact_secrets(&err.to_string()),
+        cli_error_hint(err),
+        cli_error_next_command(err),
+        cli_error_retryable(err),
+        err.exit_code(),
+    )
 }
 
 pub fn oidc_error_json(err: &OidcError) -> Value {
-    let message = redact_secrets(&err.to_string());
-    json!({
-        "error": {
-            "kind": "oidc",
-            "message": message,
-        }
-    })
+    let exit_code = oidc_exit_code(err);
+    let (code, kind, retryable) = match err {
+        OidcError::MissingEnv(_) => ("auth.oidc_missing_env", "oidc", false),
+        OidcError::Unsupported(_) => ("platform.unsupported", "oidc", false),
+        OidcError::Http(_) => ("transport.oidc_http", "oidc", true),
+        OidcError::Other(_) => ("error.oidc", "oidc", false),
+    };
+    error_envelope(
+        code,
+        kind,
+        redact_secrets(&err.to_string()),
+        None,
+        None,
+        retryable,
+        exit_code,
+    )
 }
 
 pub fn oidc_exit_code(err: &OidcError) -> i32 {
@@ -154,6 +321,13 @@ pub fn oidc_exit_code(err: &OidcError) -> i32 {
         OidcError::Http(_) => 10,
         OidcError::Other(_) => 1,
     }
+}
+
+pub fn emit_output_conflict(format: LogFormat) -> i32 {
+    let err = CliError::InvalidInput(
+        "conflicting values among --output/-o, --json, --log-format, and DESLICER_OUTPUT".into(),
+    );
+    emit_cli_error(format, &err)
 }
 
 pub fn emit_cli_error(format: LogFormat, err: &CliError) -> i32 {
@@ -188,16 +362,26 @@ pub fn emit_clap_error(format: LogFormat, err: &clap::Error) -> i32 {
         ErrorKind::DisplayVersion => 0,
         _ => 2,
     };
+    if code == 0 {
+        // Help/version stay human on stdout even when the default format is JSON.
+        if let Err(print_err) = ignore_broken_pipe(err.print()) {
+            write_stderr_line(&format!("clap error print failed: {print_err}"));
+        }
+        return code;
+    }
     match format {
         LogFormat::Json => {
             let message = redact_secrets(&err.to_string());
             write_stderr_line(
-                &serde_json::to_string(&json!({
-                    "error": {
-                        "kind": "usage",
-                        "message": message,
-                    }
-                }))
+                &serde_json::to_string(&error_envelope(
+                    "usage.invalid",
+                    "usage",
+                    message,
+                    None,
+                    None,
+                    false,
+                    2,
+                ))
                 .unwrap_or_default(),
             );
         }
@@ -211,12 +395,51 @@ pub fn emit_clap_error(format: LogFormat, err: &clap::Error) -> i32 {
     code
 }
 
+pub fn emit_log_format_deprecation() {
+    write_stderr_line(
+        "warning: --log-format is deprecated; prefer --output/-o (or DESLICER_OUTPUT)",
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn resolve_prefers_explicit_over_tty_default() {
+        assert_eq!(
+            resolve_output_format(Some(LogFormat::Human), false, None, false).unwrap(),
+            LogFormat::Human
+        );
+        assert_eq!(
+            resolve_output_format(None, true, None, true).unwrap(),
+            LogFormat::Json
+        );
+    }
+
+    #[test]
+    fn resolve_defaults_json_when_not_tty() {
+        assert_eq!(
+            resolve_output_format(None, false, None, false).unwrap(),
+            LogFormat::Json
+        );
+        assert_eq!(
+            resolve_output_format(None, false, None, true).unwrap(),
+            LogFormat::Human
+        );
+    }
+
+    #[test]
+    fn resolve_rejects_conflicts() {
+        assert!(resolve_output_format(Some(LogFormat::Human), true, None, false).is_err());
+        assert!(
+            resolve_output_format(Some(LogFormat::Json), false, Some(LogFormat::Human), true)
+                .is_err()
+        );
+    }
 
     #[test]
     fn log_format_from_args_reads_flag() {
@@ -228,6 +451,12 @@ mod tests {
     fn log_format_from_args_reads_equals_form() {
         let args = ["cli", "auth", "status", "--log-format=json"];
         assert_eq!(log_format_from_args(args), LogFormat::Json);
+    }
+
+    #[test]
+    fn output_format_from_args_reads_output_flag() {
+        let args = ["cli", "--output", "json", "groups", "list"];
+        assert_eq!(output_format_from_args(args).unwrap(), LogFormat::Json);
     }
 
     #[test]
@@ -248,11 +477,17 @@ mod tests {
     }
 
     #[test]
-    fn cli_error_json_has_kind_and_message() {
+    fn cli_error_json_has_envelope_v1_fields() {
         let err = CliError::Other("not logged in".into());
         let value = cli_error_json(&err);
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["error"]["code"], "auth.not_logged_in");
         assert_eq!(value["error"]["kind"], "auth");
         assert!(value["error"]["hint"].is_string());
+        assert_eq!(value["error"]["next_command"], "deslicer auth login");
+        assert_eq!(value["error"]["retryable"], false);
+        assert_eq!(value["error"]["exit_code"], err.exit_code());
+        assert!(value["error"]["details"].is_object());
     }
 
     #[test]
@@ -260,6 +495,7 @@ mod tests {
         let err = CliError::ApiTokenRejected("HTTP 401 Unauthorized".into());
         let value = cli_error_json(&err);
         assert_eq!(value["error"]["kind"], "api_token");
+        assert_eq!(value["error"]["code"], "auth.api_token_rejected");
         assert!(value["error"]["hint"]
             .as_str()
             .unwrap()
