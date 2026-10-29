@@ -13,7 +13,12 @@ fn cli_bin() -> Command {
         .env_remove("DESLICER_DEV_TOKEN")
         .env_remove("OBSERVER_API_URL")
         .env_remove("DESLICER_CONFIG_DIR")
-        .env_remove("DESLICER_TOKEN_STORE");
+        .env_remove("DESLICER_TOKEN_STORE")
+        // GitHub Actions sets CI + OIDC request env; force a local no-session path.
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN");
     cmd
 }
 
@@ -21,7 +26,14 @@ fn cli_bin() -> Command {
 fn groups_list_not_logged_in_exits_4() {
     let _guard = ENV_LOCK.lock().unwrap();
     let output = cli_bin()
-        .args(["--log-format", "human", "groups", "list"])
+        .args([
+            "--ci-platform",
+            "local",
+            "--log-format",
+            "human",
+            "groups",
+            "list",
+        ])
         .output()
         .expect("run");
     assert_eq!(
