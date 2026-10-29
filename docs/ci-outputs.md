@@ -5,13 +5,17 @@ outputs to the detected CI platform. `change validate` instead writes the
 requested report format directly to stdout so it can be redirected to a file
 or piped into a PR-comment command.
 
-`change show` defaults to human-readable output: a list with plan ID, status,
-and name, or labeled fields for `--plan-id`. Missing fields display as `-`.
-Use `--log-format json` for the existing machine-readable format: a JSON array
-for lists, or a plan object followed by the local metadata record for a single
-plan. Single-plan human output still writes CI outputs and GitHub step summaries,
-but does not append fallback JSON when no CI output file is configured. Azure
-logging commands remain enabled in human mode. List output does not emit CI keys.
+`change show` defaults to **JSON when stdout is not a TTY** (CI runners, pipes)
+and human-readable text on a TTY: a list with plan ID, status, and name, or
+labeled fields for `--plan-id`. Missing fields display as `-`. Pin
+`--output human` (or `DESLICER_OUTPUT=human`) when CI logs must stay text —
+for example `deslicer/change-action`, which runs `deslicer change <cmd>` with
+no format flag today. Use `--output json` / `--json` for the machine-readable
+format explicitly: a JSON array for lists, or a plan object followed by the
+local metadata record for a single plan. Single-plan human output still writes
+CI outputs and GitHub step summaries, but does not append fallback JSON when no
+CI output file is configured. Azure logging commands remain enabled in human
+mode. List output does not emit CI keys.
 
 ## Output sinks per platform
 

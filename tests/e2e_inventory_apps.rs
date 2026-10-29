@@ -124,6 +124,8 @@ async fn adopt_sends_git_managed_body_with_host_id() {
         dir.path(),
         &observer.uri(),
         &[
+            "--output",
+            "human",
             "inventory",
             "apps",
             "adopt",
@@ -146,6 +148,8 @@ async fn adopt_sends_git_managed_body_with_host_id() {
         dir.path(),
         &observer.uri(),
         &[
+            "--output",
+            "human",
             "inventory",
             "apps",
             "adopt",

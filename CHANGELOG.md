@@ -2,8 +2,34 @@
 
 User-facing notes for the CLI. Older releases are on the
 [GitHub Releases](https://github.com/deslicer/cli/releases) page. <!-- pragma: allowlist secret -->
-The published v1.7.1 notes are generated from merged pull requests when the
+The published notes are generated from merged pull requests when the
 tag is pushed; this file is the prepared copy.
+
+## 1.8.0 — Unreleased
+
+Minor release with a **breaking default** for non-TTY stdout. Compare with
+[v1.7.3...main](https://github.com/deslicer/cli/compare/v1.7.3...main). <!-- pragma: allowlist secret -->
+
+### Breaking
+
+- When stdout is **not a TTY** (GitHub Actions and every typical CI runner,
+  pipes, agent captures), the CLI now defaults to **JSON for successful
+  command stdout as well as errors** — not only stderr envelopes. This is
+  keyed off TTY detection, not `CI=true`. TTY sessions still default to human
+  text. Callers that need human logs in CI must pass `--output human` /
+  `-o human` or set `DESLICER_OUTPUT=human`. In particular,
+  `deslicer/change-action` runs `deslicer change <cmd>` with no format flag
+  today, so its job logs will flip to JSON unless that action pins `--output`.
+  ([#231](https://github.com/deslicer/cli/pull/231), <!-- pragma: allowlist secret -->
+  fixes [#221](https://github.com/deslicer/cli/issues/221)) <!-- pragma: allowlist secret -->
+
+### Features
+
+- JSON error envelope v1 on the last stderr line (`schema_version`, `code`,
+  `kind`, `message`, `hint`, `next_command`, `retryable`, `exit_code`,
+  `details`), plus canonical `--output`/`-o` and `DESLICER_OUTPUT`.
+  `--json` remains; `--log-format` is deprecated.
+  ([#231](https://github.com/deslicer/cli/pull/231)) <!-- pragma: allowlist secret -->
 
 ## 1.7.1 — Unreleased
 
