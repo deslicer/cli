@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::io::{self, Write};
 
 use clap::error::ErrorKind;
 use serde_json::{json, Value};
@@ -6,6 +7,19 @@ use serde_json::{json, Value};
 use crate::ci::OidcError;
 use crate::cli::LogFormat;
 use crate::errors::CliError;
+
+/// Treat a closed pipe as success so agents piping into `head`/`jq` never panic.
+fn ignore_broken_pipe(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
+    }
+}
+
+fn write_stderr_line(line: &str) {
+    let mut stderr = io::stderr();
+    let _ = ignore_broken_pipe(writeln!(stderr, "{line}"));
+}
 
 const SECRET_ENV_VARS: &[&str] = &[
     "DESLICER_DEV_TOKEN", // pragma: allowlist secret
@@ -146,13 +160,10 @@ pub fn emit_cli_error(format: LogFormat, err: &CliError) -> i32 {
     let code = err.exit_code();
     match format {
         LogFormat::Json => {
-            eprintln!(
-                "{}",
-                serde_json::to_string(&cli_error_json(err)).unwrap_or_default()
-            );
+            write_stderr_line(&serde_json::to_string(&cli_error_json(err)).unwrap_or_default());
         }
         LogFormat::Human => {
-            eprintln!("{}", redact_secrets(&err.to_string()));
+            write_stderr_line(&redact_secrets(&err.to_string()));
         }
     }
     code
@@ -162,13 +173,10 @@ pub fn emit_oidc_error(format: LogFormat, err: &OidcError) -> i32 {
     let code = oidc_exit_code(err);
     match format {
         LogFormat::Json => {
-            eprintln!(
-                "{}",
-                serde_json::to_string(&oidc_error_json(err)).unwrap_or_default()
-            );
+            write_stderr_line(&serde_json::to_string(&oidc_error_json(err)).unwrap_or_default());
         }
         LogFormat::Human => {
-            eprintln!("{}", redact_secrets(&err.to_string()));
+            write_stderr_line(&redact_secrets(&err.to_string()));
         }
     }
     code
@@ -183,19 +191,21 @@ pub fn emit_clap_error(format: LogFormat, err: &clap::Error) -> i32 {
     match format {
         LogFormat::Json => {
             let message = redact_secrets(&err.to_string());
-            eprintln!(
-                "{}",
-                serde_json::to_string(&json!({
+            write_stderr_line(
+                &serde_json::to_string(&json!({
                     "error": {
                         "kind": "usage",
                         "message": message,
                     }
                 }))
-                .unwrap_or_default()
+                .unwrap_or_default(),
             );
         }
         LogFormat::Human => {
-            err.print().expect("clap error print");
+            // clap writes help/usage to stdout; a closed pipe must not panic (agents use head/jq).
+            if let Err(print_err) = ignore_broken_pipe(err.print()) {
+                write_stderr_line(&format!("clap error print failed: {print_err}"));
+            }
         }
     }
     code
@@ -255,5 +265,13 @@ mod tests {
             .unwrap()
             .contains("DESLICER_API_TOKEN"));
         assert!(!value["error"]["message"].as_str().unwrap().contains("OIDC"));
+    }
+
+    #[test]
+    fn ignore_broken_pipe_swallows_epipe_only() {
+        assert!(ignore_broken_pipe(Ok(())).is_ok());
+        assert!(ignore_broken_pipe(Err(io::Error::from(io::ErrorKind::BrokenPipe))).is_ok());
+        let err = ignore_broken_pipe(Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+        assert_eq!(err.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
     }
 }
