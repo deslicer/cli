@@ -31,7 +31,7 @@ pub use app_provenance::InventoryApp;
 pub use catalog::CatalogEntry;
 pub use license::{LicenseBindResult, LicenseStatus};
 pub use mappings::{find_mapping, EnvironmentAppMapping, MappingUpsert};
-pub use registry::{parse_registry_app_ref, RegistryAppRef};
+pub use registry::{parse_registry_app_ref, registry_source_reference, RegistryAppRef};
 pub use remediate::{RemediateAnalysis, RemediateDraft};
 pub use upgrade::UpgradeStatus;
 

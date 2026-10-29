@@ -70,11 +70,13 @@ pub struct Args {
     )]
     pub destination: Option<String>,
 
-    /// Create a Pending plan from a Splunkbase/registry app version
-    /// (`<app>@<ver>`). Works in any change-management mode. Uses
-    /// `POST /api/v1/app-provenance/compare-registry`. Mutually exclusive with
-    /// `--source-dir` / `--destination`. Prefer `--target-group` (or a single
-    /// env-YAML destination) so Observer knows where to compare.
+    /// Plan a registry app release (`<app>@<ver>`, sent as
+    /// `splunkbase:<app>/<ver>`). Works in any change-management mode.
+    /// Needs a target group: `--target-group`, else the single env-YAML
+    /// destination; exits 2 when neither resolves. The group must already pin
+    /// this release. Creates a draft (`source_type=registry`), triggers the
+    /// compile-runner and waits for Pending unless `--no-wait`. Never
+    /// approves. Mutually exclusive with `--source-dir` / `--destination`.
     #[arg(
         long,
         value_name = "APP@VER",
@@ -259,32 +261,46 @@ async fn run_registry_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliErro
     let app_ref = crate::observer_client::parse_registry_app_ref(spec)?;
     let environment = resolve_plan_environment(ctx, args.environment.as_deref())?;
     let (_session, client) = authenticate(ctx, environment.as_deref(), None).await?;
-    let target_group =
-        match resolve_direct_plan_target_group(&client, args, environment.as_deref()).await {
-            Ok(id) => Some(id),
-            Err(err) if args.target_group.is_none() => {
-                // Env YAML may have zero/multiple destinations; Observer can still
-                // compare without a group in some tenants.
-                eprintln!(
-                "note: no --target-group resolved ({err}); sending compare-registry without one"
-            );
-                None
-            }
-            Err(err) => return Err(err),
-        };
+    // Observer rejects registry plans without a group (registry_target_group_required);
+    // fail locally with exit 2 instead of sending a request that cannot succeed.
+    let env_yaml = match environment.as_deref() {
+        Some(stem) => crate::target_group::read_environment_yaml(stem)?,
+        None => None,
+    };
+    let group_spec = crate::target_group::choose_target_group_spec(
+        args.target_group.as_deref(),
+        env_yaml.as_deref(),
+    )
+    .map_err(|err| {
+        CliError::InvalidInput(format!(
+            "--from-registry needs a target group: {err}. Pass --target-group <name|uuid>."
+        ))
+    })?;
+    let target_group = resolve_plan_target_group(&client, &group_spec).await?;
+    let plan_name = resolve_plan_name(args.name.as_deref());
     let plan = client
-        .create_plan_from_registry(
-            &app_ref.app,
-            &app_ref.version,
-            target_group.as_deref(),
-            args.name.as_deref(),
-        )
+        .create_plan_from_registry(&app_ref, &target_group, plan_name.as_deref())
         .await?;
     eprintln!(
-        "registry plan created for {}@{} (Pending — approve before deploy)",
-        app_ref.app, app_ref.version
+        "registry plan created for {} on group {target_group} (draft)",
+        crate::observer_client::registry_source_reference(&app_ref)
     );
-    Ok(plan)
+    // Registry plans have no git ref; the source is the group's pinned blob.
+    client.trigger_compile(&plan.id, "registry").await?;
+    if args.no_wait {
+        return Ok(plan);
+    }
+    let compiled = wait_for_compile(&client, plan.external_id())
+        .await
+        .map_err(CliError::Other)?;
+    if is_compile_failure(&compiled.status) {
+        return Err(CliError::Other(format!(
+            "registry plan compile failed with status: {}",
+            compiled.status
+        )));
+    }
+    eprintln!("registry plan ready (Pending — approve before deploy)");
+    Ok(compiled)
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {

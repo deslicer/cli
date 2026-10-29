@@ -1,6 +1,6 @@
 //! Registry-sourced change plans via app provenance.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::types::{ChangePlan, ChangePlanResponse};
 use super::Client;
@@ -32,91 +32,75 @@ pub fn parse_registry_app_ref(spec: &str) -> Result<RegistryAppRef, CliError> {
             "--from-registry app name must not contain '@'".into(),
         ));
     }
+    let valid = |seg: &str| {
+        seg.len() <= 128
+            && seg != "."
+            && seg != ".."
+            && seg
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'))
+    };
+    if !valid(app) || !valid(version) {
+        return Err(CliError::InvalidInput(format!(
+            "invalid --from-registry {spec:?}; app and version may use letters, digits, '.', '_', '-', '+'"
+        )));
+    }
     Ok(RegistryAppRef {
         app: app.to_string(),
         version: version.to_string(),
     })
 }
 
+/// Observer registry ref (`splunkbase:<app>/<ver>`) for `source_reference`.
+pub fn registry_source_reference(app_ref: &RegistryAppRef) -> String {
+    format!("splunkbase:{}/{}", app_ref.app, app_ref.version)
+}
+
 impl Client {
-    /// Create a Pending plan by comparing a registry app version to deployed state.
+    /// Create a draft registry-sourced plan (`POST /api/v1/plans` with
+    /// `source_type = "registry"`), DAP #1395.
     ///
-    /// Works in any change-management mode. Never auto-approves.
+    /// Observer resolves the release from the target group's durable pin and
+    /// accepts it under every change-management mode. The plan stays in draft
+    /// until the compile-runner posts content; it never auto-approves.
     pub async fn create_plan_from_registry(
         &self,
-        app: &str,
-        version: &str,
-        target_group_id: Option<&str>,
+        app_ref: &RegistryAppRef,
+        target_group_id: &str,
         name: Option<&str>,
     ) -> Result<ChangePlan, CliError> {
         #[derive(Serialize)]
         struct Body<'a> {
-            app: &'a str,
-            version: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            target_group_id: Option<&'a str>,
+            source_type: &'a str,
+            source_reference: String,
+            target_group_id: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             name: Option<&'a str>,
-            /// Request a draft plan row (Pending), not an auto-apply.
-            create_plan: bool,
         }
 
         let body = Body {
-            app,
-            version,
+            source_type: "registry",
+            source_reference: registry_source_reference(app_ref),
             target_group_id,
             name,
-            create_plan: true,
         };
         let bytes = self
-            .request_bytes(
-                reqwest::Method::POST,
-                "api/v1/app-provenance/compare-registry",
-                Some(&body),
-            )
+            .request_bytes(reqwest::Method::POST, "api/v1/plans", Some(&body))
             .await?;
         parse_registry_plan_response(&bytes)
     }
 }
 
 fn parse_registry_plan_response(bytes: &[u8]) -> Result<ChangePlan, CliError> {
-    if let Ok(envelope) = serde_json::from_slice::<ChangePlanResponse>(bytes) {
-        if let Some(plan) = envelope.plan {
-            if envelope.success || !plan.id.is_empty() {
-                return Ok(plan);
-            }
-        }
-        if !envelope.success && !envelope.message.is_empty() {
-            return Err(CliError::Other(envelope.message));
-        }
+    let envelope: ChangePlanResponse = serde_json::from_slice(bytes)
+        .map_err(|e| CliError::Transport(format!("invalid plan create response: {e}")))?;
+    match envelope.plan {
+        Some(plan) if !plan.id.is_empty() => Ok(plan),
+        _ => Err(CliError::Other(format!(
+            "registry plan creation failed: {}",
+            envelope.message
+        ))),
     }
-    if let Ok(plan) = serde_json::from_slice::<ChangePlan>(bytes) {
-        if !plan.id.is_empty() {
-            return Ok(plan);
-        }
-    }
-    #[derive(Deserialize)]
-    struct Nested {
-        #[serde(default)]
-        plan: Option<ChangePlan>,
-        #[serde(default)]
-        draft: Option<ChangePlan>,
-        #[serde(default)]
-        change_plan: Option<ChangePlan>,
-    }
-    if let Ok(nested) = serde_json::from_slice::<Nested>(bytes) {
-        if let Some(plan) = nested
-            .plan
-            .or(nested.draft)
-            .or(nested.change_plan)
-            .filter(|p| !p.id.is_empty())
-        {
-            return Ok(plan);
-        }
-    }
-    Err(CliError::Transport(
-        "invalid compare-registry response: expected a change plan".into(),
-    ))
 }
 
 #[cfg(test)]
@@ -139,14 +123,24 @@ mod tests {
         assert!(parse_registry_app_ref("@1.0").is_err());
         assert!(parse_registry_app_ref("app@").is_err());
         assert!(parse_registry_app_ref("a@b@c").is_err());
+        assert!(parse_registry_app_ref("a/b@1.0").is_err());
+        assert!(parse_registry_app_ref("..@1.0").is_err());
+    }
+
+    #[test]
+    fn builds_splunkbase_source_reference() {
+        let r = parse_registry_app_ref("Splunk_SA_CIM@6.1.0").unwrap();
+        assert_eq!(
+            registry_source_reference(&r),
+            "splunkbase:Splunk_SA_CIM/6.1.0"
+        );
     }
 
     #[test]
     fn parses_envelope_plan() {
-        let json =
-            br#"{"success":true,"message":"ok","plan":{"id":"p1","status":"pending_approval"}}"#;
+        let json = br#"{"success":true,"message":"ok","plan":{"id":"p1","status":"draft"}}"#;
         let plan = parse_registry_plan_response(json).unwrap();
         assert_eq!(plan.id, "p1");
-        assert_eq!(plan.status, "pending_approval");
+        assert_eq!(plan.status, "draft");
     }
 }
