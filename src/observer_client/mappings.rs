@@ -5,17 +5,51 @@ use serde::{Deserialize, Serialize};
 use super::Client;
 use crate::errors::CliError;
 
+/// One row from `GET/PUT /api/v1/environments/{env}/mappings`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentAppMapping {
-    pub app: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(alias = "app")]
+    pub app_name: String,
     #[serde(default)]
-    pub source_path: Option<String>,
+    pub host_group_id: Option<String>,
     #[serde(default)]
     pub inventory_group: Option<String>,
     #[serde(default)]
-    pub host: Option<String>,
+    pub source_path: Option<String>,
     #[serde(default)]
-    pub status: Option<String>,
+    pub dest_dir: Option<String>,
+    #[serde(default)]
+    pub target_host_id: Option<String>,
+    #[serde(default, alias = "host")]
+    pub target_host: Option<String>,
+    #[serde(default, alias = "status")]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+/// One entry in the `PUT .../mappings` request body.
+#[derive(Debug, Clone, Serialize)]
+pub struct MappingUpsert {
+    pub host_group_id: String,
+    pub app_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dest_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_host_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct UpsertMappingsRequest<'a> {
+    mappings: &'a [MappingUpsert],
+    /// Always false: the CLI only upserts; it never deletes sibling rows.
+    replace: bool,
 }
 
 #[derive(Deserialize)]
@@ -24,6 +58,19 @@ struct ListMappingsResponse {
     mappings: Vec<EnvironmentAppMapping>,
     #[serde(default)]
     items: Vec<EnvironmentAppMapping>,
+}
+
+fn parse_mappings(bytes: &[u8]) -> Result<Vec<EnvironmentAppMapping>, CliError> {
+    if let Ok(list) = serde_json::from_slice::<Vec<EnvironmentAppMapping>>(bytes) {
+        return Ok(list);
+    }
+    let wrapped: ListMappingsResponse = serde_json::from_slice(bytes)
+        .map_err(|e| CliError::Transport(format!("invalid mappings JSON: {e}")))?;
+    if !wrapped.mappings.is_empty() {
+        Ok(wrapped.mappings)
+    } else {
+        Ok(wrapped.items)
+    }
 }
 
 impl Client {
@@ -36,59 +83,41 @@ impl Client {
         let bytes = self
             .request_bytes(reqwest::Method::GET, &path, None::<&()>)
             .await?;
-        if let Ok(list) = serde_json::from_slice::<Vec<EnvironmentAppMapping>>(&bytes) {
-            return Ok(list);
-        }
-        let wrapped: ListMappingsResponse = serde_json::from_slice(&bytes)
-            .map_err(|e| CliError::Transport(format!("invalid mappings JSON: {e}")))?;
-        if !wrapped.mappings.is_empty() {
-            Ok(wrapped.mappings)
-        } else {
-            Ok(wrapped.items)
-        }
+        parse_mappings(&bytes)
     }
 
-    /// Upsert one app mapping for an environment.
-    pub async fn set_environment_mapping(
+    /// Upsert app mappings (`PUT .../mappings` with `replace=false`).
+    ///
+    /// Observer only accepts direct writes when the environment mapping
+    /// source is `db`; repo_yaml / distribution sources return 409.
+    /// Returns the full mapping list for the environment after the write.
+    pub async fn upsert_environment_mappings(
         &self,
         environment: &str,
-        mapping: &EnvironmentAppMapping,
-    ) -> Result<EnvironmentAppMapping, CliError> {
+        entries: &[MappingUpsert],
+    ) -> Result<Vec<EnvironmentAppMapping>, CliError> {
         let encoded = encode_env_segment(environment)?;
         let path = format!("api/v1/environments/{encoded}/mappings");
-        self.request_json(reqwest::Method::PUT, &path, Some(mapping))
-            .await
+        let body = UpsertMappingsRequest {
+            mappings: entries,
+            replace: false,
+        };
+        let bytes = self
+            .request_bytes(reqwest::Method::PUT, &path, Some(&body))
+            .await?;
+        parse_mappings(&bytes)
     }
+}
 
-    /// Adopt a live/discovered app into the environment mapping (Observer SoT).
-    pub async fn adopt_environment_mapping(
-        &self,
-        environment: &str,
-        app: &str,
-        host: Option<&str>,
-        inventory_group: Option<&str>,
-    ) -> Result<EnvironmentAppMapping, CliError> {
-        #[derive(Serialize)]
-        struct Body<'a> {
-            app: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            host: Option<&'a str>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            inventory_group: Option<&'a str>,
-        }
-        let encoded = encode_env_segment(environment)?;
-        let path = format!("api/v1/environments/{encoded}/mappings/adopt");
-        self.request_json(
-            reqwest::Method::POST,
-            &path,
-            Some(&Body {
-                app,
-                host,
-                inventory_group,
-            }),
-        )
-        .await
-    }
+/// Pick the row matching an upserted entry out of the post-write list.
+pub fn find_mapping<'a>(
+    mappings: &'a [EnvironmentAppMapping],
+    entry: &MappingUpsert,
+) -> Option<&'a EnvironmentAppMapping> {
+    mappings.iter().find(|m| {
+        m.app_name == entry.app_name
+            && m.host_group_id.as_deref() == Some(entry.host_group_id.as_str())
+    })
 }
 
 fn encode_env_segment(raw: &str) -> Result<String, CliError> {
@@ -120,5 +149,33 @@ mod tests {
         assert_eq!(encode_env_segment("prod").unwrap(), "prod");
         assert!(encode_env_segment("").is_err());
         assert!(encode_env_segment("a/b").is_err());
+    }
+
+    #[test]
+    fn parses_observer_list_shape_with_app_name() {
+        let body = br#"{"environment_name":"prod","mappings":[{"id":"1","environment_name":"prod","inventory_group":"idx","host_group_id":"g1","app_name":"ta_nix","source_path":"apps/ta_nix","dest_dir":null,"target_host_id":null,"target_host":null,"state":"present","source":"db","created_at":"x","updated_at":"y"}]}"#;
+        let rows = parse_mappings(body).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].app_name, "ta_nix");
+        assert_eq!(rows[0].state.as_deref(), Some("present"));
+    }
+
+    #[test]
+    fn upsert_body_never_replaces() {
+        let entries = [MappingUpsert {
+            host_group_id: "g1".into(),
+            app_name: "ta_nix".into(),
+            source_path: None,
+            dest_dir: None,
+            target_host_id: None,
+        }];
+        let v = serde_json::to_value(UpsertMappingsRequest {
+            mappings: &entries,
+            replace: false,
+        })
+        .unwrap();
+        assert_eq!(v["replace"], false);
+        assert_eq!(v["mappings"][0]["app_name"], "ta_nix");
+        assert!(v["mappings"][0].get("source_path").is_none());
     }
 }

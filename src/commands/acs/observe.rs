@@ -2,13 +2,24 @@ use clap::Args as ClapArgs;
 
 use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
+use crate::observer_client::AcsObserveReport;
 use crate::Ctx;
 
+/// Read-only scan of a Splunk Cloud stack through ACS. Never applies changes.
+///
+/// Examples:
+///   deslicer acs observe my-stack
+///   deslicer --log-format json acs observe my-stack --experience classic
 #[derive(ClapArgs)]
 pub struct Args {
     /// ACS stack name (from `acs stacks list`)
     pub stack: String,
 
+    /// Splunk Cloud experience: victoria (default on Observer) or classic
+    #[arg(long, value_parser = ["victoria", "classic"])]
+    pub experience: Option<String>,
+
+    /// Deslicer environment profile used for auth
     #[arg(long)]
     pub environment: Option<String>,
 }
@@ -19,7 +30,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
-    let report = match client.observe_acs_stack(&args.stack).await {
+    let report = match client
+        .observe_acs_stack(&args.stack, args.experience.as_deref())
+        .await
+    {
         Ok(report) => report,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
@@ -36,19 +50,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             }
         },
         LogFormat::Human => {
-            println!("ACS observe (read-only) for stack {}", report.stack);
-            if let Some(summary) = report.summary.as_deref() {
-                println!("summary: {summary}");
-            }
-            if let Some(plan) = report.project_plan.as_ref() {
-                match serde_json::to_string_pretty(plan) {
-                    Ok(json) => println!("{json}"),
-                    Err(err) => {
-                        eprintln!("failed to format project plan: {err}");
-                        return 1;
-                    }
-                }
-            }
+            print!("{}", format_report_human(&report));
             eprintln!(
                 "Observe never applies changes. Create a Pending plan with:\n  \
                  deslicer change plan --destination acs-stack:{}",
@@ -56,5 +58,43 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
             );
             0
         }
+    }
+}
+
+fn format_report_human(report: &AcsObserveReport) -> String {
+    let mut lines = vec![format!(
+        "ACS observe (read-only) for stack {}: {} object(s)",
+        report.stack, report.object_count
+    )];
+    if !report.objects.is_empty() {
+        lines.push("TYPE  ID".to_string());
+        for object in &report.objects {
+            lines.push(format!("{}  {}", object.resource_type, object.resource_id));
+        }
+    }
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::observer_client::AcsObservedObject;
+
+    #[test]
+    fn parses_observer_response_shape() {
+        let report: AcsObserveReport = serde_json::from_str(
+            r#"{"stack_name":"acme","object_count":1,"objects":[{"resource_type":"index","resource_id":"main","content_hash":"abc"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(report.stack, "acme");
+        let text = format_report_human(&report);
+        assert!(text.contains("1 object(s)"));
+        assert!(text.contains("index  main"));
+        let _ = AcsObservedObject {
+            resource_type: "x".into(),
+            resource_id: "y".into(),
+            content_hash: None,
+        };
     }
 }
