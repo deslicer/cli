@@ -7,12 +7,17 @@ use crate::Ctx;
 
 #[derive(Subcommand)]
 pub enum StacksCmd {
-    /// List ACS stacks
+    /// List ACS stacks that have a stored credential
+    ///
+    /// Examples:
+    ///   deslicer acs stacks list
+    ///   deslicer --log-format json acs stacks list
     List(ListArgs),
 }
 
 #[derive(ClapArgs)]
 pub struct ListArgs {
+    /// Deslicer environment profile used for auth
     #[arg(long)]
     pub environment: Option<String>,
 }
@@ -54,15 +59,20 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
 
 fn format_stacks_human(stacks: &[AcsStack]) -> String {
     if stacks.is_empty() {
-        return "No ACS stacks.\n".to_string();
+        return "No ACS stacks. Store a stack credential with `deslicer acs credentials set <stack> --token-stdin`.\n".to_string();
     }
-    let mut lines = vec!["NAME  STATUS  REGION".to_string()];
+    let mut lines = vec!["NAME  ACS_ENV  TOKEN  UPDATED".to_string()];
     for stack in stacks {
         lines.push(format!(
-            "{}  {}  {}",
+            "{}  {}  {}  {}",
             stack.name,
-            stack.status.as_deref().unwrap_or("-"),
-            stack.region.as_deref().unwrap_or("-")
+            stack.environment.as_deref().unwrap_or("-"),
+            if stack.token_configured {
+                "set"
+            } else {
+                "missing"
+            },
+            stack.updated_at.as_deref().unwrap_or("-")
         ));
     }
     lines.push(String::new());
@@ -77,10 +87,17 @@ mod tests {
     fn human_list_rows() {
         let text = format_stacks_human(&[AcsStack {
             name: "prod".into(),
-            status: Some("ready".into()),
-            region: Some("us-east-1".into()),
+            environment: Some("production".into()),
+            token_configured: true,
+            updated_at: None,
         }]);
         assert!(text.contains("prod"));
-        assert!(text.contains("ready"));
+        assert!(text.contains("production"));
+        assert!(text.contains("set"));
+    }
+
+    #[test]
+    fn empty_list_points_at_credentials_set() {
+        assert!(format_stacks_human(&[]).contains("acs credentials set"));
     }
 }

@@ -11,10 +11,10 @@ pub enum AcsCmd {
     /// List Splunk Cloud ACS stacks for the tenant
     #[command(subcommand)]
     Stacks(stacks::StacksCmd),
-    /// List or test Splunk Cloud credentials
+    /// List, test or set Splunk Cloud ACS stack credentials
     #[command(subcommand)]
     Credentials(credentials::CredentialsCmd),
-    /// Observe an ACS stack (read-only project plan; never applies)
+    /// Observe an ACS stack (read-only scan; never applies)
     Observe(observe::Args),
 }
 

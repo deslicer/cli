@@ -6,55 +6,74 @@ use super::types::ChangePlan;
 use super::Client;
 use crate::errors::CliError;
 
+/// One ACS stack known to the tenant. Derived from the stack credential list
+/// (`GET /api/v1/acs/stacks/credentials`); Observer has no separate stack
+/// catalogue route.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcsStack {
     pub name: String,
+    /// ACS environment for the stack (`production` or `staging`).
     #[serde(default)]
-    pub status: Option<String>,
+    pub environment: Option<String>,
     #[serde(default)]
-    pub region: Option<String>,
+    pub token_configured: bool,
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
+/// ACS stack credential metadata. The JWT itself is write-only on Observer and
+/// is never returned.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SplunkCredential {
-    pub name: String,
+pub struct AcsCredential {
     #[serde(default)]
-    pub kind: Option<String>,
+    pub id: Option<String>,
+    pub stack_name: String,
     #[serde(default)]
-    pub stack: Option<String>,
+    pub environment: Option<String>,
     #[serde(default)]
-    pub status: Option<String>,
+    pub token_configured: bool,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
+
+/// Back-compat alias for older callers.
+pub type SplunkCredential = AcsCredential;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CredentialTestResult {
-    #[serde(default)]
     pub ok: bool,
+    pub stack: String,
     #[serde(default)]
-    pub name: Option<String>,
+    pub object_count: Option<usize>,
     #[serde(default)]
     pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AcsObserveReport {
-    pub stack: String,
+pub struct AcsObservedObject {
+    pub resource_type: String,
+    pub resource_id: String,
     #[serde(default)]
-    pub summary: Option<String>,
-    #[serde(default)]
-    pub project_plan: Option<serde_json::Value>,
+    pub content_hash: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct ListStacksResponse {
+/// Response of `POST /api/v1/acs/stacks/{stack}/observe` (read-only scan).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AcsObserveReport {
+    #[serde(alias = "stack_name")]
+    pub stack: String,
     #[serde(default)]
-    stacks: Vec<AcsStack>,
+    pub object_count: usize,
+    #[serde(default)]
+    pub objects: Vec<AcsObservedObject>,
 }
 
 #[derive(Deserialize)]
 struct ListCredentialsResponse {
     #[serde(default)]
-    credentials: Vec<SplunkCredential>,
+    credentials: Vec<AcsCredential>,
 }
 
 #[derive(Deserialize)]
@@ -67,47 +86,106 @@ struct AcsDraftResponse {
     plan: Option<ChangePlan>,
 }
 
+/// ACS environments accepted by Observer for stack credentials.
+pub fn validate_acs_environment(raw: &str) -> Result<&str, CliError> {
+    match raw {
+        "production" | "staging" => Ok(raw),
+        other => Err(CliError::InvalidInput(format!(
+            "--acs-environment must be production or staging (got {other:?})"
+        ))),
+    }
+}
+
 impl Client {
+    /// Stacks with a stored ACS credential (`GET /api/v1/acs/stacks/credentials`).
     pub async fn list_acs_stacks(&self) -> Result<Vec<AcsStack>, CliError> {
-        let resp: ListStacksResponse = self.get_json("api/v1/acs/stacks").await?;
-        Ok(resp.stacks)
+        let creds = self.list_acs_credentials().await?;
+        Ok(stacks_from_credentials(creds))
     }
 
-    pub async fn list_splunk_credentials(&self) -> Result<Vec<SplunkCredential>, CliError> {
-        let resp: ListCredentialsResponse =
-            self.get_json("api/v1/tenant/splunk-credentials").await?;
+    /// ACS stack credential metadata (`GET /api/v1/acs/stacks/credentials`).
+    pub async fn list_acs_credentials(&self) -> Result<Vec<AcsCredential>, CliError> {
+        let resp: ListCredentialsResponse = self.get_json("api/v1/acs/stacks/credentials").await?;
         Ok(resp.credentials)
     }
 
-    pub async fn test_splunk_credential(
+    /// Back-compat name for [`Client::list_acs_credentials`].
+    pub async fn list_splunk_credentials(&self) -> Result<Vec<AcsCredential>, CliError> {
+        self.list_acs_credentials().await
+    }
+
+    /// Store or rotate the ACS JWT for a stack
+    /// (`PUT /api/v1/acs/stacks/{stack}/credentials`). The token is sent once
+    /// and never echoed back.
+    pub async fn set_acs_credential(
         &self,
-        name: &str,
-    ) -> Result<CredentialTestResult, CliError> {
+        stack: &str,
+        token: &str,
+        acs_environment: Option<&str>,
+    ) -> Result<AcsCredential, CliError> {
         #[derive(Serialize)]
         struct Body<'a> {
-            name: &'a str,
+            token: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            environment: Option<&'a str>,
         }
+        let encoded = urlencoding_path_segment(stack)?;
+        let path = format!("api/v1/acs/stacks/{encoded}/credentials");
         self.request_json(
-            reqwest::Method::POST,
-            "api/v1/tenant/splunk-credentials/test",
-            Some(&Body { name }),
+            reqwest::Method::PUT,
+            &path,
+            Some(&Body {
+                token,
+                environment: acs_environment,
+            }),
         )
         .await
     }
 
-    /// Read-only ACS project plan / observe payload for a stack.
-    pub async fn observe_acs_stack(&self, stack: &str) -> Result<AcsObserveReport, CliError> {
+    /// Check that the stored credential for `stack` can reach ACS by running a
+    /// read-only observe scan.
+    pub async fn test_splunk_credential(
+        &self,
+        stack: &str,
+    ) -> Result<CredentialTestResult, CliError> {
+        match self.observe_acs_stack(stack, None).await {
+            Ok(report) => Ok(CredentialTestResult {
+                ok: true,
+                stack: stack.to_string(),
+                object_count: Some(report.object_count),
+                message: None,
+            }),
+            // 409 (no credential) and 502 (ACS rejected the JWT / stack not
+            // found) surface as Other / BackendUnavailable: report as a failed
+            // test instead of a transport error.
+            Err(CliError::Other(message))
+            | Err(CliError::AmbiguousBinding(message))
+            | Err(CliError::BackendUnavailable(message)) => Ok(CredentialTestResult {
+                ok: false,
+                stack: stack.to_string(),
+                object_count: None,
+                message: Some(message),
+            }),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Read-only ACS observe scan (`POST /api/v1/acs/stacks/{stack}/observe`).
+    pub async fn observe_acs_stack(
+        &self,
+        stack: &str,
+        experience: Option<&str>,
+    ) -> Result<AcsObserveReport, CliError> {
         let encoded = urlencoding_path_segment(stack)?;
-        let path = format!("api/v1/acs/stacks/{encoded}/project-plan");
-        let project_plan: serde_json::Value = self.get_json(&path).await?;
-        Ok(AcsObserveReport {
-            stack: stack.to_string(),
-            summary: project_plan
-                .get("summary")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            project_plan: Some(project_plan),
-        })
+        let path = match experience {
+            Some(exp) => format!(
+                "api/v1/acs/stacks/{encoded}/observe?experience={}",
+                urlencoding_path_segment(exp)?
+            ),
+            None => format!("api/v1/acs/stacks/{encoded}/observe"),
+        };
+        self.request_json(reqwest::Method::POST, &path, None::<&()>)
+            .await
     }
 
     /// Create a Pending ACS draft plan for a stack (never auto-approves).
@@ -160,6 +238,21 @@ impl Client {
             "invalid ACS project-plan create response".into(),
         ))
     }
+}
+
+fn stacks_from_credentials(creds: Vec<AcsCredential>) -> Vec<AcsStack> {
+    let mut stacks: Vec<AcsStack> = creds
+        .into_iter()
+        .map(|c| AcsStack {
+            name: c.stack_name,
+            environment: c.environment,
+            token_configured: c.token_configured,
+            updated_at: c.updated_at,
+        })
+        .collect();
+    stacks.sort_by(|a, b| a.name.cmp(&b.name));
+    stacks.dedup_by(|a, b| a.name == b.name);
+    stacks
 }
 
 fn urlencoding_path_segment(raw: &str) -> Result<String, CliError> {
