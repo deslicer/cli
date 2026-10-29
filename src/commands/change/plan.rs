@@ -1,6 +1,7 @@
 use clap::Args as ClapArgs;
 
 use crate::ci::{self, CiPlatform, AUDIENCE};
+use crate::cli::LogFormat;
 use crate::commands::change::acs_inputs::resolve_acs_plan_inputs;
 use crate::commands::change::plan_env::resolve_plan_environment;
 use crate::commands::change::plan_name::resolve_plan_name;
@@ -15,6 +16,15 @@ use crate::output::{
 use crate::pr_preview::{labels_for_plan_context, resolve_changed_paths, PrPreviewLabels};
 use crate::token_source::TokenSource;
 use crate::Ctx;
+
+/// Honour subcommand `--json` the same way upgrade does (issue #210).
+fn error_format(ctx: &Ctx, args: &Args) -> LogFormat {
+    if args.json {
+        LogFormat::Json
+    } else {
+        ctx.log_format
+    }
+}
 
 #[derive(ClapArgs)]
 #[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
@@ -360,10 +370,11 @@ async fn run_registry_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliErro
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
+    let format = error_format(&ctx, &args);
     if args.source_dir.is_some() {
         return match run_bundle_flow(&ctx, &args).await {
             Ok(plan) => emit_change_plan(&plan),
-            Err(err) => map_cli_error(ctx.log_format, err),
+            Err(err) => map_cli_error(format, err),
         };
     }
 
@@ -371,29 +382,29 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return match run_acs_destination_plan(&ctx, &args).await {
             Ok(plan) if args.json => emit_change_plan_ci_outputs(&plan),
             Ok(plan) => emit_change_plan(&plan),
-            Err(err) => map_cli_error(ctx.log_format, err),
+            Err(err) => map_cli_error(format, err),
         };
     }
 
     if args.from_registry.is_some() {
         return match run_registry_plan(&ctx, &args).await {
             Ok(plan) => emit_change_plan(&plan),
-            Err(err) => map_cli_error(ctx.log_format, err),
+            Err(err) => map_cli_error(format, err),
         };
     }
 
     let environment = match resolve_plan_environment(&ctx, args.environment.as_deref()) {
         Ok(value) => value,
-        Err(err) => return map_cli_error(ctx.log_format, err),
+        Err(err) => return map_cli_error(format, err),
     };
     let (session, client) = match authenticate(&ctx, environment.as_deref(), None).await {
         Ok(pair) => pair,
-        Err(err) => return map_cli_error(ctx.log_format, err),
+        Err(err) => return map_cli_error(format, err),
     };
 
     if session.is_device_session() {
         return map_cli_error(
-            ctx.log_format,
+            format,
             CliError::Other(
                 "`change plan` without --source-dir starts a git-sourced compile. \
              Device sessions have no repository credentials. Use CI with Path A OIDC, \
@@ -411,17 +422,17 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if session.is_observer_api_token() {
         return match run_direct_git_plan(&session, &client, &args, environment.as_deref()).await {
             Ok(plan) => emit_ready_plan(&client, &args, environment.as_deref(), plan).await,
-            Err(err) => map_cli_error(ctx.log_format, err),
+            Err(err) => map_cli_error(format, err),
         };
     }
 
     if let Err(err) = require_proxy_mode(&session, "change plan") {
-        return map_cli_error(ctx.log_format, err);
+        return map_cli_error(format, err);
     }
 
     match run_git_plans(&ctx, &session, &client, &args, environment.as_deref()).await {
         Ok(code) => code,
-        Err(err) => map_cli_error(ctx.log_format, err),
+        Err(err) => map_cli_error(format, err),
     }
 }
 
