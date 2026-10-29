@@ -24,7 +24,7 @@ pub fn looks_like_uuid(spec: &str) -> bool {
 pub fn resolve_target_group_id(spec: &str, groups: &[HostGroup]) -> Result<String, CliError> {
     let trimmed = spec.trim();
     if trimmed.is_empty() {
-        return Err(CliError::Other(
+        return Err(CliError::MissingArgument(
             "--target-group must be a host-group UUID or exact group name".into(),
         ));
     }
@@ -90,7 +90,7 @@ pub fn choose_target_group_spec(
         [] => Err(missing_target_group_hint(Some(
             "environment YAML has no destinations with source_path apps",
         ))),
-        many => Err(CliError::Other(format!(
+        many => Err(CliError::MissingArgument(format!(
             "environment YAML maps apps to multiple inventory_groups ({}); \
              pass --target-group <name-or-uuid> to select one. Observer allows \
              one active plan per repository commit today, so multi-group fan-out \
@@ -102,7 +102,7 @@ pub fn choose_target_group_spec(
 
 fn missing_target_group_hint(detail: Option<&str>) -> CliError {
     let suffix = detail.map(|text| format!(" ({text})")).unwrap_or_default();
-    CliError::Other(format!(
+    CliError::MissingArgument(format!(
         "git-sourced `change plan` with DESLICER_API_TOKEN requires \
          --target-group <host-group-uuid-or-name>{suffix}. Pass the \
          inventory_group name from the environment YAML, or run \

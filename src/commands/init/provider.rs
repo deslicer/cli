@@ -68,7 +68,7 @@ fn git_origin_url(dir: &Path) -> Result<String, CliError> {
         .output()
         .map_err(|err| CliError::Other(format!("git remote get-url origin failed: {err}")))?;
     if !output.status.success() {
-        return Err(CliError::Other(
+        return Err(CliError::MissingArgument(
             "no git remote named origin; pass --provider github|github-token|gitlab|bitbucket|azure"
                 .into(),
         ));

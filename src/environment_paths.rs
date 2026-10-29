@@ -40,10 +40,10 @@ pub fn resolve_environment_stem(
             stem: only.clone(),
             label: only.clone(),
         }),
-        [] => Err(CliError::Other(format!(
+        [] => Err(CliError::MissingArgument(format!(
             "could not resolve a tenant environment file; {MISSING_ENVIRONMENT_HINT}"
         ))),
-        _ => Err(CliError::Other(format!(
+        _ => Err(CliError::MissingArgument(format!(
             "multiple environment files found ({}); {MISSING_ENVIRONMENT_HINT}",
             stems.join(", ")
         ))),
@@ -66,7 +66,7 @@ pub fn resolve_optional_environment_stem(
             label: only.clone(),
         })),
         [] => Ok(None),
-        _ => Err(CliError::Other(format!(
+        _ => Err(CliError::MissingArgument(format!(
             "multiple environment files found ({}); {MISSING_ENVIRONMENT_HINT}",
             stems.join(", ")
         ))),

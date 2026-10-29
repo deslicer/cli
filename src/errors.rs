@@ -22,6 +22,9 @@ pub enum CliError {
     UnsupportedPlatform(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    /// Required flag/argument missing or not inferable (issue #235).
+    #[error("{0}")]
+    MissingArgument(String),
     #[error("rate limited: retry after {retry_after_secs}s")]
     RateLimited { retry_after_secs: u64 },
     #[error("backend unavailable (HTTP {0})")]
@@ -63,7 +66,7 @@ impl CliError {
             CliError::EnvironmentNotBound(_) => 6,
             CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => 7,
             CliError::UnsupportedPlatform(_) => 8,
-            CliError::InvalidInput(_) => 2,
+            CliError::InvalidInput(_) | CliError::MissingArgument(_) => 2,
             CliError::RateLimited { .. } => 9,
             CliError::BackendUnavailable(_) | CliError::Transport(_) => 10,
             CliError::PlanNotFound(_) => 11,
@@ -124,6 +127,7 @@ mod tests {
             CliError::GitBackedChangeManagement("x".into()),
             CliError::UnsupportedPlatform("x".into()),
             CliError::InvalidInput("x".into()),
+            CliError::MissingArgument("pass --environment".into()),
             CliError::RateLimited {
                 retry_after_secs: 1,
             },
@@ -147,6 +151,13 @@ mod tests {
             "not logged in. Run `deslicer auth login` and approve the code in the portal".into(),
         );
         assert_eq!(err.exit_code(), 4);
+        assert!(!err.retryable());
+    }
+
+    #[test]
+    fn missing_argument_exits_2() {
+        let err = CliError::MissingArgument("pass --environment <tenant-slug>".into());
+        assert_eq!(err.exit_code(), 2);
         assert!(!err.retryable());
     }
 
@@ -175,6 +186,7 @@ mod tests {
                 | CliError::GitBackedChangeManagement(_)
                 | CliError::UnsupportedPlatform(_)
                 | CliError::InvalidInput(_)
+                | CliError::MissingArgument(_)
                 | CliError::RateLimited { .. }
                 | CliError::BackendUnavailable(_)
                 | CliError::PlanNotFound(_)
