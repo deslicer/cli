@@ -503,10 +503,11 @@ mod tests {
             AuthRejectionKind::Oidc,
             "api/v1/plans/00000000-0000-0000-0000-000000000000/approve",
         );
-        assert!(matches!(err, CliError::PlanNotFound(_)), "got {err:?}");
+        assert!(matches!(err, CliError::PlanNotFound(_)));
         assert_eq!(err.exit_code(), 11);
-        assert!(err.to_string().contains("plan not found"));
-        assert!(!err.to_string().contains("endpoint not available"));
+        let text = err.to_string();
+        assert!(text.contains("plan not found"));
+        assert!(!text.contains("endpoint not available"));
     }
 
     #[test]
@@ -518,10 +519,7 @@ mod tests {
             AuthRejectionKind::Oidc,
             "api/v1/plans/00000000-0000-0000-0000-000000000000/approve",
         );
-        assert!(
-            matches!(err, CliError::EndpointNotAvailable(_)),
-            "got {err:?}"
-        );
+        assert!(matches!(err, CliError::EndpointNotAvailable(_)));
         assert_eq!(err.exit_code(), 15);
     }
 
