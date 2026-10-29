@@ -173,11 +173,35 @@ plan_release() {
   emit reason "${reason}"
 }
 
+# Pick the head branch of an open bump PR for TAG (e.g. v1.7.3).
+# Accepts `gh pr list --json number,headRefName` JSON on stdin or as $2.
+# Matches `release/<TAG>` or legacy `release/<TAG>-<run_id>` (#202).
+# Prints the highest-numbered match's headRefName, or empty if none.
+select_open_bump_branch() {
+  local tag="$1" json="${2:-}"
+  if [ -z "${json}" ]; then
+    json="$(cat)"
+  fi
+  printf '%s' "${json}" | jq -r --arg tag "${tag}" '
+    [
+      .[]
+      | select(
+          .headRefName == ("release/" + $tag)
+          or (.headRefName | startswith("release/" + $tag + "-"))
+        )
+    ]
+    | sort_by(.number)
+    | last
+    | .headRefName // empty
+  '
+}
+
 usage() {
   cat <<'EOF'
 Usage:
   scripts/cut-release.sh plan [--bump auto|patch|minor|major]
   scripts/cut-release.sh apply <version>
+  scripts/cut-release.sh select-open-bump-branch <tag>   # JSON on stdin
 EOF
 }
 
@@ -201,6 +225,10 @@ main() {
     apply)
       [ $# -eq 1 ] || { usage >&2; return 1; }
       apply_version "$1"
+      ;;
+    select-open-bump-branch)
+      [ $# -eq 1 ] || { usage >&2; return 1; }
+      select_open_bump_branch "$1"
       ;;
     *)
       usage >&2

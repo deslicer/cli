@@ -109,9 +109,11 @@ jobs:
             git commit -m "chore(release): bump version to ${VERSION}"
             # Reuse any open bump PR for this tag (release/vX.Y.Z or a legacy
             # release/vX.Y.Z-<run_id> branch) instead of opening a duplicate (#202).
-            existing="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base main --state open \
-              --json number,headRefName \
-              --jq "[.[] | select(.headRefName == \"release/${TAG}\" or (.headRefName | startswith(\"release/${TAG}-\")))] | sort_by(.number) | last | .headRefName // empty")"
+            existing="$(
+              gh pr list --repo "${GITHUB_REPOSITORY}" --base main --state open \
+                --json number,headRefName \
+                | bash scripts/cut-release.sh select-open-bump-branch "${TAG}"
+            )"
             if [ -n "${existing}" ]; then
               echo "reusing open bump PR on ${existing}; refreshing it from main"
               git push --force origin "HEAD:refs/heads/${existing}"

@@ -50,9 +50,36 @@ test_should_tag_cargo_as_is() {
   pass "should_tag_cargo_as_is"
 }
 
+# Simulates the #192 / #194 / #200 pile-up: exact branch plus run_id suffixes.
+test_select_open_bump_branch() {
+  local json picked
+  json='[
+    {"number":192,"headRefName":"release/v1.7.3"},
+    {"number":194,"headRefName":"release/v1.7.3-40866227225"},
+    {"number":200,"headRefName":"release/v1.7.3-40870527314"},
+    {"number":201,"headRefName":"release/v1.8.0"}
+  ]'
+  picked="$(select_open_bump_branch v1.7.3 "${json}")"
+  [ "${picked}" = "release/v1.7.3-40870527314" ] || fail "expected highest 1.7.3 match, got ${picked}"
+
+  picked="$(select_open_bump_branch v1.8.0 "${json}")"
+  [ "${picked}" = "release/v1.8.0" ] || fail "exact 1.8.0 match, got ${picked}"
+
+  picked="$(select_open_bump_branch v1.9.0 "${json}")"
+  [ -z "${picked}" ] || fail "no match should be empty, got ${picked}"
+
+  # Do not treat release/v1.7.30 as a v1.7.3 match.
+  json='[{"number":1,"headRefName":"release/v1.7.30"}]'
+  picked="$(select_open_bump_branch v1.7.3 "${json}")"
+  [ -z "${picked}" ] || fail "v1.7.30 must not match v1.7.3, got ${picked}"
+
+  pass "select_open_bump_branch"
+}
+
 test_bump_semver
 test_decide_bump
 test_version_gt
 test_plan_when_cargo_already_ahead
 test_should_tag_cargo_as_is
+test_select_open_bump_branch
 echo "cut-release tests passed"
