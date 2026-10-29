@@ -160,7 +160,7 @@ async fn preview_and_deprecated_status_alias() {
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["waves"][0]["step_id"], "searchhead");
 
-    let mut args = vec!["status"];
+    let mut args = vec!["--output", "human", "status"];
     args.extend_from_slice(ROLLING);
     let out = run(dir.path(), &server.uri(), &args).await;
     assert_eq!(out.status.code(), Some(0));
