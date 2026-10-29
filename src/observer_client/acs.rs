@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::types::ChangePlan;
+use super::types::{ChangePlan, ChangePlanResponse};
 use super::Client;
 use crate::errors::CliError;
 
@@ -74,16 +74,6 @@ pub struct AcsObserveReport {
 struct ListCredentialsResponse {
     #[serde(default)]
     credentials: Vec<AcsCredential>,
-}
-
-#[derive(Deserialize)]
-struct AcsDraftResponse {
-    #[serde(default)]
-    success: bool,
-    #[serde(default)]
-    message: String,
-    #[serde(default)]
-    plan: Option<ChangePlan>,
 }
 
 /// ACS environments accepted by Observer for stack credentials.
@@ -188,55 +178,125 @@ impl Client {
             .await
     }
 
-    /// Create a Pending ACS draft plan for a stack (never auto-approves).
-    pub async fn create_acs_draft_plan(
+    /// Create a Pending Cloud ACS plan: `POST /api/v1/plans` (stack_kind=cloud),
+    /// then `POST /api/v1/acs/stacks/{stack}/project-plan` with `plan_id` so
+    /// Observer attaches the projected items. Never approves or executes.
+    pub async fn create_acs_project_plan(
         &self,
         stack: &str,
         name: Option<&str>,
-    ) -> Result<ChangePlan, CliError> {
+        request: &AcsProjectPlanRequest,
+    ) -> Result<AcsProjectPlanOutcome, CliError> {
         #[derive(Serialize)]
-        struct Body<'a> {
+        struct CreateBody<'a> {
+            source_type: &'a str,
+            stack_kind: &'a str,
+            acs_stack_name: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             name: Option<&'a str>,
         }
         let encoded = urlencoding_path_segment(stack)?;
-        let path = format!("api/v1/acs/stacks/{encoded}/project-plan");
-        let bytes = self
-            .request_bytes(reqwest::Method::POST, &path, Some(&Body { name }))
+        let created: ChangePlanResponse = self
+            .request_json(
+                reqwest::Method::POST,
+                "api/v1/plans",
+                Some(&CreateBody {
+                    source_type: "manual",
+                    stack_kind: "cloud",
+                    acs_stack_name: stack,
+                    name,
+                }),
+            )
             .await?;
-        if let Ok(envelope) = serde_json::from_slice::<AcsDraftResponse>(&bytes) {
-            if let Some(plan) = envelope.plan {
-                return Ok(plan);
+        let plan = match created.plan {
+            Some(plan) if created.success || !plan.id.is_empty() => plan,
+            _ => {
+                return Err(CliError::Other(format!(
+                    "Cloud ACS plan creation failed: {}",
+                    created.message
+                )))
             }
-            if !envelope.success && !envelope.message.is_empty() {
-                return Err(CliError::Other(envelope.message));
-            }
+        };
+
+        #[derive(Serialize)]
+        struct ProjectBody<'a> {
+            #[serde(flatten)]
+            request: &'a AcsProjectPlanRequest,
+            plan_id: &'a str,
         }
-        // Some Observer builds return a bare plan or `{ plan_id }` then require
-        // a follow-up acs-draft call; try bare plan first.
-        if let Ok(plan) = serde_json::from_slice::<ChangePlan>(&bytes) {
-            return Ok(plan);
+        let path = format!("api/v1/acs/stacks/{encoded}/project-plan");
+        let projected: AcsProjectPlanResponse = self
+            .request_json(
+                reqwest::Method::POST,
+                &path,
+                Some(&ProjectBody {
+                    request,
+                    plan_id: &plan.id,
+                }),
+            )
+            .await?;
+        Ok(AcsProjectPlanOutcome { plan, projected })
+    }
+}
+
+/// One app in the project-plan body (conf tree keyed by relative path).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AcsProjectPlanApp {
+    pub app_name: String,
+    pub source_path: String,
+    pub inventory_group: String,
+    pub files: std::collections::BTreeMap<String, String>,
+}
+
+/// Body for `POST /api/v1/acs/stacks/{stack}/project-plan` (minus `plan_id`).
+#[derive(Debug, Clone, Serialize)]
+pub struct AcsProjectPlanRequest {
+    pub environment_name: String,
+    pub mapping_source: String,
+    pub apps: Vec<AcsProjectPlanApp>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AcsProjectPlanItem {
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_app: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AcsProjectPlanResponse {
+    #[serde(default)]
+    pub plan_id: Option<String>,
+    #[serde(default)]
+    pub plan_status: Option<String>,
+    #[serde(default)]
+    pub item_count: usize,
+    #[serde(default)]
+    pub items: Vec<AcsProjectPlanItem>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AcsProjectPlanOutcome {
+    /// Plan row returned by `POST /api/v1/plans`.
+    pub plan: ChangePlan,
+    pub projected: AcsProjectPlanResponse,
+}
+
+impl AcsProjectPlanOutcome {
+    /// Plan with the status Observer reported after attaching items.
+    pub fn as_change_plan(&self) -> ChangePlan {
+        let mut plan = self.plan.clone();
+        if let Some(status) = self.projected.plan_status.clone() {
+            plan.status = status;
         }
-        #[derive(Deserialize)]
-        struct IdOnly {
-            plan_id: String,
+        if plan.plan_id.is_none() {
+            plan.plan_id = self.projected.plan_id.clone();
         }
-        if let Ok(id_only) = serde_json::from_slice::<IdOnly>(&bytes) {
-            let draft_path = format!("api/v1/plans/{}/acs-draft", id_only.plan_id);
-            let draft_bytes = self
-                .request_bytes(reqwest::Method::POST, &draft_path, None::<&()>)
-                .await?;
-            if let Ok(envelope) = serde_json::from_slice::<AcsDraftResponse>(&draft_bytes) {
-                if let Some(plan) = envelope.plan {
-                    return Ok(plan);
-                }
-            }
-            return serde_json::from_slice::<ChangePlan>(&draft_bytes)
-                .map_err(|e| CliError::Transport(format!("invalid ACS draft plan JSON: {e}")));
-        }
-        Err(CliError::Transport(
-            "invalid ACS project-plan create response".into(),
-        ))
+        plan
     }
 }
 

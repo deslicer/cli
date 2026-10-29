@@ -24,7 +24,8 @@ mod types;
 mod upgrade;
 
 pub use acs::{
-    validate_acs_environment, AcsCredential, AcsObserveReport, AcsObservedObject, AcsStack,
+    validate_acs_environment, AcsCredential, AcsObserveReport, AcsObservedObject,
+    AcsProjectPlanApp, AcsProjectPlanOutcome, AcsProjectPlanRequest, AcsStack,
     CredentialTestResult, SplunkCredential,
 };
 pub use app_provenance::{
