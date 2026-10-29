@@ -180,20 +180,7 @@ fn map_resolver_error(
 }
 
 fn error_message(body: &str, status: reqwest::StatusCode) -> String {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
-        for key in ["detail", "error", "message"] {
-            if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
-                if !text.is_empty() {
-                    return text.to_string();
-                }
-            }
-        }
-    }
-    if body.trim().is_empty() {
-        format!("HTTP {status}")
-    } else {
-        body.trim().to_string()
-    }
+    crate::http::http_error_message(body, status)
 }
 
 fn mentions_environment(text: &str) -> bool {

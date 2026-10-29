@@ -21,7 +21,7 @@ pub(crate) fn map_observer_error_with_auth(
     auth: AuthRejectionKind,
     request_path: &str,
 ) -> CliError {
-    let message = error_message(body, status);
+    let message = error_message_with_path(body, status, request_path);
     if let Some(error) = validation_error(body) {
         return error;
     }
@@ -128,20 +128,11 @@ pub(crate) fn is_duplicate_plan_error(body: &str) -> bool {
 }
 
 pub(crate) fn error_message(body: &str, status: reqwest::StatusCode) -> String {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
-        for key in ["detail", "message", "error"] {
-            if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
-                if !text.is_empty() {
-                    return text.to_string();
-                }
-            }
-        }
-    }
-    if body.trim().is_empty() {
-        format!("HTTP {status}")
-    } else {
-        body.trim().to_string()
-    }
+    crate::http::http_error_message(body, status)
+}
+
+fn error_message_with_path(body: &str, status: reqwest::StatusCode, request_path: &str) -> String {
+    crate::http::http_error_message_with_path(body, status, Some(request_path))
 }
 
 fn mentions_environment(text: &str) -> bool {
@@ -554,5 +545,30 @@ mod tests {
         assert!(is_plan_absent_text("plan_not_found"));
         assert!(!is_plan_absent_text("not_found"));
         assert!(!is_plan_absent_text("Not Found"));
+    }
+
+    #[test]
+    fn html_404_body_is_sanitized_not_dumped() {
+        let html = format!(
+            "<!DOCTYPE html><html lang=\"en\" data-scroll-behavior=\"smooth\"><head><title>404</title></head><body>{}</body></html>",
+            "missing ".repeat(800)
+        );
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::NOT_FOUND,
+            &html,
+            None,
+            AuthRejectionKind::ApiToken,
+            "api/v1/groups",
+        );
+        assert!(matches!(err, CliError::EndpointNotAvailable(_)));
+        let text = err.to_string();
+        assert!(text.contains("endpoint not available"), "{text}");
+        assert!(text.contains("HTTP 404"), "{text}");
+        assert!(text.contains("content-type text/html"), "{text}");
+        assert!(text.contains("path api/v1/groups"), "{text}");
+        assert!(text.contains("OBSERVER_API_URL"), "{text}");
+        assert!(!text.contains("data-scroll-behavior"), "{text}");
+        assert!(!text.contains("<!DOCTYPE"), "{text}");
+        assert!(text.len() < 500, "error still too long: {}", text.len());
     }
 }
