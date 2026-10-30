@@ -88,7 +88,7 @@ async fn single_piped_defaults_to_json() {
         records[0]["next_command"],
         "deslicer change status --plan-id external-id"
     );
-    assert!(records[0]["next_commands"].as_array().unwrap().len() >= 1);
+    assert!(!records[0]["next_commands"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]

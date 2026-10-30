@@ -112,6 +112,6 @@ mod tests {
         assert_eq!(doc["name"], "n");
         assert!(doc["url"].is_null());
         assert_eq!(doc["next_command"], "deslicer change status --plan-id ext");
-        assert!(doc["next_commands"].as_array().unwrap().len() >= 1);
+        assert!(!doc["next_commands"].as_array().unwrap().is_empty());
     }
 }
