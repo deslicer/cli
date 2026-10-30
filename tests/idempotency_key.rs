@@ -118,11 +118,25 @@ async fn remediate_draft_sends_idempotency_key_and_marks_replay() {
 }
 
 #[tokio::test]
-async fn idempotency_key_only_on_plan_create_not_compile() {
+async fn idempotency_key_only_on_plan_create_not_upload_or_compile() {
+    // Bundle flow makes three POSTs; only plan-create may carry Idempotency-Key (#228 review).
     let server = MockServer::start().await;
     let plan_row = "01890a5d-7777-7888-9999-aaaabbbbcccc";
     let plan_id = "0e4f8a34-1111-4222-8333-444455556666";
     let group = "019f36d6-3f61-7eea-9417-7ac4a8a10f69";
+    let bundle_id = "bundle-1";
+
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plan-sources/bundles"))
+        .and(NoIdempotencyKey)
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "id": bundle_id,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 4
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/api/v1/plans"))
@@ -152,8 +166,17 @@ async fn idempotency_key_only_on_plan_create_not_compile() {
     let base = Url::parse(&format!("{}/", server.uri())).expect("url");
     let client = Client::new(base, TokenSource::static_token("dap_tools_ci_key".into()))
         .with_idempotency_key(Some("bundle-create-1".into()));
+    let uploaded = client
+        .upload_bundle(
+            b"gzip".to_vec(),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            None,
+        )
+        .await
+        .expect("upload");
+    assert_eq!(uploaded.id, bundle_id);
     let plan = client
-        .create_plan_from_bundle("bundle-1", group, Some("airgap"))
+        .create_plan_from_bundle(&uploaded.id, group, Some("airgap"))
         .await
         .expect("create");
     assert_eq!(plan.id, plan_row);
