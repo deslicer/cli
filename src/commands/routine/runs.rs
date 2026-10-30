@@ -9,6 +9,9 @@ use crate::Ctx;
 pub struct Args {
     /// Routine id (from `routine list`)
     pub id: String,
+
+    #[command(flatten)]
+    pub page: crate::pagination::PageArgs,
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
@@ -20,19 +23,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Ok(runs) => runs,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let page = crate::pagination::page_slice(&runs, &args.page);
     match ctx.log_format {
-        LogFormat::Json => match crate::json_doc::to_pretty_string(&runs) {
-            Ok(json) => {
-                println!("{json}");
-                0
-            }
-            Err(err) => {
-                eprintln!("failed to serialize runs: {err}");
-                1
-            }
-        },
+        LogFormat::Json => crate::pagination::print_page_json(&page),
         LogFormat::Human => {
-            print!("{}", format_runs_human(&runs));
+            print!("{}", format_runs_human(&page.items));
             0
         }
     }

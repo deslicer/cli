@@ -3,12 +3,16 @@ use clap::Args as ClapArgs;
 use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::observer_client::HostGroup;
+use crate::pagination::{page_slice, print_page_json, PageArgs};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
     #[arg(long)]
     pub environment: Option<String>,
+
+    #[command(flatten)]
+    pub page: PageArgs,
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
@@ -21,20 +25,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Ok(groups) => groups,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let page = page_slice(&groups, &args.page);
 
     match ctx.log_format {
-        LogFormat::Json => match crate::json_doc::to_pretty_string(&groups) {
-            Ok(json) => {
-                println!("{json}");
-                0
-            }
-            Err(err) => {
-                eprintln!("failed to serialize groups: {err}");
-                1
-            }
-        },
+        LogFormat::Json => print_page_json(&page),
         LogFormat::Human => {
-            print!("{}", format_groups_human(&groups));
+            print!("{}", format_groups_human(&page.items));
             0
         }
     }

@@ -331,6 +331,48 @@ impl Client {
         self.get_plans(&path).await
     }
 
+    /// Paginated plan list for `change list` (#224).
+    ///
+    /// Assumed Observer contract: `GET api/v1/plans` accepts
+    /// `environment`, `status`, `since`, `limit`, `cursor` and may return either a
+    /// bare array (legacy) or `{items, next_cursor, total?}`. Legacy arrays are
+    /// sliced client-side.
+    pub async fn list_plans_page(
+        &self,
+        environment: Option<&str>,
+        status: Option<&str>,
+        since: Option<&str>,
+        page: &crate::pagination::PageArgs,
+    ) -> Result<crate::pagination::Page<ChangePlan>, CliError> {
+        let query = crate::pagination::query_pairs(
+            page,
+            &[
+                ("environment", environment),
+                ("status", status),
+                ("since", since),
+            ],
+        );
+        let path = format!("api/v1/plans{query}");
+        let bytes = self.request_bytes(Method::GET, &path, None::<&()>).await?;
+        let (raw_items, server_cursor, total) =
+            crate::pagination::parse_list_payload(&bytes).map_err(CliError::Transport)?;
+        let plans: Vec<ChangePlan> = raw_items
+            .into_iter()
+            .map(|v| serde_json::from_value(v).map_err(|e| CliError::Transport(e.to_string())))
+            .collect::<Result<_, _>>()?;
+
+        if server_cursor.is_some() || total.is_some() {
+            return Ok(crate::pagination::Page {
+                items: plans,
+                next_cursor: server_cursor,
+                total,
+                partial: false,
+            });
+        }
+        // Legacy bare array: apply client-side offset cursor.
+        Ok(crate::pagination::page_slice(&plans, page))
+    }
+
     pub async fn approve(&self, plan_id: &str) -> Result<ChangePlan, CliError> {
         let path = format!("api/v1/plans/{plan_id}/approve");
         self.post_change_plan_mutation(&path).await

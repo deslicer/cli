@@ -7,6 +7,7 @@ pub mod approve;
 pub mod deploy;
 pub mod jobs;
 pub mod lifecycle;
+pub mod list;
 pub mod plan;
 mod plan_env;
 mod plan_name;
@@ -23,7 +24,8 @@ pub const CHANGE_WORKFLOW_EXAMPLES: &str = concat!(
     "  deslicer change plan --environment production\n", // pragma: allowlist secret
     "  deslicer change plan --destination acs-stack:<stack>\n",
     "  deslicer change plan --from-registry <app>@<ver> --target-group <group>\n",
-    "  deslicer change show --plan-id <plan-id>\n", // pragma: allowlist secret
+    "  deslicer change list --environment production --limit 50\n", // pragma: allowlist secret
+    "  deslicer change show --plan-id <plan-id>\n",                 // pragma: allowlist secret
     "  deslicer change validate --plan-id <plan-id> --environment production\n", // pragma: allowlist secret
     "  deslicer change approve --plan-id <plan-id> --environment production\n", // pragma: allowlist secret
     "  deslicer change deploy --plan-id <plan-id> --environment production\n", // pragma: allowlist secret
@@ -37,6 +39,8 @@ pub const CHANGE_WORKFLOW_EXAMPLES: &str = concat!(
 pub enum ChangeCmd {
     /// Create a change plan from the current repo commit (or a local bundle).
     Plan(plan::Args),
+    /// List plans (filters + pagination) so agents can rediscover plan ids.
+    List(list::Args),
     /// Show one plan or list recent plans for an environment.
     Show(show::Args),
     /// Approve a plan pending human review (CI proxy attests the approver).
@@ -62,6 +66,7 @@ pub enum ChangeCmd {
 pub async fn dispatch(ctx: Ctx, cmd: ChangeCmd) -> i32 {
     match cmd {
         ChangeCmd::Plan(args) => plan::run(ctx, args).await,
+        ChangeCmd::List(args) => list::run(ctx, args).await,
         ChangeCmd::Show(args) => show::run(ctx, args).await,
         ChangeCmd::Approve(args) => approve::run(ctx, args).await,
         ChangeCmd::Reject(args) => reject::run(ctx, args).await,

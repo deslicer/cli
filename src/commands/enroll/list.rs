@@ -6,20 +6,21 @@ use crate::errors::CliError;
 use crate::observer_client::EnrollmentTokenSummary;
 use crate::Ctx;
 
-const LIST_CAP: usize = 50;
-
 #[derive(ClapArgs)]
-pub struct Args {}
+pub struct Args {
+    #[command(flatten)]
+    pub page: crate::pagination::PageArgs,
+}
 
-pub async fn run(ctx: Ctx, _args: Args) -> i32 {
+pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let log_format = ctx.log_format;
-    match run_inner(ctx).await {
+    match run_inner(ctx, args).await {
         Ok(code) => code,
         Err(err) => map_cli_error(log_format, err),
     }
 }
 
-async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
+async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     let (session, client) = authenticate(&ctx, None, None).await?;
     if !session.is_device_session() {
         return Err(CliError::DeviceSessionRequired(
@@ -28,21 +29,23 @@ async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
     }
 
     let listed = client.list_enrollment_tokens().await?;
-    let shown: Vec<&EnrollmentTokenSummary> = listed.tokens.iter().take(LIST_CAP).collect();
+    let page = crate::pagination::page_slice(&listed.tokens, &args.page);
 
     match ctx.log_format {
         LogFormat::Json => {
-            let payload = serde_json::json!({
-                "tokens": shown,
-                "shown": shown.len(),
-                "total": listed.total,
-            });
+            let mut payload = page
+                .to_json_value()
+                .map_err(|err| CliError::Other(format!("serialize tokens: {err}")))?;
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert("total".into(), serde_json::json!(listed.total));
+            }
             let text = crate::json_doc::to_pretty_string(&payload)
                 .map_err(|err| CliError::Other(format!("serialize tokens: {err}")))?;
             assert_no_secret(&text)?;
             println!("{text}");
         }
         LogFormat::Human => {
+            let shown: Vec<&EnrollmentTokenSummary> = page.items.iter().collect();
             print!("{}", format_tokens_human(&shown, listed.total));
         }
     }

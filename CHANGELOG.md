@@ -51,6 +51,11 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   run id is present (run id + attempt/job + input hash); never defaults
   from local inputs alone. Replays surface `"replayed": true` with exit 0.
   (fixes [#228](https://github.com/deslicer/cli/issues/228)) <!-- pragma: allowlist secret -->
+- `change list` with `--status` / `--since` / `--environment` / `--limit` /
+  `--cursor`, plus `--limit`/`--cursor` on `groups list`, `inventory apps`,
+  `routine runs`, and `enroll list`. JSON pages are
+  `{items, next_cursor, total?, partial}`.
+  (fixes [#224](https://github.com/deslicer/cli/issues/224)) <!-- pragma: allowlist secret -->
 
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,
   `kind`, `message`, `hint`, `next_command`, `retryable`, `exit_code`,
