@@ -26,6 +26,10 @@ fn error_format(ctx: &Ctx, args: &Args) -> LogFormat {
     }
 }
 
+fn with_idempotency(client: Client, args: &Args) -> Client {
+    client.with_idempotency_key(crate::idempotency::resolve(args.idempotency_key.as_deref()))
+}
+
 #[derive(ClapArgs)]
 #[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
@@ -106,6 +110,11 @@ pub struct Args {
     /// Print one JSON object with `plan_id` (and ACS item counts) on stdout.
     #[arg(long)]
     pub json: bool,
+
+    /// Idempotency key for safe retries (`Idempotency-Key` header). Defaults to a
+    /// CI run id when present; never hashes local inputs silently.
+    #[arg(long = "idempotency-key", env = "DESLICER_IDEMPOTENCY_KEY")]
+    pub idempotency_key: Option<String>,
 }
 
 use super::lifecycle::{is_compile_failure, is_still_compiling};
@@ -151,11 +160,14 @@ async fn bundle_flow_client(ctx: &Ctx, args: &Args) -> Result<Client, CliError> 
         ctx.observer_api_url.clone(),
         crate::observer_token::api_token(),
     ) {
-        return Ok(Client::new(base, TokenSource::static_token(token)).with_api_token_auth());
+        return Ok(with_idempotency(
+            Client::new(base, TokenSource::static_token(token)).with_api_token_auth(),
+            args,
+        ));
     }
 
     match authenticate(ctx, args.environment.as_deref(), None).await {
-        Ok((_session, client)) => Ok(client),
+        Ok((_session, client)) => Ok(with_idempotency(client, args)),
         Err(err) => {
             if ctx.observer_api_url.is_some() {
                 return Err(CliError::Other(
@@ -291,6 +303,7 @@ async fn run_acs_destination_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, 
             .join(", ")
     );
     let (_session, client) = authenticate(ctx, environment.as_deref(), None).await?;
+    let client = with_idempotency(client, args);
     let outcome = client
         .create_acs_project_plan(&stack, args.name.as_deref(), &inputs.request)
         .await?;
@@ -327,6 +340,7 @@ async fn run_registry_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, CliErro
     let app_ref = crate::observer_client::parse_registry_app_ref(spec)?;
     let environment = resolve_plan_environment(ctx, args.environment.as_deref())?;
     let (_session, client) = authenticate(ctx, environment.as_deref(), None).await?;
+    let client = with_idempotency(client, args);
     // Observer rejects registry plans without a group (registry_target_group_required);
     // fail locally with exit 2 instead of sending a request that cannot succeed.
     let env_yaml = match environment.as_deref() {
@@ -398,7 +412,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(format, err),
     };
     let (session, client) = match authenticate(&ctx, environment.as_deref(), None).await {
-        Ok(pair) => pair,
+        Ok((session, client)) => (session, with_idempotency(client, &args)),
         Err(err) => return map_cli_error(format, err),
     };
 

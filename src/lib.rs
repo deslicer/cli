@@ -13,6 +13,7 @@ pub mod environment_yaml;
 pub mod errors;
 pub mod github_release;
 pub mod http;
+pub mod idempotency;
 pub mod interactive;
 pub mod json_doc;
 pub mod observer_client;

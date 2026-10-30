@@ -21,14 +21,15 @@ pub(crate) fn next_steps(plan_id: &str) -> Vec<String> {
 async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i32, CliError> {
     super::validate_version(&args.to_version)?;
     let (_session, client) = authenticate(ctx, args.environment.as_deref(), None).await?;
+    let client =
+        client.with_idempotency_key(crate::idempotency::resolve(args.idempotency_key.as_deref()));
     let body = rolling_request(&client, args).await?;
     let plan = client.create_upgrade_plan(&body).await?;
+    let replayed = crate::idempotency::take_replayed();
     let status = "pending_approval";
     let (next_command, next_commands) = crate::plan_next::next_commands_for(&plan.plan_id, status);
     Ok(match format {
         LogFormat::Json => {
-            // `mut` matches #254 so `"replayed": true` can insert additively.
-            #[allow(unused_mut)]
             let mut doc = serde_json::json!({
                 "plan_id": plan.plan_id,
                 "status": status,
@@ -39,6 +40,11 @@ async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i
                 "next_steps": next_steps(&plan.plan_id),
                 "plan": plan,
             });
+            if replayed {
+                doc.as_object_mut()
+                    .expect("object")
+                    .insert("replayed".into(), serde_json::json!(true));
+            }
             print_json(&doc)
         }
         LogFormat::Human => {

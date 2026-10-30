@@ -77,6 +77,8 @@ pub struct Client {
     ci_platform: Option<crate::ci::CiPlatform>,
     environment: Option<String>,
     auth_rejection: AuthRejectionKind,
+    /// Sent as `Idempotency-Key` on mutating requests when set (#228).
+    idempotency_key: Option<String>,
 }
 
 impl Client {
@@ -88,6 +90,7 @@ impl Client {
             ci_platform: None,
             environment: None,
             auth_rejection: AuthRejectionKind::Oidc,
+            idempotency_key: None,
         }
     }
 
@@ -107,6 +110,12 @@ impl Client {
     /// Label Observer 401s as API-token failures (direct URL + `DESLICER_API_TOKEN`).
     pub fn with_api_token_auth(mut self) -> Self {
         self.auth_rejection = AuthRejectionKind::ApiToken;
+        self
+    }
+
+    /// Attach an `Idempotency-Key` header on POST/PUT/PATCH/DELETE (#228).
+    pub fn with_idempotency_key(mut self, key: Option<String>) -> Self {
+        self.idempotency_key = key.filter(|k| !k.trim().is_empty());
         self
     }
 
@@ -568,6 +577,7 @@ impl Client {
             if let Some(platform) = self.ci_platform {
                 req = req.header("X-Deslicer-CI-Platform", platform.header_value());
             }
+            req = self.apply_idempotency_header(req, &method);
             if let Some(payload) = body {
                 req = req.json(payload);
             }
@@ -602,12 +612,16 @@ impl Client {
             }
 
             let retry_after = parse_retry_after_header(response.headers());
+            let headers = response.headers().clone();
             let bytes = response
                 .bytes()
                 .await
                 .map_err(|e| CliError::Transport(e.to_string()))?;
 
             if status.is_success() {
+                crate::idempotency::note_replayed(crate::idempotency::response_indicates_replay(
+                    &headers, &bytes,
+                ));
                 return Ok(bytes.to_vec());
             }
 
@@ -624,6 +638,19 @@ fn is_connect_or_timeout(err: &reqwest::Error) -> bool {
 }
 
 impl Client {
+    fn apply_idempotency_header(
+        &self,
+        req: reqwest::RequestBuilder,
+        method: &Method,
+    ) -> reqwest::RequestBuilder {
+        match (&self.idempotency_key, method) {
+            (Some(key), &Method::POST | &Method::PUT | &Method::PATCH | &Method::DELETE) => {
+                req.header("Idempotency-Key", key.as_str())
+            }
+            _ => req,
+        }
+    }
+
     async fn request_status<B>(
         &self,
         method: Method,
@@ -637,11 +664,12 @@ impl Client {
         let bearer = self.tokens.bearer().await?;
         let mut req = self
             .http
-            .request(method, url)
+            .request(method.clone(), url)
             .header("Authorization", format!("Bearer {bearer}"));
         if let Some(platform) = self.ci_platform {
             req = req.header("X-Deslicer-CI-Platform", platform.header_value());
         }
+        req = self.apply_idempotency_header(req, &method);
         if let Some(payload) = body {
             req = req.json(payload);
         }
@@ -650,10 +678,16 @@ impl Client {
             .await
             .map_err(|e| CliError::Transport(e.to_string()))?;
         let status = response.status();
+        let headers = response.headers().clone();
         let bytes = response
             .bytes()
             .await
             .map_err(|e| CliError::Transport(e.to_string()))?;
+        if status.is_success() {
+            crate::idempotency::note_replayed(crate::idempotency::response_indicates_replay(
+                &headers, &bytes,
+            ));
+        }
         Ok((status, String::from_utf8_lossy(&bytes).into_owned()))
     }
 

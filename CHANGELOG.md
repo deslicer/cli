@@ -45,6 +45,11 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   Deprecated `next_steps` is kept as an alias of `next_commands` for one
   release (including `upgrade plan`) so existing consumers keep working.
   (fixes [#225](https://github.com/deslicer/cli/issues/225)) <!-- pragma: allowlist secret -->
+- `--idempotency-key` / `DESLICER_IDEMPOTENCY_KEY` on `change plan`,
+  `remediate draft`, `catalog plan`, and `upgrade plan`, sent as
+  `Idempotency-Key`. Defaults only when a CI run id is present; replays
+  surface `"replayed": true` with exit 0.
+  (fixes [#228](https://github.com/deslicer/cli/issues/228)) <!-- pragma: allowlist secret -->
 
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,
   `kind`, `message`, `hint`, `next_command`, `retryable`, `exit_code`,

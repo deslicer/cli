@@ -55,6 +55,10 @@ pub struct RollingArgs {
     /// Print JSON (same as --log-format json)
     #[arg(long)]
     pub json: bool,
+
+    /// Idempotency key for safe retries on `upgrade plan` (`Idempotency-Key`).
+    #[arg(long = "idempotency-key", env = "DESLICER_IDEMPOTENCY_KEY")]
+    pub idempotency_key: Option<String>,
 }
 
 pub(crate) fn output_format(ctx: &Ctx, json: bool) -> LogFormat {
