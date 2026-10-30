@@ -29,6 +29,10 @@ pub struct Args {
     /// Create the draft plan. Without this flag, print a dry-run and exit.
     #[arg(long)]
     pub yes: bool,
+
+    /// Idempotency key for safe retries (`Idempotency-Key` header).
+    #[arg(long = "idempotency-key", env = "DESLICER_IDEMPOTENCY_KEY")]
+    pub idempotency_key: Option<String>,
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
@@ -64,7 +68,20 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     }
 
     let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
-        Ok(pair) => pair,
+        Ok((session, client)) => (
+            session,
+            client.with_idempotency_key(crate::idempotency::resolve(
+                args.idempotency_key.as_deref(),
+                &crate::idempotency::fingerprint([
+                    "remediate draft",
+                    args.host.as_deref().unwrap_or(""),
+                    args.app.as_str(),
+                    args.group.as_deref().unwrap_or(""),
+                    args.environment.as_deref().unwrap_or(""),
+                    args.name.as_deref().unwrap_or(""),
+                ]),
+            )),
+        ),
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match client

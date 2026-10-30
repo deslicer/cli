@@ -82,8 +82,9 @@ Publish the **full** table in `deslicer schema` and `docs/exit-codes.md`. A test
 - **Create-draft** paths such as `change plan` create on invoke **without** requiring `--yes`. Agents expect a plan id back from a single call.
 - `schema` sets `requires_yes: true` **only** for true side-effect apply commands, not for draft creation.
 - **Idempotency (#228):** covers replay of creates, not a forced `--yes` on plan create.
-  - Accept `--idempotency-key`, sent as `Idempotency-Key`.
+  - Accept `--idempotency-key`, sent as `Idempotency-Key` on the plan-create POST only (not upload/compile/follow-ups).
   - Default a key **only** when a CI run id is present **or** the caller set `--idempotency-key`.
+  - In CI, the default key includes attempt/job (when available) plus a hash of plan inputs so two plan steps in one run do not collide.
   - **No** silent local input-hash replay (avoids surprising “same args → same plan” on a laptop).
   - A server-side replay returns the same id with `"replayed": true` and exit 0.
 
@@ -184,7 +185,7 @@ Evidence comes from `check.sh` (check-v1.7.3.txt, raw outputs in run-v1.7.3/) an
 | P1 | #224 `change list` + pagination | Read-only; auth like show; exit 15 if Observer route missing |
 | P2 | #227 `--no-input` + device-login JSON poll / `--no-wait` | Never open browser; exit 0/4; `auth.pending` retryable |
 | P2 | #226 `--timeout` and retries | Global flag + env; Retry-After |
-| P2 | #228 idempotency keys | Default only with CI run id or explicit flag; no local input-hash replay |
+| P2 | #228 idempotency keys | Default only with CI run id (incl. input hash) or explicit flag; header on create only; no local-only input-hash replay |
 | P2 | #187 / #133 naming | Bare groups, flag consistency; #211 may land in gate |
 
 ## Weekly check
@@ -248,7 +249,7 @@ Locked grill outcomes for v1.1 (Daniel):
 | 7 | Aliases | Canonical `--output`/`-o` (+ `DESLICER_OUTPUT`). `--json` remains (hidden ok). `--log-format` deprecated two minors then hidden. Conflicts → exit 2. |
 | 8 | `schema_version` | Additive `schema_version: 1` on all JSON success+error in one wave; snapshot tests; human unscathed. |
 | 9 | `change list` | Read-only tenant list; auth like `change show`; `--limit`/`--cursor`/filters; missing Observer route → exit 15. |
-| 10 | Idempotency | Default key only when CI run id present or `--idempotency-key` set; no silent local input-hash replay. |
+| 10 | Idempotency | Default key only when CI run id present or `--idempotency-key` set; CI default includes input hash; header only on plan create; no silent local input-hash replay. |
 | 11 | Sequencing | Merge fix PRs #212–#218 (#205–#210) [and #204/#211 if open] → patch release → then agent-native P0 **#219 → #221 → #220**. |
 | 12 | Device login non-interactive | Print JSON codes; poll until success/timeout (0/4); `--no-wait` → exit 4 `auth.pending` retryable; never open browser. |
 | 13 | Error envelope | JSON mode: last stderr line is exactly one envelope; logs may precede; nothing after. Human mode free-form. |
