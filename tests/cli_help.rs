@@ -72,6 +72,9 @@ fn change_status_help_documents_timeout() {
     let mut buf = Vec::new();
     status.write_long_help(&mut buf).expect("help");
     let help = String::from_utf8(buf).expect("utf8");
-    assert!(help.contains("--timeout-secs"));
+    assert!(
+        help.contains("--timeout-secs"),
+        "change status should document --timeout-secs:\n{help}"
+    );
     assert!(help.contains("Examples:"));
 }

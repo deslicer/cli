@@ -54,6 +54,24 @@ pub struct Cli {
     #[arg(long, value_enum, global = true)]
     pub log_format: Option<LogFormat>,
 
+    /// Per-request HTTP timeout in seconds (default 120). Env: `DESLICER_TIMEOUT`.
+    #[arg(
+        long = "timeout",
+        global = true,
+        env = "DESLICER_TIMEOUT",
+        value_name = "SECS"
+    )]
+    pub timeout: Option<u64>,
+
+    /// Retries for idempotent GETs on 429/502/503/504 and connect errors (default 2; 0 disables).
+    #[arg(
+        long = "retries",
+        global = true,
+        env = "DESLICER_RETRIES",
+        value_name = "N"
+    )]
+    pub retries: Option<u64>,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -188,6 +206,7 @@ impl Cli {
         if self.log_format.is_some() {
             emit_log_format_deprecation();
         }
+        crate::runtime_limits::set_from_cli(self.timeout, self.retries);
         let ctx = Ctx {
             deslicer_api_url: self.deslicer_api_url,
             observer_api_url: self.observer_api_url,

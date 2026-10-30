@@ -59,7 +59,8 @@ pub use types::{
 };
 
 use http_errors::{
-    map_observer_error_with_auth, parse_retry_after_header, retry_delay, AuthRejectionKind,
+    is_retryable_status, map_observer_error_with_auth, parse_retry_after_header, retry_delay,
+    AuthRejectionKind,
 };
 
 pub(crate) use http_errors::{error_message, parse_retry_after_header as retry_after_header};
@@ -549,13 +550,14 @@ impl Client {
     where
         B: Serialize + ?Sized,
     {
-        const MAX_ATTEMPTS: u32 = 3;
         const BACKOFF_BASE_MS: u64 = 500;
 
         let url = self.request_url(path)?;
         let mut bearer = self.tokens.bearer().await?;
         let mut attempt = 0u32;
         let mut auth_refreshed = false;
+        let max_attempts = crate::runtime_limits::max_attempts();
+        let idempotent = method == Method::GET || method == Method::HEAD;
 
         loop {
             attempt += 1;
@@ -570,10 +572,16 @@ impl Client {
                 req = req.json(payload);
             }
 
-            let response = req
-                .send()
-                .await
-                .map_err(|e| CliError::Transport(e.to_string()))?;
+            let response = match req.send().await {
+                Ok(response) => response,
+                Err(err) if idempotent && attempt < max_attempts && is_connect_or_timeout(&err) => {
+                    let delay =
+                        retry_delay(&reqwest::header::HeaderMap::new(), attempt, BACKOFF_BASE_MS);
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err) => return Err(CliError::Transport(err.to_string())),
+            };
 
             let status = response.status();
 
@@ -587,9 +595,7 @@ impl Client {
                 }
             }
 
-            if (status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS)
-                && attempt < MAX_ATTEMPTS
-            {
+            if idempotent && is_retryable_status(status) && attempt < max_attempts {
                 let delay = retry_delay(response.headers(), attempt, BACKOFF_BASE_MS);
                 tokio::time::sleep(delay).await;
                 continue;
@@ -609,7 +615,15 @@ impl Client {
             return Err(self.map_http_error(status, &body_text, retry_after, path));
         }
     }
+}
 
+fn is_connect_or_timeout(err: &reqwest::Error) -> bool {
+    // Do not use `is_request()`: it also matches builder/invalid-URL style
+    // failures that are not transient.
+    err.is_connect() || err.is_timeout()
+}
+
+impl Client {
     async fn request_status<B>(
         &self,
         method: Method,

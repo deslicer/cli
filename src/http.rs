@@ -10,8 +10,6 @@ use url::Url;
 
 use crate::errors::CliError;
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
-
 /// Silence tolerated on a streaming body before it is treated as dead.
 ///
 /// The server writes an SSE keepalive comment every 15s, so anything past a
@@ -32,7 +30,7 @@ fn base_builder() -> reqwest::ClientBuilder {
 
 pub fn try_client() -> Result<reqwest::Client, CliError> {
     base_builder()
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(crate::runtime_limits::request_timeout())
         .build()
         .map_err(|e| CliError::Transport(format!("build HTTP client: {e}")))
 }
@@ -260,7 +258,10 @@ mod tests {
 
     #[test]
     fn request_timeout_allows_cold_create_window() {
-        assert_eq!(REQUEST_TIMEOUT, Duration::from_secs(120));
+        assert_eq!(
+            crate::runtime_limits::request_timeout(),
+            Duration::from_secs(120)
+        );
     }
 
     #[test]

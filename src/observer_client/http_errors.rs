@@ -213,7 +213,23 @@ pub(crate) fn retry_delay(
         return Duration::from_secs(secs);
     }
     let multiplier = 1u64.checked_shl(attempt.saturating_sub(1)).unwrap_or(1);
-    Duration::from_millis(base_ms.saturating_mul(multiplier))
+    let base = base_ms.saturating_mul(multiplier);
+    // Full jitter in [base/2, base] so concurrent agents do not align.
+    let half = base / 2;
+    let jitter = if half == 0 {
+        0
+    } else {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos() as u64)
+            .unwrap_or(0)
+            % (half + 1)
+    };
+    Duration::from_millis(half.saturating_add(jitter).max(1))
+}
+
+pub(crate) fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 429 | 502 | 503 | 504)
 }
 
 pub(crate) fn parse_retry_after_header(headers: &reqwest::header::HeaderMap) -> Option<u64> {
