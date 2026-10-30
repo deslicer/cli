@@ -22,7 +22,7 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
 async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
     let (session, client) = authenticate(&ctx, None, None).await?;
     if !session.is_device_session() {
-        return Err(CliError::Other(
+        return Err(CliError::DeviceSessionRequired(
             "`enroll list` requires `deslicer auth login` (device session)".into(),
         ));
     }

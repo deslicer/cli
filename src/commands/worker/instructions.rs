@@ -46,7 +46,7 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     let enrollment_token = resolve_embed_token(&args)?;
     let (session, _client) = authenticate(&ctx, None, None).await?;
     if !session.is_device_session() {
-        return Err(CliError::Other(
+        return Err(CliError::DeviceSessionRequired(
             "`worker instructions` requires `deslicer auth login` (device session)".into(),
         ));
     }

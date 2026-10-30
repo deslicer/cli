@@ -27,7 +27,7 @@ pub async fn bind_repo(
     target_group: Uuid,
 ) -> Result<BindOutcome, CliError> {
     if !session.is_device_session() {
-        return Err(CliError::Other(
+        return Err(CliError::DeviceSessionRequired(
             "`init --bind` requires `deslicer auth login` (device session)".into(),
         ));
     }
