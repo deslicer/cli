@@ -20,10 +20,10 @@ pub struct ChangePlan {
     #[serde(default, alias = "description")]
     pub summary: Option<String>,
     /// RFC3339 create time when Observer includes it (used by `change list --since`).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     /// RFC3339 update time when Observer includes it (preferred for `--since`).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
 }
 
