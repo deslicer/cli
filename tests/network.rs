@@ -529,6 +529,11 @@ async fn client_catalog_404_maps_to_exit_15_not_plan_not_found() {
     );
     assert_eq!(err.exit_code(), 15);
     assert!(!err.to_string().contains("plan not found"));
+    // Exit-15 envelopes must carry hint + next_command (issue #248).
+    let envelope = deslicer_cli::reporting::cli_error_json(&err);
+    assert_eq!(envelope["error"]["code"], "endpoint.not_available");
+    assert_eq!(envelope["error"]["next_command"], "deslicer auth status");
+    assert!(envelope["error"]["hint"].is_string());
 }
 
 #[tokio::test]
