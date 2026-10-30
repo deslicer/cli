@@ -69,6 +69,35 @@ fn schema_command_filter() {
 }
 
 #[test]
+fn schema_positional_path_filter() {
+    let _guard = env_lock();
+    let output = cli_bin()
+        .args(["schema", "change", "revert"])
+        .output()
+        .expect("run");
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let doc = stdout_json(&output);
+    let commands = doc["commands"].as_array().unwrap();
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0]["path"], "change revert");
+}
+
+#[test]
+fn schema_positional_group_prefix() {
+    let _guard = env_lock();
+    let output = cli_bin().args(["schema", "change"]).output().expect("run");
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let doc = stdout_json(&output);
+    let commands = doc["commands"].as_array().unwrap();
+    assert!(commands.len() > 1, "expected all change/* commands");
+    assert!(commands.iter().all(|c| {
+        let p = c["path"].as_str().unwrap();
+        p == "change" || p.starts_with("change ")
+    }));
+    assert!(commands.iter().any(|c| c["path"] == "change plan"));
+}
+
+#[test]
 fn schema_unknown_command_exits_2() {
     let _guard = env_lock();
     let output = cli_bin()
