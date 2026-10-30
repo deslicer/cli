@@ -20,7 +20,11 @@ pub struct Args {
     pub plan_id: String,
 
     /// Maximum seconds to wait for rollout progress while `progress_status` is `partial`.
-    #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECS)]
+    #[arg(
+        long = "timeout",
+        visible_alias = "timeout-secs",
+        default_value_t = DEFAULT_TIMEOUT_SECS
+    )]
     pub timeout_secs: u64,
 
     /// Also print per-job state (one-shot; skips progress polling).

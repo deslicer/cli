@@ -33,6 +33,13 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
 
 ### Features
 
+- Global `--timeout` / `DESLICER_TIMEOUT` (per-request HTTP) and `--retries`
+  / `DESLICER_RETRIES` (default 2; `0` disables) with jittered backoff for
+  idempotent GETs on 429/502/503/504 and connect errors, honouring
+  `Retry-After`. `change status --timeout-secs` is now `--timeout`
+  (alias retained).
+  (fixes [#226](https://github.com/deslicer/cli/issues/226)) <!-- pragma: allowlist secret -->
+
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,
   `kind`, `message`, `hint`, `next_command`, `retryable`, `exit_code`,
   `details`), plus canonical `--output`/`-o` and `DESLICER_OUTPUT`.
