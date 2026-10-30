@@ -55,8 +55,10 @@ async fn run_with_inner(
     args: Args,
     detached_run: Option<String>,
 ) -> Result<i32, CliError> {
+    // Non-TTY stdin cannot drive the REPL; treat as usage, not error.other
+    // (issue #245), matching `agent run` after #240.
     if !std::io::stdin().is_terminal() {
-        return Err(CliError::Other(
+        return Err(CliError::MissingArgument(
             "no prompt given. Pass it as an argument or pipe it on stdin:\n  \
              deslicer agent run \"why did plan X fail?\""
                 .into(),

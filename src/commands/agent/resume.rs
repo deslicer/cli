@@ -44,6 +44,15 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
+    // Usage failures for a missing prompt on non-TTY must win over auth so
+    // agents see exit 2 / usage.missing_argument (issue #245). --follow does
+    // not need a prompt.
+    if args.prompt.is_none() && !args.follow && !std::io::stdin().is_terminal() {
+        return Err(CliError::MissingArgument(
+            "no prompt given. Pass one, or run `deslicer agent resume` on a terminal.".into(),
+        ));
+    }
+
     let client = AgentClient::from_ctx(&ctx)?;
     let latest = client.try_latest_run().await?.ok_or_else(no_runs_yet)?;
 
@@ -76,12 +85,6 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
             detached,
         )
         .await);
-    }
-
-    if args.prompt.is_none() && !std::io::stdin().is_terminal() {
-        return Err(CliError::Other(
-            "no prompt given. Pass one, or run `deslicer agent resume` on a terminal.".into(),
-        ));
     }
 
     if latest.status == "running" {
