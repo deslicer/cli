@@ -13,6 +13,11 @@ pub async fn run(ctx: Ctx, args: RollingArgs) -> i32 {
     }
 }
 
+/// Deprecated alias of `next_commands` for `upgrade plan` JSON (kept one release).
+pub(crate) fn next_steps(plan_id: &str) -> Vec<String> {
+    crate::plan_next::next_commands_for(plan_id, "pending_approval").1
+}
+
 async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i32, CliError> {
     super::validate_version(&args.to_version)?;
     let (_session, client) = authenticate(ctx, args.environment.as_deref(), None).await?;
@@ -27,6 +32,8 @@ async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i
             "url": serde_json::Value::Null,
             "next_command": next_command,
             "next_commands": next_commands,
+            // Deprecated alias of `next_commands` — remove after one release.
+            "next_steps": next_steps(&plan.plan_id),
             "plan": plan,
         })),
         LogFormat::Human => {
@@ -37,8 +44,9 @@ async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i
 }
 
 fn format_human(plan: &UpgradePlanCreated) -> String {
-    let (next, nexts) = crate::plan_next::next_commands_for(&plan.plan_id, "pending_approval");
-    let then = nexts.get(1).cloned().unwrap_or_default();
+    let steps = next_steps(&plan.plan_id);
+    let next = steps.first().cloned().unwrap_or_default();
+    let then = steps.get(1).cloned().unwrap_or_default();
     format!(
         "plan_id: {}\nupgrade plan created ({} → {}, {} host(s), {} phase(s)); Pending, nothing was approved or deployed\nnext: {}\n  then: {}\n",
         plan.plan_id,
@@ -46,7 +54,7 @@ fn format_human(plan: &UpgradePlanCreated) -> String {
         plan.to_version,
         plan.host_ids.len(),
         plan.phase_ids.len(),
-        next.unwrap_or_default(),
+        next,
         then
     )
 }

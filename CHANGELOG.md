@@ -42,6 +42,8 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   (fixes [#226](https://github.com/deslicer/cli/issues/226)) <!-- pragma: allowlist secret -->
 - Uniform `plan_id` / `status` / `next_command` / `next_commands` on change
   plan create/advance JSON (and human `next:`), including `upgrade plan`.
+  `upgrade plan` still emits deprecated `next_steps` (same list as
+  `next_commands`) for one release so existing consumers keep working.
   (fixes [#225](https://github.com/deslicer/cli/issues/225)) <!-- pragma: allowlist secret -->
 
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,

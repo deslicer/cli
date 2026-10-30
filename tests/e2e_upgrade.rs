@@ -220,6 +220,8 @@ async fn plan_prints_plan_id_and_next_step() {
         v["next_commands"][1],
         format!("deslicer change approve --plan-id {PLAN}")
     );
+    // Deprecated alias kept for one release (#250 review).
+    assert_eq!(v["next_steps"], v["next_commands"]);
 }
 
 #[tokio::test]

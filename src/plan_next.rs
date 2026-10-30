@@ -98,6 +98,19 @@ mod tests {
     }
 
     #[test]
+    fn failed_suggests_existing_retry_yes() {
+        let (next, nexts) = next_commands_for("p-3", "failed");
+        assert_eq!(
+            next.as_deref(),
+            Some("deslicer change retry --plan-id p-3 --yes")
+        );
+        assert_eq!(
+            nexts[0],
+            "deslicer change retry --plan-id p-3 --yes".to_string()
+        );
+    }
+
+    #[test]
     fn attach_adds_handle_fields_without_dropping_plan_body() {
         let plan = ChangePlan {
             id: "row".into(),
