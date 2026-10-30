@@ -414,6 +414,8 @@ mod tests {
             status: "pending_approval".into(),
             name: None,
             summary: None,
+            created_at: None,
+            updated_at: None,
         };
         let _ = append_github_step_summary(&plan_summary_markdown("Test", &plan, None, None));
         std::env::remove_var("GITHUB_STEP_SUMMARY");
@@ -434,6 +436,8 @@ mod tests {
             status: "pending_approval".into(),
             name: None,
             summary: None,
+            created_at: None,
+            updated_at: None,
         };
         let markdown = plan_summary_markdown("Test", &plan, None, Some(&labels));
         assert!(markdown.contains("This PR touches"));
@@ -451,6 +455,8 @@ mod tests {
                 status: "draft".into(),
                 name: None,
                 summary: None,
+                created_at: None,
+                updated_at: None,
             },
             ChangePlan {
                 id: "row-2".into(),
@@ -458,6 +464,8 @@ mod tests {
                 status: "pending_approval".into(),
                 name: None,
                 summary: None,
+                created_at: None,
+                updated_at: None,
             },
         ];
         let markdown = plans_summary_markdown(&plans);

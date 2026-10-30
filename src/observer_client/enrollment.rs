@@ -25,7 +25,7 @@ pub struct CreateEnrollmentTokenResponse {
     pub bind_to_host_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EnrollmentTokenSummary {
     pub jti: Uuid,
     pub name: Option<String>,

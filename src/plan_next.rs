@@ -122,6 +122,8 @@ mod tests {
             status: "draft".into(),
             name: Some("n".into()),
             summary: None,
+            created_at: None,
+            updated_at: None,
         };
         let doc = change_plan_success_doc(&plan);
         assert_eq!(doc["plan_id"], "ext");

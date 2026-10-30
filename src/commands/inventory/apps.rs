@@ -24,6 +24,9 @@ pub struct Args {
     #[arg(long)]
     pub environment: Option<String>,
 
+    #[command(flatten)]
+    pub page: crate::pagination::PageArgs,
+
     #[command(subcommand)]
     pub action: Option<AppsAction>,
 }
@@ -120,10 +123,11 @@ async fn list_run(ctx: &Ctx, args: Args) -> Result<i32, CliError> {
         None => None,
     };
     let rows = filter_rows(&apps, args.host.as_deref(), group_hosts.as_deref())?;
+    let page = crate::pagination::page_slice(&rows, &args.page);
     Ok(match ctx.log_format {
-        LogFormat::Json => print_json(&rows),
+        LogFormat::Json => crate::pagination::print_page_json(&page),
         LogFormat::Human => {
-            print!("{}", format_apps_human(&rows));
+            print!("{}", format_apps_human(&page.items));
             0
         }
     })

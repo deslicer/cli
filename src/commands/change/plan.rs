@@ -171,6 +171,8 @@ fn orchestrated_as_change_plan(created: &OrchestratedPlan) -> ChangePlan {
         status: created.status.clone(),
         name: None,
         summary: None,
+        created_at: None,
+        updated_at: None,
     }
 }
 
