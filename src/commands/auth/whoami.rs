@@ -44,22 +44,8 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
         // 403: auth accepted the bearer; insufficient scope / forbid is not
         // "not logged in" (that is 401 → ApiTokenRejected / OidcRejected only).
         Err(err) if identity_probe_forbidden(&err) => print_token_logged_in(&ctx, url.as_deref()),
-        Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
-            // Single document only: do not also emit_cli_error (that printed a
-            // second JSON object on stderr and broke `--log-format json` parsers).
-            print_output(
-                ctx.log_format,
-                &json!({
-                    "ok": false,
-                    "logged_in": false,
-                    "identity": "none",
-                    "observer_api_url": url,
-                    "hint": "DESLICER_API_TOKEN was rejected by Observer",
-                }),
-                &whoami_none_human(),
-            );
-            err.exit_code()
-        }
+        // Rejected token → auth exit 4 + error envelope on stderr; empty stdout
+        // (issue #247). Same contract as logged-out whoami (#241) and auth login (#242).
         Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
