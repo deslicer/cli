@@ -109,7 +109,11 @@ async fn auth_login_rejected_api_token_does_not_claim_logged_in() {
 
     let code = run(
         direct_ctx(&observer, LogFormat::Human),
-        Args { environment: None },
+        Args {
+            environment: None,
+            no_wait: false,
+            wait: false,
+        },
     )
     .await;
     assert_eq!(code, 4);
@@ -135,7 +139,11 @@ async fn auth_login_accepted_api_token_reports_logged_in() {
 
     let code = run(
         direct_ctx(&observer, LogFormat::Human),
-        Args { environment: None },
+        Args {
+            environment: None,
+            no_wait: false,
+            wait: false,
+        },
     )
     .await;
     assert_eq!(code, 0);

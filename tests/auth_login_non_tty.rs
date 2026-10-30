@@ -1,12 +1,7 @@
 //! Regression: `auth login` must not block waiting for portal approval without a TTY.
 
-use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
-
-fn cli_bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_deslicer"))
-}
 
 fn api_url_flag() -> String {
     format!(
@@ -17,9 +12,8 @@ fn api_url_flag() -> String {
 
 #[test]
 fn auth_login_ci_local_without_token_fails_fast() {
-    let binary = cli_bin();
     let start = Instant::now();
-    let output = Command::new(binary)
+    let output = Command::new(env!("CARGO_BIN_EXE_deslicer"))
         .arg("auth")
         .arg("login")
         .arg("--ci-platform")
@@ -53,7 +47,7 @@ fn auth_login_ci_local_without_token_fails_fast() {
         "stderr should explain automation credentials, got: {stderr}"
     );
     assert!(
-        stderr.contains("TTY") || stderr.contains("CI"),
+        stderr.contains("TTY") || stderr.contains("CI") || stderr.contains("no-input"),
         "stderr should mention non-interactive context, got: {stderr}"
     );
 }

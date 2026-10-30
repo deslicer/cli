@@ -41,6 +41,7 @@ struct TokenError {
 }
 
 pub async fn login_device_session(ctx: &Ctx) -> Result<StoredSession, CliError> {
+    // Default: poll on a TTY; under --no-input / CI, emit codes and exit pending.
     login_device_session_with_poll(ctx, !interactive::is_non_interactive()).await
 }
 
@@ -76,13 +77,17 @@ pub async fn login_device_session_with_poll(
 
     if !poll {
         print_device_pending(ctx, &started);
-        return Err(CliError::Other(device_pending_message()));
+        return Err(CliError::AuthPending(device_pending_message()));
     }
 
     poll_for_token(ctx, &started).await
 }
 
 fn print_device_instructions(started: &StartResponse) {
+    if interactive::is_non_interactive() {
+        // Codes also go to the structured pending payload / JSON stdout path.
+        return;
+    }
     if let Some(complete) = &started.verification_uri_complete {
         eprintln!("Open {complete} to approve this CLI.");
         eprintln!(
@@ -97,8 +102,11 @@ fn print_device_instructions(started: &StartResponse) {
     }
 }
 
-/// AWS SSO-style: launch the default browser when a TTY is available.
+/// AWS SSO-style: launch the default browser only when interactive.
 fn maybe_open_browser(ctx: &Ctx, started: &StartResponse) {
+    if interactive::is_non_interactive() {
+        return;
+    }
     let url = started
         .verification_uri_complete
         .as_deref()
@@ -112,7 +120,9 @@ fn print_device_pending(ctx: &Ctx, started: &StartResponse) {
     let output = json!({
         "user_code": started.user_code,
         "verification_uri": started.verification_uri,
+        "verification_uri_complete": started.verification_uri_complete,
         "logged_in": false,
+        "pending": true,
     });
     print_output(
         ctx.log_format,
@@ -125,9 +135,8 @@ fn print_device_pending(ctx: &Ctx, started: &StartResponse) {
 }
 
 fn device_pending_message() -> String {
-    "device login requires an interactive terminal; approve the code in the portal on a TTY, \
-     use OBSERVER_API_URL with DESLICER_API_TOKEN for automation, or use real CI OIDC \
-     (--ci-platform github|gitlab|azure|bitbucket)"
+    "device login pending portal approval; re-run with --wait to poll, or set \
+     OBSERVER_API_URL with DESLICER_API_TOKEN for automation"
         .to_string()
 }
 
@@ -309,6 +318,36 @@ mod tests {
             persistable_tenant_slug(uuid_slug.tenant_slug.as_deref()),
             None
         );
+    }
+
+    #[tokio::test]
+    async fn no_wait_prints_pending_and_returns_auth_pending() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/cli/device/start"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "device_code": "devcode1234567890abcd",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://app.deslicer.ai/dashboard/cli-auth",
+                "verification_uri_complete": "https://app.deslicer.ai/dashboard/cli-auth?user_code=ABCD-EFGH",
+                "interval": 1,
+                "expires_in": 60
+            })))
+            .mount(&server)
+            .await;
+
+        let ctx = Ctx {
+            deslicer_api_url: Url::parse(&format!("{}/", server.uri())).unwrap(),
+            observer_api_url: None,
+            ci_override: None,
+            log_format: LogFormat::Json,
+        };
+        let err = login_device_session_with_poll(&ctx, false)
+            .await
+            .expect_err("pending");
+        assert!(matches!(err, CliError::AuthPending(_)));
+        assert_eq!(err.exit_code(), 4);
+        assert!(err.retryable());
     }
 
     #[tokio::test]

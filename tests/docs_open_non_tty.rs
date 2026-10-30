@@ -1,25 +1,12 @@
 //! Regression: `docs --open` must not block launching a browser without a TTY.
 
-use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-fn cli_bin() -> PathBuf {
-    let bin_name = env!("CARGO_PKG_NAME").split('-').next().unwrap();
-    if let Ok(path) = std::env::var(format!("CARGO_BIN_EXE_{bin_name}")) {
-        return PathBuf::from(path);
-    }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
-        .join("debug")
-        .join(bin_name)
-}
-
 #[test]
 fn docs_quickstart_open_does_not_block_in_ci() {
-    let binary = cli_bin();
     let start = Instant::now();
-    let output = Command::new(binary)
+    let output = Command::new(env!("CARGO_BIN_EXE_deslicer"))
         .args(["docs", "quickstart", "--open"])
         .env("CI", "1")
         .env("TERM", "dumb")

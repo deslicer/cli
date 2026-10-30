@@ -16,6 +16,14 @@ pub struct Args {
     /// Environment name used to resolve CI bindings during login.
     #[arg(long)]
     pub environment: Option<String>,
+
+    /// Print the device code as JSON and exit without polling (agents).
+    #[arg(long, conflicts_with = "wait")]
+    pub no_wait: bool,
+
+    /// Poll until the device code is approved (default on a TTY).
+    #[arg(long, conflicts_with = "no_wait")]
+    pub wait: bool,
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
@@ -27,10 +35,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         credential,
         AuthCredential::ExpiredDevice(_) | AuthCredential::None
     ) {
-        return if interactive::is_non_interactive() {
+        return if interactive::is_non_interactive() && !args.wait {
+            // Fail fast for automation: do not start a portal device flow against
+            // a remote host without an explicit --wait (preserves #237 / D1).
             map_cli_error(ctx.log_format, local_login_error())
         } else {
-            device_login(ctx).await
+            device_login(ctx, should_poll(&args)).await
         };
     }
 
@@ -38,6 +48,16 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Ok((session, client)) => confirm_login(ctx, session, client).await,
         Err(err) => map_cli_error(ctx.log_format, err),
     }
+}
+
+fn should_poll(args: &Args) -> bool {
+    if args.no_wait {
+        return false;
+    }
+    if args.wait {
+        return true;
+    }
+    !interactive::is_non_interactive()
 }
 
 /// For static API tokens, probe `GET /me` before claiming "Logged in" (issue #237 / #217).
@@ -70,8 +90,8 @@ async fn confirm_login(ctx: Ctx, session: AuthenticatedSession, client: Client) 
     0
 }
 
-async fn device_login(ctx: Ctx) -> i32 {
-    match crate::device_flow::login_device_session(&ctx).await {
+async fn device_login(ctx: Ctx, poll: bool) -> i32 {
+    match crate::device_flow::login_device_session_with_poll(&ctx, poll).await {
         Ok(session) => {
             if let Err(err) =
                 CompositeTokenStore::default_store().and_then(|store| store.save(&session))
@@ -98,8 +118,9 @@ fn local_login_error() -> CliError {
     // (issue #237). Hint names DESLICER_API_TOKEN via cli_error_hint.
     CliError::Other(
         "not logged in: cannot run interactive device login without a TTY \
-         (CI=1 or non-interactive stdout/stdin). Set OBSERVER_API_URL and \
-         DESLICER_API_TOKEN for automation, or run from a real terminal."
+         (CI=1, --no-input, or non-interactive stdout/stdin). Set OBSERVER_API_URL and \
+         DESLICER_API_TOKEN for automation, or run from a real terminal \
+         (pass --wait to start a device login and poll)."
             .into(),
     )
 }
