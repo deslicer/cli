@@ -59,7 +59,7 @@ Publish the **full** table in `deslicer schema` and `docs/exit-codes.md`. A test
 
 ## 4. Self-description
 
-- `deslicer schema [--command "<path>"]` is the **contract surface**. It emits JSON listing every command path, with: summary, flags (name, type, required, default, enum, env), positionals, `mutating`, `requires_yes` (only for true side-effect apply paths — see §6), `paginated`, the error codes and exit codes it can emit, and an output JSON Schema reference.
+- `deslicer schema [change [plan]]` / `deslicer schema [--command "<path>"]` is the **contract surface** (positional path segments or `--command`). It emits JSON listing every command path, with: summary, flags (name, type, required, default, enum, env), positionals, `mutating`, `requires_yes` (only for true side-effect apply paths — see §6), `paginated`, the error codes and exit codes it can emit, and an output JSON Schema reference.
 - `--help --json` is an alias for `schema --command <path>`.
 - The output is generated from the clap tree and snapshot-tested.
 - **MCP is an external consumer**, not shipped in this CLI programme. Do not treat “maps 1:1 onto an MCP tool” as a CLI deliverable. External adapters **may** generate MCP tools from `deslicer schema` output (`name` ≈ `deslicer_change_plan`, `inputSchema` ≈ flag schema).
