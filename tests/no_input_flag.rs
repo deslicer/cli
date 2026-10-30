@@ -1,11 +1,31 @@
 //! Global `--no-input` / `--non-interactive` / `DESLICER_NO_INPUT` (issue #227).
 
+#![allow(clippy::await_holding_lock)]
+
 use clap::CommandFactory;
 use deslicer_cli::cli::Cli;
+use serde_json::json;
 use std::process::Command;
 use std::sync::Mutex;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+fn parse_json_output(text: &str) -> serde_json::Value {
+    let trimmed = text.trim();
+    if let Ok(value) = serde_json::from_str(trimmed) {
+        return value;
+    }
+    let line = trimmed
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or(trimmed);
+    serde_json::from_str(line).unwrap_or_else(|e| {
+        panic!("output is not JSON ({e}): {line:?}\nfull:\n{text}")
+    })
+}
 
 #[test]
 fn top_level_help_documents_no_input() {
@@ -93,4 +113,73 @@ fn agent_repl_under_no_input_exits_2_input_required() {
     assert_eq!(v["error"]["code"], "input.required");
     assert_eq!(v["error"]["exit_code"], 2);
     assert_eq!(v["error"]["kind"], "usage");
+}
+
+/// Agents invoke exactly `--no-input auth login --no-wait`; that must reach the
+/// device start path (not the fail-fast `auth.not_logged_in` gate).
+#[tokio::test]
+async fn no_input_auth_login_no_wait_starts_device_flow() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/cli/device/start"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "device_code": "devcode1234567890abcd",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://app.deslicer.ai/dashboard/cli-auth",
+            "verification_uri_complete": "https://app.deslicer.ai/dashboard/cli-auth?user_code=ABCD-EFGH",
+            "interval": 1,
+            "expires_in": 60
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir().expect("home");
+    let api_url = format!("{}/", server.uri());
+    let output = Command::new(env!("CARGO_BIN_EXE_deslicer"))
+        .args([
+            "--no-input",
+            "--output",
+            "json",
+            "--deslicer-api-url",
+            &api_url,
+            "--ci-platform",
+            "local",
+            "auth",
+            "login",
+            "--no-wait",
+        ])
+        .env("HOME", home.path())
+        .env("DESLICER_CONFIG_DIR", home.path().join("config"))
+        .env("DESLICER_TOKEN_STORE", "file")
+        .env_remove("DESLICER_API_TOKEN")
+        .env_remove("DESLICER_DEV_TOKEN")
+        .env_remove("OBSERVER_API_URL")
+        .env_remove("DESLICER_NO_INPUT")
+        .env_remove("CI")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("spawn");
+
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pending = parse_json_output(&stdout);
+    assert_eq!(pending["user_code"], "ABCD-EFGH");
+    assert_eq!(pending["pending"], true);
+    assert_eq!(pending["logged_in"], false);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let err = parse_json_output(&stderr);
+    assert_eq!(err["error"]["code"], "auth.pending");
+    assert_eq!(err["error"]["exit_code"], 4);
+    assert_eq!(err["error"]["retryable"], true);
+    assert_ne!(err["error"]["code"], "auth.not_logged_in");
 }

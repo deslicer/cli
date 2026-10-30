@@ -35,9 +35,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         credential,
         AuthCredential::ExpiredDevice(_) | AuthCredential::None
     ) {
-        return if interactive::is_non_interactive() && !args.wait {
+        return if interactive::is_non_interactive() && !args.wait && !args.no_wait {
             // Fail fast for automation: do not start a portal device flow against
-            // a remote host without an explicit --wait (preserves #237 / D1).
+            // a remote host without an explicit --wait / --no-wait (preserves #237 / D1).
+            // Agents pass --no-wait to start the flow, print codes, and exit pending.
             map_cli_error(ctx.log_format, local_login_error())
         } else {
             device_login(ctx, should_poll(&args)).await
