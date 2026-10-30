@@ -20,9 +20,7 @@ fn env_truthy(name: &str) -> bool {
 /// True when `--no-input` / `--non-interactive`, `DESLICER_NO_INPUT`, or `CI`
 /// forced non-interactive mode (excludes bare non-TTY detection).
 pub fn is_forced_no_input() -> bool {
-    FORCE_NO_INPUT.load(Ordering::Relaxed)
-        || env_truthy("DESLICER_NO_INPUT")
-        || env_truthy("CI")
+    FORCE_NO_INPUT.load(Ordering::Relaxed) || env_truthy("DESLICER_NO_INPUT") || env_truthy("CI")
 }
 
 /// True when the CLI must not block on user input or open a browser.
