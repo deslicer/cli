@@ -21,6 +21,7 @@ pub mod output;
 pub mod pr_preview;
 pub mod reporting;
 pub mod resolver;
+pub mod schema;
 pub mod seed_inventory;
 pub mod session_portal;
 pub mod sse;

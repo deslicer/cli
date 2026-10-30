@@ -125,6 +125,8 @@ pub enum Command {
     /// Splunk package upgrade intent (plan / flapping-gate status)
     #[command(subcommand)]
     Upgrade(crate::commands::upgrade::UpgradeCmd),
+    /// Emit machine-readable command / flag / exit-code schema (JSON)
+    Schema(crate::commands::schema::Args),
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
@@ -219,6 +221,7 @@ impl Cli {
             Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(ctx, args).await,
             Command::Upgrade(cmd) => crate::commands::upgrade::dispatch(ctx, cmd).await,
+            Command::Schema(args) => crate::commands::schema::run(ctx, args),
         }
     }
 }

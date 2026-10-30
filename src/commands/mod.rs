@@ -18,6 +18,7 @@ pub mod pipeline;
 pub mod remediate;
 pub mod repo;
 pub mod routine;
+pub mod schema;
 pub mod skill;
 pub mod update;
 pub mod upgrade;
