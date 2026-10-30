@@ -73,8 +73,8 @@ fn change_status_help_documents_timeout() {
     status.write_long_help(&mut buf).expect("help");
     let help = String::from_utf8(buf).expect("utf8");
     assert!(
-        help.contains("--timeout"),
-        "change status should document --timeout:\n{help}"
+        help.contains("--timeout-secs"),
+        "change status should document --timeout-secs:\n{help}"
     );
     assert!(help.contains("Examples:"));
 }
