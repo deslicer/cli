@@ -618,7 +618,9 @@ impl Client {
 }
 
 fn is_connect_or_timeout(err: &reqwest::Error) -> bool {
-    err.is_connect() || err.is_timeout() || err.is_request()
+    // Do not use `is_request()`: it also matches builder/invalid-URL style
+    // failures that are not transient.
+    err.is_connect() || err.is_timeout()
 }
 
 impl Client {

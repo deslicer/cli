@@ -28,7 +28,12 @@ pub fn retries() -> u32 {
 }
 
 pub fn max_attempts() -> u32 {
-    retries().saturating_add(1).max(1)
+    max_attempts_for(retries())
+}
+
+/// Pure helper so tests never mutate process-wide statics.
+pub(crate) fn max_attempts_for(retries: u32) -> u32 {
+    retries.saturating_add(1).max(1)
 }
 
 #[cfg(test)]
@@ -37,18 +42,17 @@ mod tests {
 
     #[test]
     fn defaults_match_legacy_constants() {
-        // Reset in case other tests mutated.
-        set_from_cli(Some(DEFAULT_REQUEST_TIMEOUT_SECS), Some(DEFAULT_RETRIES));
-        assert_eq!(request_timeout(), Duration::from_secs(120));
-        assert_eq!(retries(), 2);
-        assert_eq!(max_attempts(), 3);
+        assert_eq!(DEFAULT_REQUEST_TIMEOUT_SECS, 120);
+        assert_eq!(DEFAULT_RETRIES, 2);
+        assert_eq!(max_attempts_for(DEFAULT_RETRIES as u32), 3);
+        assert_eq!(
+            Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS),
+            Duration::from_secs(120)
+        );
     }
 
     #[test]
     fn zero_retries_means_single_attempt() {
-        set_from_cli(None, Some(0));
-        assert_eq!(retries(), 0);
-        assert_eq!(max_attempts(), 1);
-        set_from_cli(None, Some(DEFAULT_RETRIES));
+        assert_eq!(max_attempts_for(0), 1);
     }
 }
