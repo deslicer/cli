@@ -5,8 +5,9 @@ use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
 use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::commands::auth::format::{
     print_output, whoami_ci_human, whoami_device_human, whoami_none_human, whoami_token_human,
+    whoami_token_unverified_human,
 };
-use crate::commands::auth::probe::identity_probe_forbidden;
+use crate::commands::auth::probe::{identity_probe_forbidden, identity_probe_unavailable};
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::errors::CliError;
 use crate::reporting::{emit_cli_error, emit_oidc_error, oidc_exit_code};
@@ -40,17 +41,31 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match client.get_me().await {
-        Ok(_) => print_token_logged_in(&ctx, url.as_deref()),
+        Ok(_) => print_token_logged_in(&ctx, url.as_deref(), true),
         // 403: auth accepted the bearer; insufficient scope / forbid is not
         // "not logged in" (that is 401 → ApiTokenRejected / OidcRejected only).
-        Err(err) if identity_probe_forbidden(&err) => print_token_logged_in(&ctx, url.as_deref()),
+        Err(err) if identity_probe_forbidden(&err) => {
+            print_token_logged_in(&ctx, url.as_deref(), true)
+        }
+        // Missing /me → soft "logged in, unverified" (issue #246), not exit 15.
+        Err(err) if identity_probe_unavailable(&err) => {
+            print_token_logged_in(&ctx, url.as_deref(), false)
+        }
         // Rejected token → auth exit 4 + error envelope on stderr; empty stdout
         // (issue #247). Same contract as logged-out whoami (#241) and auth login (#242).
+        Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
+            map_cli_error(ctx.log_format, err)
+        }
         Err(err) => map_cli_error(ctx.log_format, err),
     }
 }
 
-fn print_token_logged_in(ctx: &Ctx, url: Option<&str>) -> i32 {
+fn print_token_logged_in(ctx: &Ctx, url: Option<&str>, verified: bool) -> i32 {
+    let human = if verified {
+        whoami_token_human(url)
+    } else {
+        whoami_token_unverified_human(url)
+    };
     print_output(
         ctx.log_format,
         &json!({
@@ -58,8 +73,9 @@ fn print_token_logged_in(ctx: &Ctx, url: Option<&str>) -> i32 {
             "logged_in": true,
             "identity": "observer_api_token",
             "observer_api_url": url,
+            "details": { "verified": verified },
         }),
-        &whoami_token_human(url),
+        &human,
     );
     0
 }

@@ -2,8 +2,8 @@ use clap::Args as ClapArgs;
 use serde_json::json;
 
 use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
-use crate::commands::auth::format::{login_human, print_output};
-use crate::commands::auth::probe::identity_probe_forbidden;
+use crate::commands::auth::format::{login_human, login_unverified_human, print_output};
+use crate::commands::auth::probe::{identity_probe_forbidden, identity_probe_unavailable};
 use crate::commands::pipeline::{authenticate, map_cli_error, AuthenticatedSession};
 use crate::errors::CliError;
 use crate::interactive;
@@ -41,11 +41,17 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 /// For static API tokens, probe `GET /me` before claiming "Logged in" (issue #237 / #217).
+///
+/// Missing `/me` (exit-15 class) is soft success: logged in, unverified (issue #246).
 async fn confirm_login(ctx: Ctx, session: AuthenticatedSession, client: Client) -> i32 {
+    let mut verified = true;
     if session.is_observer_api_token() {
         match client.get_me().await {
             Ok(_) => {}
             Err(err) if identity_probe_forbidden(&err) => {}
+            Err(err) if identity_probe_unavailable(&err) => {
+                verified = false;
+            }
             Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
                 return map_cli_error(ctx.log_format, err);
             }
@@ -59,6 +65,7 @@ async fn confirm_login(ctx: Ctx, session: AuthenticatedSession, client: Client) 
         session.backend.observer_api_url.as_str(),
         &session.backend.resolution_path,
         &session.backend.audience,
+        verified,
     );
     0
 }
@@ -77,6 +84,7 @@ async fn device_login(ctx: Ctx) -> i32 {
                 &session.observer_api_url,
                 "device_session",
                 crate::ci::AUDIENCE,
+                true,
             );
             0
         }
@@ -102,16 +110,19 @@ fn print_login(
     observer_api_url: &str,
     resolution_path: &str,
     audience: &str,
+    verified: bool,
 ) {
     let output = json!({
         "platform": identity,
         "observer_api_url": observer_api_url,
         "resolution_path": resolution_path,
         "audience": audience,
+        "details": { "verified": verified },
     });
-    print_output(
-        ctx.log_format,
-        &output,
-        &login_human(identity, observer_api_url, resolution_path),
-    );
+    let human = if verified {
+        login_human(identity, observer_api_url, resolution_path)
+    } else {
+        login_unverified_human(identity, observer_api_url, resolution_path)
+    };
+    print_output(ctx.log_format, &output, &human);
 }

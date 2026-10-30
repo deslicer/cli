@@ -165,3 +165,43 @@ async fn whoami_forbidden_scoped_api_token_is_still_logged_in() {
 
     std::env::remove_var("DESLICER_API_TOKEN");
 }
+
+/// Observer without `GET /me` (HTML 404) → exit 0, logged_in, details.verified=false
+/// (issue #246). Must not exit 15 / endpoint.not_available.
+#[tokio::test]
+async fn whoami_missing_me_endpoint_is_logged_in_unverified() {
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me"))
+        .and(header("Authorization", "Bearer tools-key"))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .insert_header("content-type", "text/html")
+                .set_body_string("<html><body>404 Not Found</body></html>"),
+        )
+        .expect(1)
+        .mount(&observer)
+        .await;
+
+    let mut cmd = whoami_json_cmd(&observer);
+    cmd.env("DESLICER_API_TOKEN", "tools-key");
+    let output = cmd.output().expect("run auth whoami --output json");
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "soft success must not emit an error envelope: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let doc: Value = serde_json::from_slice(&output.stdout).expect("whoami JSON on stdout");
+    assert_eq!(doc["ok"], true);
+    assert_eq!(doc["logged_in"], true);
+    assert_eq!(doc["identity"], "observer_api_token");
+    assert_eq!(doc["details"]["verified"], false);
+}
