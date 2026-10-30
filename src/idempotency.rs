@@ -116,9 +116,9 @@ pub fn is_plan_create_path(path: &str) -> bool {
         || path == "api/v1/plans"
         || path == "api/v1/remediate/draft"
         || path == "api/v1/splunk-packages/upgrade-rolling"
-        || path.strip_prefix("api/v1/catalog/").is_some_and(|rest| {
-            matches!(rest.rsplit_once('/'), Some((id, "plan")) if !id.is_empty())
-        })
+        || path.strip_prefix("api/v1/catalog/").is_some_and(
+            |rest| matches!(rest.rsplit_once('/'), Some((id, "plan")) if !id.is_empty()),
+        )
 }
 
 pub fn note_replayed(replayed: bool) {
@@ -260,9 +260,7 @@ mod tests {
         ));
         assert!(!is_plan_create_path("api/v1/plan-sources/bundles"));
         assert!(!is_plan_create_path("api/v1/runners/compile/row-1"));
-        assert!(!is_plan_create_path(
-            "api/v1/acs/stacks/prod/project-plan"
-        ));
+        assert!(!is_plan_create_path("api/v1/acs/stacks/prod/project-plan"));
         assert!(!is_plan_create_path("api/v1/plans/abc/approve"));
         assert!(!is_plan_create_path("api/v1/remediate/analyse"));
         assert!(!is_plan_create_path(
