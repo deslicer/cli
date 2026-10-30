@@ -241,6 +241,8 @@ pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
         CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
         CliError::DeviceSessionRequired(_) => Some("deslicer auth login"),
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
+        // Confirm which Observer the CLI is talking to (issue #248).
+        CliError::EndpointNotAvailable(_) => Some("deslicer auth status"),
         _ => None,
     }
 }
@@ -272,6 +274,10 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
             Some("pass the prompt as an argument, e.g. deslicer agent run \"…\"")
         }
         CliError::MissingArgument(_) => Some("see the error message for the required flag"),
+        // Path detail lives in the error message; hint steers upgrade / URL check (issue #248).
+        CliError::EndpointNotAvailable(_) => Some(
+            "this Observer does not expose the requested API route; upgrade the backend or check --observer-api-url",
+        ),
         _ => None,
     }
 }
@@ -548,6 +554,23 @@ mod tests {
             .unwrap()
             .contains("DESLICER_API_TOKEN"));
         assert!(!value["error"]["message"].as_str().unwrap().contains("OIDC"));
+    }
+
+    #[test]
+    fn endpoint_not_available_json_has_hint_and_next_command() {
+        let err = CliError::EndpointNotAvailable("path api/v1/catalog → HTTP 404".into());
+        let value = cli_error_json(&err);
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["error"]["code"], "endpoint.not_available");
+        assert_eq!(value["error"]["kind"], "endpoint");
+        assert_eq!(value["error"]["exit_code"], 15);
+        assert_eq!(value["error"]["next_command"], "deslicer auth status");
+        let hint = value["error"]["hint"].as_str().unwrap_or("");
+        assert!(
+            hint.contains("upgrade the backend") && hint.contains("--observer-api-url"),
+            "hint should steer upgrade / URL check, got {hint:?}"
+        );
+        assert_eq!(value["error"]["retryable"], false);
     }
 
     #[test]
