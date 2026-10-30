@@ -243,6 +243,8 @@ pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
         // Confirm which Observer the CLI is talking to (issue #248).
         CliError::EndpointNotAvailable(_) => Some("deslicer auth status"),
+        // Plan id is not always known on the wire error; leave null (no placeholders).
+        CliError::HumanApprovalRequired(_) => None,
         _ => None,
     }
 }
@@ -261,6 +263,9 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
         CliError::ApiTokenRejected(_) => {
             Some("mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login")
         }
+        CliError::HumanApprovalRequired(_) => Some(
+            "approve in the portal, or gate CI with a GitHub Environment that requires reviewers",
+        ),
         CliError::MissingArgument(msg) if msg.contains("--provider") => {
             Some("pass --provider github|github-token|gitlab|bitbucket|azure")
         }

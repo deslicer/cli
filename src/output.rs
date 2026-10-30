@@ -182,7 +182,8 @@ pub fn emit_change_plan_with_diff(
     diff: Option<&DiffCounts>,
     preview: Option<&PrPreviewLabels>,
 ) -> i32 {
-    let _ = crate::json_doc::print_success_compact(plan);
+    let doc = crate::plan_next::change_plan_success_doc(plan);
+    let _ = crate::json_doc::print_success_compact(&doc);
     emit_plan_metadata(plan, diff, preview, true)
 }
 

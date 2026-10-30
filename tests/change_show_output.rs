@@ -64,6 +64,10 @@ async fn single_output_human_without_json_metadata() {
     assert!(text.contains("Status: pending_approval"));
     assert!(text.contains("Name: Update Splunk app"));
     assert!(text.contains("Summary: Two configuration changes"));
+    assert!(
+        text.contains("next: deslicer change status --plan-id external-id"),
+        "{text}"
+    );
     assert!(!text.contains('{'), "{text}");
 }
 
@@ -77,9 +81,14 @@ async fn single_piped_defaults_to_json() {
         .into_iter()
         .collect::<Result<_, _>>()
         .unwrap();
-    let mut expected = plan();
-    expected["schema_version"] = json!(1);
-    assert_eq!(records[0], expected);
+    assert_eq!(records[0]["schema_version"], 1);
+    assert_eq!(records[0]["plan_id"], "external-id");
+    assert_eq!(records[0]["status"], "pending_approval");
+    assert_eq!(
+        records[0]["next_command"],
+        "deslicer change status --plan-id external-id"
+    );
+    assert!(records[0]["next_commands"].as_array().unwrap().len() >= 1);
 }
 
 #[tokio::test]
@@ -140,9 +149,12 @@ async fn single_json_preserves_plan_and_local_ci_records() {
         .collect::<Result<_, _>>()
         .unwrap();
     assert_eq!(records.len(), 2);
-    let mut expected = plan();
-    expected["schema_version"] = json!(1);
-    assert_eq!(records[0], expected);
+    assert_eq!(records[0]["schema_version"], 1);
+    assert_eq!(records[0]["plan_id"], "external-id");
+    assert_eq!(
+        records[0]["next_command"],
+        "deslicer change status --plan-id external-id"
+    );
     assert_eq!(records[1]["plan_id"], "external-id");
     assert_eq!(records[1]["plan_row_id"], "row-id");
 }
