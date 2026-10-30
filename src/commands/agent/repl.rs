@@ -55,8 +55,15 @@ async fn run_with_inner(
     args: Args,
     detached_run: Option<String>,
 ) -> Result<i32, CliError> {
-    // Non-TTY stdin cannot drive the REPL; treat as usage, not error.other
-    // (issue #245), matching `agent run` after #240.
+    // Explicit --no-input / DESLICER_NO_INPUT / CI → input.required (#227).
+    // Bare non-TTY stdin → usage.missing_argument (#245), matching agent run.
+    if crate::interactive::is_forced_no_input() {
+        return Err(CliError::InputRequired(
+            "agent REPL needs interactive input. Pass a prompt instead:\n  \
+             deslicer agent run \"why did plan X fail?\""
+                .into(),
+        ));
+    }
     if !std::io::stdin().is_terminal() {
         return Err(CliError::MissingArgument(
             "no prompt given. Pass it as an argument or pipe it on stdin:\n  \

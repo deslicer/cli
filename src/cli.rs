@@ -72,6 +72,16 @@ pub struct Cli {
     )]
     pub retries: Option<u64>,
 
+    /// Never prompt or open a browser. Implied by `CI=true` or a non-TTY stdin.
+    #[arg(
+        long = "no-input",
+        alias = "non-interactive",
+        global = true,
+        env = "DESLICER_NO_INPUT",
+        action = clap::ArgAction::SetTrue
+    )]
+    pub no_input: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -207,6 +217,7 @@ impl Cli {
             emit_log_format_deprecation();
         }
         crate::runtime_limits::set_from_cli(self.timeout, self.retries);
+        crate::interactive::set_no_input(self.no_input);
         let ctx = Ctx {
             deslicer_api_url: self.deslicer_api_url,
             observer_api_url: self.observer_api_url,

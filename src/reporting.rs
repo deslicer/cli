@@ -189,7 +189,9 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::EnvironmentNotBound(_) => "auth",
         CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => "auth",
         CliError::UnsupportedPlatform(_) => "platform",
-        CliError::InvalidInput(_) | CliError::MissingArgument(_) => "usage",
+        CliError::InvalidInput(_) | CliError::MissingArgument(_) | CliError::InputRequired(_) => {
+            "usage"
+        }
         CliError::RateLimited { .. } => "rate_limit",
         CliError::BackendUnavailable(_) => "transport",
         CliError::Transport(_) => "transport",
@@ -197,7 +199,7 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::EndpointNotAvailable(_) => "endpoint",
         CliError::HumanApprovalRequired(_) => "approval",
         CliError::AgentRunFailed(_) => "agent",
-        CliError::DeviceSessionRequired(_) => "auth",
+        CliError::DeviceSessionRequired(_) | CliError::AuthPending(_) => "auth",
         CliError::ValidationModelUnavailable
         | CliError::ValidationTimeout
         | CliError::ValidationUnavailable => "validation",
@@ -217,6 +219,8 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
         CliError::UnsupportedPlatform(_) => "platform.unsupported",
         CliError::InvalidInput(_) => "usage.invalid_input",
         CliError::MissingArgument(_) => "usage.missing_argument",
+        CliError::InputRequired(_) => "input.required",
+        CliError::AuthPending(_) => "auth.pending",
         CliError::RateLimited { .. } => "transport.rate_limited",
         CliError::BackendUnavailable(_) => "transport.backend_unavailable",
         CliError::Transport(_) => "transport.error",
@@ -238,6 +242,11 @@ pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
     match err {
         // Already inside auth login / non-interactive — pointing back at login is useless.
         CliError::Other(msg) if msg.contains("without a TTY") => None,
+        CliError::AuthPending(_) => Some("deslicer auth login --wait"),
+        CliError::InputRequired(msg) if msg.contains("agent") || msg.contains("prompt") => {
+            Some("deslicer agent run \"…\"")
+        }
+        CliError::InputRequired(_) => Some("deslicer --no-input <command> …"),
         CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
         CliError::DeviceSessionRequired(_) => Some("deslicer auth login"),
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
@@ -256,6 +265,12 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
         }
         CliError::Other(msg) if msg.contains("not logged in") => {
             Some("run auth login and approve the code in the portal")
+        }
+        CliError::AuthPending(_) => {
+            Some("approve the device code in the portal, or pass --wait to poll")
+        }
+        CliError::InputRequired(_) => {
+            Some("pass required flags/args, or unset --no-input / DESLICER_NO_INPUT for a TTY")
         }
         CliError::DeviceSessionRequired(_) => {
             Some("run deslicer auth login and approve the code in the portal")

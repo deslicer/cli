@@ -25,6 +25,12 @@ pub enum CliError {
     /// Required flag/argument missing or not inferable (issue #235).
     #[error("{0}")]
     MissingArgument(String),
+    /// Command would prompt or open a browser under `--no-input` (issue #227).
+    #[error("{0}")]
+    InputRequired(String),
+    /// Device login started; waiting for portal approval (`--no-wait`, issue #227).
+    #[error("{0}")]
+    AuthPending(String),
     #[error("rate limited: retry after {retry_after_secs}s")]
     RateLimited { retry_after_secs: u64 },
     #[error("backend unavailable (HTTP {0})")]
@@ -68,12 +74,15 @@ impl CliError {
         match self {
             CliError::OidcRejected(_)
             | CliError::ApiTokenRejected(_)
-            | CliError::DeviceSessionRequired(_) => 4,
+            | CliError::DeviceSessionRequired(_)
+            | CliError::AuthPending(_) => 4,
             CliError::RepoNotAllowlisted(_) => 5,
             CliError::EnvironmentNotBound(_) => 6,
             CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => 7,
             CliError::UnsupportedPlatform(_) => 8,
-            CliError::InvalidInput(_) | CliError::MissingArgument(_) => 2,
+            CliError::InvalidInput(_)
+            | CliError::MissingArgument(_)
+            | CliError::InputRequired(_) => 2,
             CliError::RateLimited { .. } => 9,
             CliError::BackendUnavailable(_) | CliError::Transport(_) => 10,
             CliError::PlanNotFound(_) => 11,
@@ -99,6 +108,7 @@ impl CliError {
                 | CliError::ValidationModelUnavailable
                 | CliError::ValidationTimeout
                 | CliError::ValidationUnavailable
+                | CliError::AuthPending(_)
         )
     }
 }
@@ -135,6 +145,8 @@ mod tests {
             CliError::UnsupportedPlatform("x".into()),
             CliError::InvalidInput("x".into()),
             CliError::MissingArgument("pass --environment".into()),
+            CliError::InputRequired("pass a prompt argument".into()),
+            CliError::AuthPending("approve the device code in the portal".into()),
             CliError::RateLimited {
                 retry_after_secs: 1,
             },
@@ -195,6 +207,8 @@ mod tests {
                 | CliError::UnsupportedPlatform(_)
                 | CliError::InvalidInput(_)
                 | CliError::MissingArgument(_)
+                | CliError::InputRequired(_)
+                | CliError::AuthPending(_)
                 | CliError::RateLimited { .. }
                 | CliError::BackendUnavailable(_)
                 | CliError::PlanNotFound(_)

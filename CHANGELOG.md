@@ -66,6 +66,11 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   is the offset. `--status`/`--since` are applied client-side (Observer list
   has no filter query params).
   (fixes [#224](https://github.com/deslicer/cli/issues/224)) <!-- pragma: allowlist secret -->
+- Global `--no-input` / `--non-interactive` and `DESLICER_NO_INPUT` so agents
+  never prompt or open a browser. Commands that would prompt exit **2** with
+  `input.required`. `auth login` gains `--no-wait` / `--wait`; pending device
+  login exits **4** with `auth.pending` (`retryable: true`).
+  (fixes [#227](https://github.com/deslicer/cli/issues/227)) <!-- pragma: allowlist secret -->
 
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,
   `kind`, `message`, `hint`, `next_command`, `retryable`, `exit_code`,
