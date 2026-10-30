@@ -22,6 +22,14 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   today, so its job logs will flip to JSON unless that action pins `--output`.
   ([#231](https://github.com/deslicer/cli/pull/231), <!-- pragma: allowlist secret -->
   fixes [#221](https://github.com/deslicer/cli/issues/221)) <!-- pragma: allowlist secret -->
+- Every **success** JSON document now carries `"schema_version": 1`. Object
+  payloads gain the field additively. Commands that previously printed a bare
+  JSON **array** now wrap it as
+  `{"schema_version":1,"items":[…]}` (scalars that are not objects become
+  `{"schema_version":1,"value":…}`). Agents that assumed a top-level array
+  must read `.items`. Human output is unchanged.
+  ([#244](https://github.com/deslicer/cli/pull/244), <!-- pragma: allowlist secret -->
+  fixes [#223](https://github.com/deslicer/cli/issues/223)) <!-- pragma: allowlist secret -->
 
 ### Features
 
