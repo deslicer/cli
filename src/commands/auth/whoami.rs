@@ -6,6 +6,7 @@ use crate::ci::{self, CiPlatform, AUDIENCE};
 use crate::commands::auth::format::{
     print_output, whoami_ci_human, whoami_device_human, whoami_none_human, whoami_token_human,
 };
+use crate::commands::auth::probe::identity_probe_forbidden;
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::errors::CliError;
 use crate::reporting::{emit_cli_error, emit_oidc_error, oidc_exit_code};
@@ -75,25 +76,6 @@ fn print_token_logged_in(ctx: &Ctx, url: Option<&str>) -> i32 {
         &whoami_token_human(url),
     );
     0
-}
-
-/// True when Observer returned HTTP 403 for the identity probe.
-///
-/// Scope/forbid proves the bearer was authenticated; only 401 maps to
-/// `ApiTokenRejected` / `OidcRejected` (not logged in, exit 4).
-fn identity_probe_forbidden(err: &CliError) -> bool {
-    match err {
-        CliError::Other(msg) => {
-            let lower = msg.to_ascii_lowercase();
-            lower.contains("forbidden") || lower.contains("http 403")
-        }
-        // Other 403 classifiers from `map_observer_error_with_auth` still mean
-        // the token was accepted before the forbid reason was applied.
-        CliError::HumanApprovalRequired(_)
-        | CliError::EnvironmentNotBound(_)
-        | CliError::RepoNotAllowlisted(_) => true,
-        _ => false,
-    }
 }
 
 async fn print_ci_whoami(ctx: &Ctx, platform: CiPlatform) -> i32 {
@@ -201,21 +183,5 @@ mod tests {
 
         let without = device_whoami_json(&session(None));
         assert!(without["tenant_slug"].is_null());
-    }
-
-    #[test]
-    fn identity_probe_forbidden_detects_403_not_401() {
-        assert!(identity_probe_forbidden(&CliError::Other(
-            "observer request forbidden (HTTP 403)".into()
-        )));
-        assert!(identity_probe_forbidden(&CliError::Other(
-            "forbidden".into()
-        )));
-        assert!(!identity_probe_forbidden(&CliError::ApiTokenRejected(
-            "HTTP 401 Unauthorized".into()
-        )));
-        assert!(!identity_probe_forbidden(&CliError::OidcRejected(
-            "oidc_rejected".into()
-        )));
     }
 }

@@ -5,6 +5,7 @@ use crate::Ctx;
 pub mod format;
 pub mod login;
 pub mod logout;
+pub(crate) mod probe;
 pub mod status;
 pub mod whoami;
 
