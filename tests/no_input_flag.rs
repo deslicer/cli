@@ -22,9 +22,8 @@ fn parse_json_output(text: &str) -> serde_json::Value {
         .rev()
         .find(|l| !l.trim().is_empty())
         .unwrap_or(trimmed);
-    serde_json::from_str(line).unwrap_or_else(|e| {
-        panic!("output is not JSON ({e}): {line:?}\nfull:\n{text}")
-    })
+    serde_json::from_str(line)
+        .unwrap_or_else(|e| panic!("output is not JSON ({e}): {line:?}\nfull:\n{text}"))
 }
 
 #[test]
