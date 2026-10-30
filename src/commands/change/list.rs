@@ -4,22 +4,24 @@ use clap::Args as ClapArgs;
 
 use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
+use crate::errors::CliError;
 use crate::observer_client::ChangePlan;
-use crate::pagination::{print_page_json, PageArgs};
+use crate::pagination::{parse_rfc3339_timestamp, print_page_json, PageArgs};
 use crate::Ctx;
 
 #[derive(ClapArgs)]
 #[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
-    /// Filter by plan status (server-side when Observer supports it).
+    /// Filter by plan status (client-side; Observer list has no status query).
     #[arg(long)]
     pub status: Option<String>,
 
-    /// Only plans created/updated at or after this RFC3339 timestamp.
+    /// Only plans with updated_at/created_at at or after this RFC3339 timestamp
+    /// (client-side filter).
     #[arg(long)]
     pub since: Option<String>,
 
-    /// Environment name or tenant slug used to scope listing and CI auth.
+    /// Environment name or tenant slug used to scope CI auth (not a plan filter).
     #[arg(long)]
     pub environment: Option<String>,
 
@@ -28,18 +30,19 @@ pub struct Args {
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
+    if let Some(since) = args.since.as_deref() {
+        if let Err(msg) = parse_rfc3339_timestamp(since) {
+            return map_cli_error(ctx.log_format, CliError::InvalidInput(msg));
+        }
+    }
+
     let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
         Ok(pair) => pair,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
     let page = match client
-        .list_plans_page(
-            args.environment.as_deref(),
-            args.status.as_deref(),
-            args.since.as_deref(),
-            &args.page,
-        )
+        .list_plans_page(args.status.as_deref(), args.since.as_deref(), &args.page)
         .await
     {
         Ok(page) => page,
@@ -96,15 +99,21 @@ mod tests {
     use super::*;
     use crate::pagination::page_slice;
 
-    #[test]
-    fn human_lists_plan_id_and_status() {
-        let plans = vec![ChangePlan {
-            id: "row".into(),
-            plan_id: Some("ext-1".into()),
-            status: "pending_approval".into(),
+    fn plan(id: &str, status: &str) -> ChangePlan {
+        ChangePlan {
+            id: id.into(),
+            plan_id: Some(id.into()),
+            status: status.into(),
             name: Some("demo".into()),
             summary: None,
-        }];
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    #[test]
+    fn human_lists_plan_id_and_status() {
+        let plans = vec![plan("ext-1", "pending_approval")];
         let text = format_human(&plans, Some("50"));
         assert!(text.contains("ext-1"));
         assert!(text.contains("pending_approval"));
@@ -113,15 +122,7 @@ mod tests {
 
     #[test]
     fn page_slice_caps_limit() {
-        let plans: Vec<ChangePlan> = (0..80)
-            .map(|i| ChangePlan {
-                id: format!("r{i}"),
-                plan_id: Some(format!("p{i}")),
-                status: "draft".into(),
-                name: None,
-                summary: None,
-            })
-            .collect();
+        let plans: Vec<ChangePlan> = (0..80).map(|i| plan(&format!("p{i}"), "draft")).collect();
         let page = page_slice(
             &plans,
             &PageArgs {

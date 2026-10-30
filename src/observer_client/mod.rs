@@ -333,35 +333,39 @@ impl Client {
 
     /// Paginated plan list for `change list` (#224).
     ///
-    /// Assumed Observer contract: `GET api/v1/plans` accepts
-    /// `environment`, `status`, `since`, `limit`, `cursor` and may return either a
-    /// bare array (legacy) or `{items, next_cursor, total?}`. Legacy arrays are
-    /// sliced client-side.
+    /// Observer `GET api/v1/plans` accepts only `limit` + `offset` and returns a
+    /// bare array plus `X-Total-Count`. CLI `--cursor` is that offset encoded as
+    /// a decimal string. `--status` / `--since` are not Observer list params —
+    /// when set, the CLI fetches all pages and filters client-side, then pages.
     pub async fn list_plans_page(
         &self,
-        environment: Option<&str>,
         status: Option<&str>,
         since: Option<&str>,
         page: &crate::pagination::PageArgs,
     ) -> Result<crate::pagination::Page<ChangePlan>, CliError> {
-        let query = crate::pagination::query_pairs(
-            page,
-            &[
-                ("environment", environment),
-                ("status", status),
-                ("since", since),
-            ],
-        );
+        if status.is_some() || since.is_some() {
+            let all = self.fetch_all_plans_pages().await?;
+            let filtered = filter_plans(&all, status, since);
+            return Ok(crate::pagination::page_slice(&filtered, page));
+        }
+
+        let offset = crate::pagination::cursor_to_offset(page.cursor.as_deref())
+            .map_err(CliError::InvalidInput)?;
+        let query = crate::pagination::query_pairs(page, &[]).map_err(CliError::InvalidInput)?;
         let path = format!("api/v1/plans{query}");
-        let bytes = self.request_bytes(Method::GET, &path, None::<&()>).await?;
-        let (raw_items, server_cursor, total) =
+        let (bytes, headers) = self
+            .request_bytes_with_headers(Method::GET, &path, None::<&()>)
+            .await?;
+        let (raw_items, server_cursor, body_total) =
             crate::pagination::parse_list_payload(&bytes).map_err(CliError::Transport)?;
         let plans: Vec<ChangePlan> = raw_items
             .into_iter()
             .map(|v| serde_json::from_value(v).map_err(|e| CliError::Transport(e.to_string())))
             .collect::<Result<_, _>>()?;
+        let total = crate::pagination::total_from_headers(&headers).or(body_total);
 
-        if server_cursor.is_some() || total.is_some() {
+        // Optional object shape with server-driven cursor (forward-compat).
+        if server_cursor.is_some() {
             return Ok(crate::pagination::Page {
                 items: plans,
                 next_cursor: server_cursor,
@@ -369,8 +373,55 @@ impl Client {
                 partial: false,
             });
         }
-        // Legacy bare array: apply client-side offset cursor.
-        Ok(crate::pagination::page_slice(&plans, page))
+
+        // Legacy Observer that ignores limit/offset and dumps the full array.
+        if plans.len() > page.limit as usize {
+            return Ok(crate::pagination::page_slice(&plans, page));
+        }
+
+        let next_cursor =
+            crate::pagination::next_offset_cursor(offset, plans.len(), page.limit, total);
+        Ok(crate::pagination::Page {
+            items: plans,
+            next_cursor,
+            total,
+            partial: false,
+        })
+    }
+
+    /// Walk `GET api/v1/plans` with limit/offset until `X-Total-Count` (or short page).
+    async fn fetch_all_plans_pages(&self) -> Result<Vec<ChangePlan>, CliError> {
+        const PAGE: u32 = crate::pagination::MAX_LIMIT;
+        const MAX_PAGES: u32 = 40;
+        let mut all = Vec::new();
+        let mut offset: u64 = 0;
+        for _ in 0..MAX_PAGES {
+            let args = crate::pagination::PageArgs {
+                limit: PAGE,
+                cursor: Some(offset.to_string()),
+            };
+            let query =
+                crate::pagination::query_pairs(&args, &[]).map_err(CliError::InvalidInput)?;
+            let path = format!("api/v1/plans{query}");
+            let (bytes, headers) = self
+                .request_bytes_with_headers(Method::GET, &path, None::<&()>)
+                .await?;
+            let (raw_items, _, body_total) =
+                crate::pagination::parse_list_payload(&bytes).map_err(CliError::Transport)?;
+            let plans: Vec<ChangePlan> = raw_items
+                .into_iter()
+                .map(|v| serde_json::from_value(v).map_err(|e| CliError::Transport(e.to_string())))
+                .collect::<Result<_, _>>()?;
+            let got = plans.len() as u64;
+            let total = crate::pagination::total_from_headers(&headers).or(body_total);
+            all.extend(plans);
+            offset = offset.saturating_add(got);
+            let done = got == 0 || got < u64::from(PAGE) || total.is_some_and(|t| offset >= t);
+            if done {
+                break;
+            }
+        }
+        Ok(all)
     }
 
     pub async fn approve(&self, plan_id: &str) -> Result<ChangePlan, CliError> {
@@ -602,6 +653,19 @@ impl Client {
     where
         B: Serialize + ?Sized,
     {
+        let (bytes, _) = self.request_bytes_with_headers(method, path, body).await?;
+        Ok(bytes)
+    }
+
+    pub(crate) async fn request_bytes_with_headers<B>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&B>,
+    ) -> Result<(Vec<u8>, reqwest::header::HeaderMap), CliError>
+    where
+        B: Serialize + ?Sized,
+    {
         const BACKOFF_BASE_MS: u64 = 500;
 
         let url = self.request_url(path)?;
@@ -665,7 +729,7 @@ impl Client {
                 crate::idempotency::note_replayed(crate::idempotency::response_indicates_replay(
                     &headers, &bytes,
                 ));
-                return Ok(bytes.to_vec());
+                return Ok((bytes.to_vec(), headers));
             }
 
             let body_text = String::from_utf8_lossy(&bytes).into_owned();
@@ -753,6 +817,36 @@ fn parse_change_plan_body(bytes: &[u8]) -> Result<ChangePlan, CliError> {
     }
     serde_json::from_slice::<ChangePlan>(bytes)
         .map_err(|e| CliError::Transport(format!("invalid plan JSON: {e}")))
+}
+
+fn filter_plans(
+    plans: &[ChangePlan],
+    status: Option<&str>,
+    since: Option<&str>,
+) -> Vec<ChangePlan> {
+    plans
+        .iter()
+        .filter(|plan| {
+            if let Some(want) = status {
+                if !plan.status.eq_ignore_ascii_case(want) {
+                    return false;
+                }
+            }
+            if let Some(since) = since {
+                let ts = plan
+                    .updated_at
+                    .as_deref()
+                    .or(plan.created_at.as_deref())
+                    .unwrap_or("");
+                // RFC3339 / ISO-8601 timestamps compare lexicographically.
+                if ts.is_empty() || ts < since {
+                    return false;
+                }
+            }
+            true
+        })
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]

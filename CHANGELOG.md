@@ -30,6 +30,15 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   must read `.items`. Human output is unchanged.
   ([#244](https://github.com/deslicer/cli/pull/244), <!-- pragma: allowlist secret -->
   fixes [#223](https://github.com/deslicer/cli/issues/223)) <!-- pragma: allowlist secret -->
+- List command success JSON is now a **page object**
+  `{schema_version, items, next_cursor, total?, partial}` instead of a bare
+  array (`groups list`, `inventory apps`, `routine runs`) or the previous
+  `enroll list` shape `{tokens, shown, total}`. Agents must read `.items`
+  (enrollment tokens are under `.items`, not `.tokens`). Default `--limit` is
+  **50** (max 500); scripts that previously received the full list must page
+  with `--cursor` / `next_cursor` or raise `--limit`.
+  ([#253](https://github.com/deslicer/cli/pull/253), <!-- pragma: allowlist secret -->
+  fixes [#224](https://github.com/deslicer/cli/issues/224)) <!-- pragma: allowlist secret -->
 
 ### Features
 
@@ -53,8 +62,9 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   (fixes [#228](https://github.com/deslicer/cli/issues/228)) <!-- pragma: allowlist secret -->
 - `change list` with `--status` / `--since` / `--environment` / `--limit` /
   `--cursor`, plus `--limit`/`--cursor` on `groups list`, `inventory apps`,
-  `routine runs`, and `enroll list`. JSON pages are
-  `{items, next_cursor, total?, partial}`.
+  `routine runs`, and `enroll list`. Observer plan list uses `limit`/`offset`
+  and `X-Total-Count`; CLI `--cursor` is the offset. `--status`/`--since` are
+  applied client-side (Observer list has no filter query params).
   (fixes [#224](https://github.com/deslicer/cli/issues/224)) <!-- pragma: allowlist secret -->
 
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,
