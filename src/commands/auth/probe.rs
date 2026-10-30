@@ -21,6 +21,13 @@ pub(crate) fn identity_probe_forbidden(err: &CliError) -> bool {
     }
 }
 
+/// True when Observer does not expose `GET /me` (HTML 404 / missing route).
+///
+/// That is not a rejected token: treat as logged in, unverified (issue #246).
+pub(crate) fn identity_probe_unavailable(err: &CliError) -> bool {
+    matches!(err, CliError::EndpointNotAvailable(_))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -38,6 +45,19 @@ mod tests {
         )));
         assert!(!identity_probe_forbidden(&CliError::OidcRejected(
             "oidc_rejected".into()
+        )));
+    }
+
+    #[test]
+    fn identity_probe_unavailable_detects_endpoint_not_available() {
+        assert!(identity_probe_unavailable(&CliError::EndpointNotAvailable(
+            "GET api/v1/me → HTTP 404".into()
+        )));
+        assert!(!identity_probe_unavailable(&CliError::ApiTokenRejected(
+            "HTTP 401 Unauthorized".into()
+        )));
+        assert!(!identity_probe_unavailable(&CliError::Other(
+            "observer request forbidden (HTTP 403)".into()
         )));
     }
 }

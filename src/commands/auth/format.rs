@@ -22,6 +22,18 @@ pub fn login_human(identity: &str, observer_api_url: &str, resolution_path: &str
     )
 }
 
+/// Soft login when Observer accepts the token but lacks `GET /me` (issue #246).
+pub fn login_unverified_human(
+    identity: &str,
+    observer_api_url: &str,
+    resolution_path: &str,
+) -> String {
+    format!(
+        "Logged in (token not verified: backend lacks /me)\n\
+         Identity: {identity}\nBackend: {observer_api_url}\nResolution: {resolution_path}\n"
+    )
+}
+
 pub fn whoami_device_human(
     logged_in: bool,
     display_name: &str,
@@ -45,6 +57,18 @@ pub fn whoami_token_human(observer_api_url: Option<&str>) -> String {
     match observer_api_url {
         Some(url) => format!("Logged in\nIdentity: observer_api_token\nBackend: {url}\n"),
         None => "Logged in\nIdentity: observer_api_token\n".to_string(),
+    }
+}
+
+/// Soft whoami when Observer accepts the token but lacks `GET /me` (issue #246).
+pub fn whoami_token_unverified_human(observer_api_url: Option<&str>) -> String {
+    match observer_api_url {
+        Some(url) => format!(
+            "Logged in (token not verified: backend lacks /me)\n\
+             Identity: observer_api_token\nBackend: {url}\n"
+        ),
+        None => "Logged in (token not verified: backend lacks /me)\nIdentity: observer_api_token\n"
+            .to_string(),
     }
 }
 

@@ -142,3 +142,50 @@ async fn auth_login_accepted_api_token_reports_logged_in() {
 
     std::env::remove_var("DESLICER_API_TOKEN");
 }
+
+/// Observer without `GET /me` (HTML 404) must soft-succeed as logged in,
+/// unverified — not exit 15 (issue #246).
+#[tokio::test]
+async fn auth_login_missing_me_endpoint_is_logged_in_unverified() {
+    let _guard = env_lock();
+
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me"))
+        .and(header("Authorization", "Bearer tools-key"))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .insert_header("content-type", "text/html")
+                .set_body_string("<html><body>404 Not Found</body></html>"),
+        )
+        .expect(1)
+        .mount(&observer)
+        .await;
+
+    let output = cli_bin()
+        .args(["--output", "json", "auth", "login"])
+        .env("DESLICER_API_TOKEN", "tools-key")
+        .env("OBSERVER_API_URL", format!("{}/", observer.uri()))
+        .env("DESLICER_TOKEN_STORE", "memory")
+        .env("CI", "1")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("run auth login");
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "soft success must not emit an error envelope: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let doc: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("login JSON on stdout");
+    assert_eq!(doc["details"]["verified"], false);
+    assert_eq!(doc["resolution_path"], "observer_api_token");
+}
