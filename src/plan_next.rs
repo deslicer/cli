@@ -41,7 +41,9 @@ pub fn attach_plan_handle(mut value: Value, plan_id: &str, status: &str) -> Valu
             "status": status,
             "url": Value::Null,
             "next_command": next,
-            "next_commands": nexts,
+            "next_commands": nexts.clone(),
+            // Deprecated alias of `next_commands` — remove after one release.
+            "next_steps": nexts,
             "value": value,
         });
     };
@@ -49,7 +51,9 @@ pub fn attach_plan_handle(mut value: Value, plan_id: &str, status: &str) -> Valu
     obj.insert("status".into(), json!(status));
     obj.entry("url".to_string()).or_insert(Value::Null);
     obj.insert("next_command".into(), json!(next));
-    obj.insert("next_commands".into(), json!(nexts));
+    obj.insert("next_commands".into(), json!(nexts.clone()));
+    // Deprecated alias of `next_commands` — remove after one release.
+    obj.insert("next_steps".into(), json!(nexts));
     value
 }
 
@@ -99,15 +103,15 @@ mod tests {
 
     #[test]
     fn failed_suggests_existing_retry_yes() {
+        use clap::Parser;
+
         let (next, nexts) = next_commands_for("p-3", "failed");
-        assert_eq!(
-            next.as_deref(),
-            Some("deslicer change retry --plan-id p-3 --yes")
-        );
-        assert_eq!(
-            nexts[0],
-            "deslicer change retry --plan-id p-3 --yes".to_string()
-        );
+        let suggested = "deslicer change retry --plan-id p-3 --yes";
+        assert_eq!(next.as_deref(), Some(suggested));
+        assert_eq!(nexts[0], suggested);
+        // Agents run next_command verbatim — argv must parse as a real command.
+        let argv: Vec<&str> = suggested.split_whitespace().collect();
+        crate::cli::Cli::try_parse_from(argv).expect("suggested retry parses");
     }
 
     #[test]
@@ -126,5 +130,6 @@ mod tests {
         assert!(doc["url"].is_null());
         assert_eq!(doc["next_command"], "deslicer change status --plan-id ext");
         assert!(!doc["next_commands"].as_array().unwrap().is_empty());
+        assert_eq!(doc["next_steps"], doc["next_commands"]);
     }
 }

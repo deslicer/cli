@@ -182,7 +182,10 @@ pub fn emit_change_plan_with_diff(
     diff: Option<&DiffCounts>,
     preview: Option<&PrPreviewLabels>,
 ) -> i32 {
-    let doc = crate::plan_next::change_plan_success_doc(plan);
+    // `mut` matches #254's shape so a rebase can insert `"replayed": true`
+    // additively between enrich and print (see feat/228-idempotency).
+    #[allow(unused_mut)]
+    let mut doc = crate::plan_next::change_plan_success_doc(plan);
     let _ = crate::json_doc::print_success_compact(&doc);
     emit_plan_metadata(plan, diff, preview, true)
 }

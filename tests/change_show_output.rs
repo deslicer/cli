@@ -89,6 +89,7 @@ async fn single_piped_defaults_to_json() {
         "deslicer change status --plan-id external-id"
     );
     assert!(!records[0]["next_commands"].as_array().unwrap().is_empty());
+    assert_eq!(records[0]["next_steps"], records[0]["next_commands"]);
 }
 
 #[tokio::test]

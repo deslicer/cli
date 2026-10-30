@@ -26,16 +26,21 @@ async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i
     let status = "pending_approval";
     let (next_command, next_commands) = crate::plan_next::next_commands_for(&plan.plan_id, status);
     Ok(match format {
-        LogFormat::Json => print_json(&serde_json::json!({
-            "plan_id": plan.plan_id,
-            "status": status,
-            "url": serde_json::Value::Null,
-            "next_command": next_command,
-            "next_commands": next_commands,
-            // Deprecated alias of `next_commands` — remove after one release.
-            "next_steps": next_steps(&plan.plan_id),
-            "plan": plan,
-        })),
+        LogFormat::Json => {
+            // `mut` matches #254 so `"replayed": true` can insert additively.
+            #[allow(unused_mut)]
+            let mut doc = serde_json::json!({
+                "plan_id": plan.plan_id,
+                "status": status,
+                "url": serde_json::Value::Null,
+                "next_command": next_command,
+                "next_commands": next_commands,
+                // Deprecated alias of `next_commands` — remove after one release.
+                "next_steps": next_steps(&plan.plan_id),
+                "plan": plan,
+            });
+            print_json(&doc)
+        }
         LogFormat::Human => {
             print!("{}", format_human(&plan));
             0
