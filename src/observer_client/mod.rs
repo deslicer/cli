@@ -77,7 +77,7 @@ pub struct Client {
     ci_platform: Option<crate::ci::CiPlatform>,
     environment: Option<String>,
     auth_rejection: AuthRejectionKind,
-    /// Sent as `Idempotency-Key` on mutating requests when set (#228).
+    /// Sent as `Idempotency-Key` on plan-create POSTs when set (#228).
     idempotency_key: Option<String>,
 }
 
@@ -113,7 +113,8 @@ impl Client {
         self
     }
 
-    /// Attach an `Idempotency-Key` header on POST/PUT/PATCH/DELETE (#228).
+    /// Attach an `Idempotency-Key` on plan-create POSTs only (#228).
+    /// Follow-up mutating calls (upload, compile, project-plan) omit the header.
     pub fn with_idempotency_key(mut self, key: Option<String>) -> Self {
         self.idempotency_key = key.filter(|k| !k.trim().is_empty());
         self
@@ -577,7 +578,7 @@ impl Client {
             if let Some(platform) = self.ci_platform {
                 req = req.header("X-Deslicer-CI-Platform", platform.header_value());
             }
-            req = self.apply_idempotency_header(req, &method);
+            req = self.apply_idempotency_header(req, &method, path);
             if let Some(payload) = body {
                 req = req.json(payload);
             }
@@ -642,9 +643,10 @@ impl Client {
         &self,
         req: reqwest::RequestBuilder,
         method: &Method,
+        path: &str,
     ) -> reqwest::RequestBuilder {
         match (&self.idempotency_key, method) {
-            (Some(key), &Method::POST | &Method::PUT | &Method::PATCH | &Method::DELETE) => {
+            (Some(key), &Method::POST) if crate::idempotency::is_plan_create_path(path) => {
                 req.header("Idempotency-Key", key.as_str())
             }
             _ => req,
@@ -669,7 +671,7 @@ impl Client {
         if let Some(platform) = self.ci_platform {
             req = req.header("X-Deslicer-CI-Platform", platform.header_value());
         }
-        req = self.apply_idempotency_header(req, &method);
+        req = self.apply_idempotency_header(req, &method, path);
         if let Some(payload) = body {
             req = req.json(payload);
         }

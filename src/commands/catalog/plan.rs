@@ -56,8 +56,16 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
         Ok((session, client)) => (
             session,
-            client
-                .with_idempotency_key(crate::idempotency::resolve(args.idempotency_key.as_deref())),
+            client.with_idempotency_key(crate::idempotency::resolve(
+                args.idempotency_key.as_deref(),
+                &crate::idempotency::fingerprint([
+                    "catalog plan",
+                    args.id.as_str(),
+                    &args.targets.join(","),
+                    args.environment.as_deref().unwrap_or(""),
+                    args.name.as_deref().unwrap_or(""),
+                ]),
+            )),
         ),
         Err(err) => return map_cli_error(ctx.log_format, err),
     };

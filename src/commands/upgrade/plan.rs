@@ -21,8 +21,18 @@ pub(crate) fn next_steps(plan_id: &str) -> Vec<String> {
 async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i32, CliError> {
     super::validate_version(&args.to_version)?;
     let (_session, client) = authenticate(ctx, args.environment.as_deref(), None).await?;
-    let client =
-        client.with_idempotency_key(crate::idempotency::resolve(args.idempotency_key.as_deref()));
+    let client = client.with_idempotency_key(crate::idempotency::resolve(
+        args.idempotency_key.as_deref(),
+        &crate::idempotency::fingerprint([
+            "upgrade plan",
+            args.family.as_str(),
+            &args.targets.join(","),
+            args.to_version.as_str(),
+            args.captain.as_deref().unwrap_or(""),
+            &args.role_groups.join(","),
+            args.environment.as_deref().unwrap_or(""),
+        ]),
+    ));
     let body = rolling_request(&client, args).await?;
     let plan = client.create_upgrade_plan(&body).await?;
     let replayed = crate::idempotency::take_replayed();

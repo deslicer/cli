@@ -4,10 +4,13 @@ use std::process::Command;
 
 use clap::CommandFactory;
 use deslicer_cli::cli::Cli;
+use deslicer_cli::observer_client::Client;
+use deslicer_cli::token_source::TokenSource;
 use serde_json::{json, Value};
 use tempfile::TempDir;
-use wiremock::matchers::{header, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use url::Url;
+use wiremock::matchers::{header, header_exists, method, path};
+use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
 
 fn clear_ci_keys(cmd: &mut Command) {
     for key in [
@@ -16,11 +19,21 @@ fn clear_ci_keys(cmd: &mut Command) {
         "BUILD_BUILDID",
         "BITBUCKET_BUILD_NUMBER",
         "CIRCLE_BUILD_NUM",
+        "GITHUB_RUN_ATTEMPT",
+        "GITHUB_JOB",
         "DESLICER_IDEMPOTENCY_KEY",
         "DESLICER_DEV_TOKEN",
         "CI",
     ] {
         cmd.env_remove(key);
+    }
+}
+
+struct NoIdempotencyKey;
+
+impl Match for NoIdempotencyKey {
+    fn matches(&self, request: &Request) -> bool {
+        !request.headers.contains_key("idempotency-key")
     }
 }
 
@@ -102,4 +115,50 @@ async fn remediate_draft_sends_idempotency_key_and_marks_replay() {
     assert_eq!(v["schema_version"], 1);
     assert_eq!(v["plan_id"], "plan-1");
     assert_eq!(v["replayed"], true);
+}
+
+#[tokio::test]
+async fn idempotency_key_only_on_plan_create_not_compile() {
+    let server = MockServer::start().await;
+    let plan_row = "01890a5d-7777-7888-9999-aaaabbbbcccc";
+    let plan_id = "0e4f8a34-1111-4222-8333-444455556666";
+    let group = "019f36d6-3f61-7eea-9417-7ac4a8a10f69";
+
+    Mock::given(method("POST"))
+        .and(path("/api/v1/plans"))
+        .and(header_exists("Idempotency-Key"))
+        .and(header("Idempotency-Key", "bundle-create-1"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "success": true,
+            "message": "ok",
+            "plan": {
+                "id": plan_row,
+                "plan_id": plan_id,
+                "status": "draft"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path(format!("/api/v1/runners/compile/{plan_row}")))
+        .and(NoIdempotencyKey)
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let base = Url::parse(&format!("{}/", server.uri())).expect("url");
+    let client = Client::new(base, TokenSource::static_token("dap_tools_ci_key".into()))
+        .with_idempotency_key(Some("bundle-create-1".into()));
+    let plan = client
+        .create_plan_from_bundle("bundle-1", group, Some("airgap"))
+        .await
+        .expect("create");
+    assert_eq!(plan.id, plan_row);
+    client
+        .trigger_compile(&plan.id, "bundle")
+        .await
+        .expect("compile");
 }

@@ -47,8 +47,9 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
   (fixes [#225](https://github.com/deslicer/cli/issues/225)) <!-- pragma: allowlist secret -->
 - `--idempotency-key` / `DESLICER_IDEMPOTENCY_KEY` on `change plan`,
   `remediate draft`, `catalog plan`, and `upgrade plan`, sent as
-  `Idempotency-Key`. Defaults only when a CI run id is present; replays
-  surface `"replayed": true` with exit 0.
+  `Idempotency-Key` on the plan-create POST only. Defaults only when a CI
+  run id is present (run id + attempt/job + input hash); never defaults
+  from local inputs alone. Replays surface `"replayed": true` with exit 0.
   (fixes [#228](https://github.com/deslicer/cli/issues/228)) <!-- pragma: allowlist secret -->
 
 - JSON error envelope v1 on the last stderr line (`schema_version`, `code`,

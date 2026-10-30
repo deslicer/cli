@@ -26,8 +26,28 @@ fn error_format(ctx: &Ctx, args: &Args) -> LogFormat {
     }
 }
 
+fn plan_input_fingerprint(args: &Args) -> String {
+    let source_dir = args
+        .source_dir
+        .as_ref()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    crate::idempotency::fingerprint([
+        "change plan",
+        args.environment.as_deref().unwrap_or(""),
+        args.destination.as_deref().unwrap_or(""),
+        args.from_registry.as_deref().unwrap_or(""),
+        source_dir.as_str(),
+        args.target_group.as_deref().unwrap_or(""),
+        args.name.as_deref().unwrap_or(""),
+    ])
+}
+
 fn with_idempotency(client: Client, args: &Args) -> Client {
-    client.with_idempotency_key(crate::idempotency::resolve(args.idempotency_key.as_deref()))
+    client.with_idempotency_key(crate::idempotency::resolve(
+        args.idempotency_key.as_deref(),
+        &plan_input_fingerprint(args),
+    ))
 }
 
 #[derive(ClapArgs)]
@@ -111,8 +131,9 @@ pub struct Args {
     #[arg(long)]
     pub json: bool,
 
-    /// Idempotency key for safe retries (`Idempotency-Key` header). Defaults to a
-    /// CI run id when present; never hashes local inputs silently.
+    /// Idempotency key for safe retries (`Idempotency-Key` header). Defaults in
+    /// CI to run id + attempt/job + a hash of plan inputs; never defaults on a
+    /// laptop from inputs alone.
     #[arg(long = "idempotency-key", env = "DESLICER_IDEMPOTENCY_KEY")]
     pub idempotency_key: Option<String>,
 }
