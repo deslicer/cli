@@ -80,6 +80,13 @@ pub async fn login_device_session_with_poll(
         return Err(CliError::AuthPending(device_pending_message()));
     }
 
+    // Under --no-input / CI with --wait, human instructions are skipped above.
+    // Emit the structured pending payload before polling so agents can surface
+    // the user code / URL while approval is in flight (PR #249 review).
+    if interactive::is_non_interactive() {
+        print_device_pending(ctx, &started);
+    }
+
     poll_for_token(ctx, &started).await
 }
 

@@ -182,3 +182,95 @@ async fn no_input_auth_login_no_wait_starts_device_flow() {
     assert_eq!(err["error"]["retryable"], true);
     assert_ne!(err["error"]["code"], "auth.not_logged_in");
 }
+
+/// Agents that pass `--no-input auth login --wait` must see the device code /
+/// URL before the CLI blocks on poll (otherwise approval is impossible).
+#[tokio::test]
+async fn no_input_auth_login_wait_emits_device_code_before_poll() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/cli/device/start"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "device_code": "devcode1234567890abcd",
+            "user_code": "WXYZ-1234",
+            "verification_uri": "https://app.deslicer.ai/dashboard/cli-auth",
+            "verification_uri_complete": "https://app.deslicer.ai/dashboard/cli-auth?user_code=WXYZ-1234",
+            "interval": 1,
+            "expires_in": 60
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/cli/device/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "cli_session_token": format!("dslcli_{}", "ef".repeat(32)),
+            "expires_at": "2099-01-01T00:00:00.000Z",
+            "tenant_id": "tenant-wait",
+            "display_name": "Wait Agent"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir().expect("home");
+    let api_url = format!("{}/", server.uri());
+    let output = Command::new(env!("CARGO_BIN_EXE_deslicer"))
+        .args([
+            "--no-input",
+            "--output",
+            "json",
+            "--deslicer-api-url",
+            &api_url,
+            "--ci-platform",
+            "local",
+            "auth",
+            "login",
+            "--wait",
+        ])
+        .env("HOME", home.path())
+        .env("DESLICER_CONFIG_DIR", home.path().join("config"))
+        .env("DESLICER_TOKEN_STORE", "file")
+        .env_remove("DESLICER_API_TOKEN")
+        .env_remove("DESLICER_DEV_TOKEN")
+        .env_remove("OBSERVER_API_URL")
+        .env_remove("DESLICER_NO_INPUT")
+        .env_remove("CI")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("spawn");
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("WXYZ-1234"),
+        "agent must see user_code before/with login success:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("cli-auth") || stdout.contains("verification_uri"),
+        "agent must see verification URI:\n{stdout}"
+    );
+
+    // Success JSON is pretty-printed; stream-parse consecutive documents.
+    let docs: Vec<serde_json::Value> = serde_json::Deserializer::from_str(&stdout)
+        .into_iter::<serde_json::Value>()
+        .filter_map(Result::ok)
+        .collect();
+    assert!(
+        docs.len() >= 2,
+        "expected pending JSON then login JSON, got {} doc(s):\n{stdout}",
+        docs.len()
+    );
+    assert_eq!(docs[0]["user_code"], "WXYZ-1234");
+    assert_eq!(docs[0]["pending"], true);
+    assert_eq!(docs[0]["logged_in"], false);
+    assert_eq!(docs.last().unwrap()["resolution_path"], "device_session");
+}
