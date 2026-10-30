@@ -103,6 +103,35 @@ fn agent_run_without_prompt_exits_2() {
 }
 
 #[test]
+fn agent_repl_non_tty_without_prompt_exits_2() {
+    let _guard = env_lock();
+    assert_missing_argument(
+        {
+            let mut cmd = cli_bin();
+            cmd.args(["--output", "json", "agent", "repl"])
+                .stdin(std::process::Stdio::null());
+            cmd
+        },
+        "prompt",
+    );
+}
+
+#[test]
+fn agent_resume_non_tty_without_prompt_exits_2() {
+    let _guard = env_lock();
+    // Usage must win over auth (no token) so agents see exit 2, not 4.
+    assert_missing_argument(
+        {
+            let mut cmd = cli_bin();
+            cmd.args(["--output", "json", "agent", "resume"])
+                .stdin(std::process::Stdio::null());
+            cmd
+        },
+        "prompt",
+    );
+}
+
+#[test]
 fn inventory_validate_without_environment_exits_2() {
     let _guard = env_lock();
     let dir = tempfile::tempdir().expect("tmpdir");
