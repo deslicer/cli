@@ -34,17 +34,16 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if !args.yes {
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "remediate_draft",
                     "host": args.host,
                     "app": args.app,
                     "group": args.group,
                     "will_auto_approve": false,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => println!(
                 "dry-run: would create a draft remediation plan app={}\
                  {}\
@@ -83,7 +82,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 return emit_change_plan(plan);
             }
             match ctx.log_format {
-                LogFormat::Json => match serde_json::to_string_pretty(&draft) {
+                LogFormat::Json => match crate::json_doc::to_pretty_string(&draft) {
                     Ok(json) => {
                         println!("{json}");
                         0

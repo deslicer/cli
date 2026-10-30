@@ -36,7 +36,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&analysis) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&analysis) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -60,7 +60,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 println!("app: {app}");
             }
             if let Some(findings) = analysis.findings.as_ref() {
-                match serde_json::to_string_pretty(findings) {
+                match crate::json_doc::to_pretty_string(findings) {
                     Ok(json) => println!("{json}"),
                     Err(err) => {
                         eprintln!("failed to format findings: {err}");

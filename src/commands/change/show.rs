@@ -62,16 +62,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return 0;
     }
 
-    match serde_json::to_string(&plans) {
-        Ok(json) => {
-            println!("{json}");
-            0
-        }
-        Err(err) => {
-            eprintln!("failed to serialize plans: {err}");
-            1
-        }
-    }
+    crate::json_doc::print_success_compact(&plans)
 }
 
 /// Keep server-provided text on one line and prevent terminal control sequences.

@@ -182,7 +182,7 @@ pub fn emit_change_plan_with_diff(
     diff: Option<&DiffCounts>,
     preview: Option<&PrPreviewLabels>,
 ) -> i32 {
-    println!("{}", serde_json::to_string(plan).unwrap_or_default());
+    let _ = crate::json_doc::print_success_compact(plan);
     emit_plan_metadata(plan, diff, preview, true)
 }
 
@@ -234,7 +234,7 @@ pub fn emit_change_plans(plans: &[ChangePlan]) -> i32 {
     if let [plan] = plans {
         return emit_change_plan(plan);
     }
-    println!("{}", serde_json::to_string(plans).unwrap_or_default());
+    let _ = crate::json_doc::print_success_compact(plans);
     let plan_ids: Vec<String> = plans
         .iter()
         .map(|plan| plan.external_id().to_string())
@@ -285,7 +285,7 @@ pub fn emit_plan_status(
     progress: &PlanProgress,
     diff: Option<&DiffCounts>,
 ) -> i32 {
-    println!("{}", serde_json::to_string(progress).unwrap_or_default());
+    let _ = crate::json_doc::print_success_compact(progress);
     let plan_status = plan.map(|p| p.status.as_str()).unwrap_or_default();
     let plan_summary = plan.map(ChangePlan::display_summary).unwrap_or_default();
     let mut pairs = vec![
@@ -314,7 +314,7 @@ pub fn emit_plan_status(
 }
 
 pub fn emit_execution_queued(execution: &ExecutionQueued) -> i32 {
-    println!("{}", serde_json::to_string(execution).unwrap_or_default());
+    let _ = crate::json_doc::print_success_compact(execution);
     let pairs = [
         ("execution_id", execution.execution_id.clone()),
         ("execution_status", execution.status.clone()),
@@ -330,7 +330,7 @@ pub fn emit_execution_queued(execution: &ExecutionQueued) -> i32 {
 }
 
 pub fn emit_execution_summary(summary: &ExecutionSummary) -> i32 {
-    println!("{}", serde_json::to_string(summary).unwrap_or_default());
+    let _ = crate::json_doc::print_success_compact(summary);
     let pairs = [
         ("execution_id", summary.execution_id.clone()),
         ("execution_status", summary.status.clone()),

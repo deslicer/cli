@@ -160,7 +160,7 @@ fn detach(ctx: &Ctx, started: StartedRun) -> Result<i32, CliError> {
 
     match ctx.log_format {
         LogFormat::Json => {
-            let line = serde_json::to_string(&serde_json::json!({
+            let line = crate::json_doc::to_compact_string(&serde_json::json!({
                 "runId": run_id,
                 "conversationId": started.conversation_id,
                 "status": "running",

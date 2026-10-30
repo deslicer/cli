@@ -96,7 +96,9 @@ fn resolve_stem(dir: &Path, explicit: Option<&str>) -> Result<ResolvedStem, CliE
 
 fn emit_report(ctx: &Ctx, report: &ValidationReport) {
     match ctx.log_format {
-        LogFormat::Json => println!("{}", json_report(report)),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json_report(report));
+        }
         LogFormat::Human => print!("{}", human_report(report)),
     }
 }

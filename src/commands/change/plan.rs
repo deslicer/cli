@@ -314,7 +314,7 @@ async fn run_acs_destination_plan(ctx: &Ctx, args: &Args) -> Result<ChangePlan, 
             "item_count": outcome.projected.item_count,
             "items": outcome.projected.items,
         });
-        println!("{out}");
+        let _ = crate::json_doc::print_success_compact(&out);
     }
     Ok(plan)
 }

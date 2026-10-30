@@ -105,7 +105,9 @@ fn write_merged(dir: &Path, stem: &str, content: &str) -> Result<(), CliError> {
 
 fn emit_report(ctx: &Ctx, merged: &MergedEnvironmentYaml, dry_run: bool) {
     match ctx.log_format {
-        LogFormat::Json => println!("{}", json_report(merged, dry_run)),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json_report(merged, dry_run));
+        }
         LogFormat::Human => print!("{}", human_report(merged, dry_run)),
     }
 }

@@ -77,7 +77,9 @@ async fn single_piped_defaults_to_json() {
         .into_iter()
         .collect::<Result<_, _>>()
         .unwrap();
-    assert_eq!(records[0], plan());
+    let mut expected = plan();
+    expected["schema_version"] = json!(1);
+    assert_eq!(records[0], expected);
 }
 
 #[tokio::test]
@@ -103,7 +105,7 @@ async fn list_human_handles_optional_fields_and_control_characters() {
 }
 
 #[tokio::test]
-async fn empty_list_has_a_human_message_but_json_stays_an_array() {
+async fn empty_list_has_a_human_message_but_json_wraps_items() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/api/v1/plans"))
@@ -116,7 +118,10 @@ async fn empty_list_has_a_human_message_but_json_stays_an_array() {
         "No change plans found.\n"
     );
     let text = stdout(command(&server, &config).args(["--output", "json"]));
-    assert_eq!(serde_json::from_str::<Value>(&text).unwrap(), json!([]));
+    assert_eq!(
+        serde_json::from_str::<Value>(&text).unwrap(),
+        json!({"schema_version": 1, "items": []})
+    );
 }
 
 #[tokio::test]
@@ -135,7 +140,9 @@ async fn single_json_preserves_plan_and_local_ci_records() {
         .collect::<Result<_, _>>()
         .unwrap();
     assert_eq!(records.len(), 2);
-    assert_eq!(records[0], plan());
+    let mut expected = plan();
+    expected["schema_version"] = json!(1);
+    assert_eq!(records[0], expected);
     assert_eq!(records[1]["plan_id"], "external-id");
     assert_eq!(records[1]["plan_row_id"], "row-id");
 }
@@ -178,7 +185,7 @@ async fn human_github_without_output_file_does_not_fall_back_to_json() {
 }
 
 #[tokio::test]
-async fn populated_json_list_remains_one_array() {
+async fn populated_json_list_wraps_items_with_schema_version() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/api/v1/plans"))
@@ -189,7 +196,7 @@ async fn populated_json_list_remains_one_array() {
     let text = stdout(command(&server, &config).args(["--log-format", "json"]));
     assert_eq!(
         serde_json::from_str::<Value>(&text).unwrap(),
-        json!([plan()])
+        json!({"schema_version": 1, "items": [plan()]})
     );
 }
 

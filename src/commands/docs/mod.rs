@@ -95,7 +95,7 @@ fn print_list(ctx: &Ctx, url_only: bool) -> Result<(), String> {
             });
             println!(
                 "{}",
-                serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+                crate::json_doc::to_pretty_string(&payload).map_err(|e| e.to_string())?
             );
         }
         LogFormat::Human if url_only => {
@@ -137,7 +137,7 @@ fn print_topic(ctx: &Ctx, name: &str, url_only: bool, open_browser: bool) -> Res
             });
             println!(
                 "{}",
-                serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+                crate::json_doc::to_pretty_string(&payload).map_err(|e| e.to_string())?
             );
         }
         LogFormat::Human if url_only => println!("{url}"),

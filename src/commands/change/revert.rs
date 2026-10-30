@@ -49,15 +49,14 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 fn print_dry_run(ctx: &Ctx, plan_id: &str) {
     let human = dry_run_text(plan_id);
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json!({
                 "dry_run": true,
                 "source_plan_id": plan_id,
                 "action": "revert",
                 "will_auto_approve": false,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => print!("{human}"),
     }
 }

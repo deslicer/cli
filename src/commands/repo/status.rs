@@ -38,14 +38,13 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 
 fn print_status(ctx: &Ctx, installation: i64, listed: &ListReposResponse) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            serde_json::json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&serde_json::json!({
                 "installation": installation,
                 "embedded_workflow_template_digest": listed.embedded_workflow_template_digest,
                 "repos": listed.repos,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => {
             println!("installation {installation}");
             println!(

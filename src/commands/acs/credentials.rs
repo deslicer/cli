@@ -99,7 +99,7 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
     };
 
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&credentials) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&credentials) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -129,7 +129,7 @@ async fn test(ctx: Ctx, args: TestArgs) -> i32 {
     let code = if result.ok { 0 } else { 1 };
 
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&result) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&result) {
             Ok(json) => {
                 println!("{json}");
                 code
@@ -184,7 +184,7 @@ async fn set(ctx: Ctx, args: SetArgs) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&cred) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&cred) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -236,16 +236,13 @@ fn normalize_token(raw: &str) -> Result<String, CliError> {
 fn print_set_dry_run(ctx: &Ctx, args: &SetArgs) {
     let acs_env = args.acs_environment.as_deref().unwrap_or("production");
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => { let _ = crate::json_doc::print_success(&json!({
                 "dry_run": true,
                 "action": "set",
                 "stack": args.stack,
                 "acs_environment": acs_env,
                 "token_source": if args.token_stdin { "stdin" } else { ACS_TOKEN_ENV },
-            })
-        ),
+            })); },
         LogFormat::Human => print!(
             "dry-run: would store the ACS credential for stack {} ({acs_env})\npass --yes to apply\n",
             args.stack

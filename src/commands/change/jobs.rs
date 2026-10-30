@@ -72,9 +72,8 @@ async fn resolve_latest_execution_id(client: &Client, plan_id: &str) -> Result<S
 
 fn print_jobs(ctx: &Ctx, plan_id: &str, summary: &ExecutionSummary) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json!({
                 "plan_id": plan_id,
                 "execution_id": summary.execution_id,
                 "status": summary.status,
@@ -82,8 +81,8 @@ fn print_jobs(ctx: &Ctx, plan_id: &str, summary: &ExecutionSummary) {
                 "jobs_succeeded": summary.jobs_succeeded,
                 "jobs_failed": summary.jobs_failed,
                 "jobs": summary.jobs,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => {
             println!(
                 "plan {plan_id} execution {} status {} ({}/{} succeeded, {} failed)",

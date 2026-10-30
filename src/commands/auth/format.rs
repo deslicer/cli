@@ -1,16 +1,19 @@
 use serde_json::Value;
 
 use crate::cli::LogFormat;
+use crate::json_doc;
 
 pub fn print_output(format: LogFormat, json: &Value, human: &str) {
     match format {
-        LogFormat::Json => println!("{}", pretty(json)),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(json);
+        }
         LogFormat::Human => print!("{human}"),
     }
 }
 
 pub fn pretty(value: &Value) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+    json_doc::to_pretty_string(value).unwrap_or_else(|_| value.to_string())
 }
 
 pub fn login_human(identity: &str, observer_api_url: &str, resolution_path: &str) -> String {

@@ -49,7 +49,7 @@ async fn status(ctx: Ctx, _args: StatusArgs) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&status) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&status) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -84,15 +84,14 @@ async fn set(ctx: Ctx, args: SetArgs) -> i32 {
     if !args.yes {
         let hint = redact_key(&args.key);
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "byok_set",
                     "provider": args.provider,
                     "key_hint": hint,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => println!(
                 "dry-run: would set BYOK for provider {} (key {hint})\npass --yes to apply",
                 args.provider
@@ -107,7 +106,7 @@ async fn set(ctx: Ctx, args: SetArgs) -> i32 {
     };
     match client.byok_set(&args.provider, &args.key).await {
         Ok(result) => match ctx.log_format {
-            LogFormat::Json => match serde_json::to_string_pretty(&result) {
+            LogFormat::Json => match crate::json_doc::to_pretty_string(&result) {
                 Ok(json) => {
                     println!("{json}");
                     if result.ok {

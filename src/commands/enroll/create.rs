@@ -89,7 +89,7 @@ fn print_created(
             if write_file.is_none() {
                 payload["token"] = serde_json::Value::String(created.token.clone());
             }
-            println!("{payload}");
+            let _ = crate::json_doc::print_success(&payload);
         }
         LogFormat::Human => {
             if let Some(path) = write_file {

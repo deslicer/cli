@@ -30,16 +30,15 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if !args.yes {
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "catalog_plan",
                     "catalog_id": args.id,
                     "targets": args.targets,
                     "will_auto_approve": false,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => println!(
                 "dry-run: would create Pending plan(s) from catalog {} for targets [{}]\n\
                  plans are never auto-approved; pass --yes to create, then `deslicer change approve`",

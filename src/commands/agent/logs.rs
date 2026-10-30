@@ -113,7 +113,7 @@ async fn report_once(ctx: &Ctx, client: &AgentClient, run_id: &str) -> Result<i3
 
     match ctx.log_format {
         LogFormat::Json => {
-            let line = serde_json::to_string(&serde_json::json!({
+            let line = crate::json_doc::to_compact_string(&serde_json::json!({
                 "runId": output.status.run_id,
                 "status": output.status.status,
                 "conversationId": output.status.conversation_id,

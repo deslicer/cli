@@ -18,7 +18,7 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&credits) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&credits) {
             Ok(json) => {
                 println!("{json}");
                 0

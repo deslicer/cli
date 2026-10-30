@@ -82,7 +82,9 @@ async fn list_filters_by_hostname_and_rejects_unknown_host() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let rows: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let doc: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(doc["schema_version"], 1);
+    let rows = doc["items"].as_array().expect("items");
     assert_eq!(rows[0]["name"], "TA-nix");
     assert_eq!(rows[0]["host_id"], IDX1);
     assert_eq!(rows[0]["version"], "9.0.0");
