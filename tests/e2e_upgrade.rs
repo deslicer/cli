@@ -211,10 +211,17 @@ async fn plan_prints_plan_id_and_next_step() {
     let out = run(dir.path(), &server.uri(), &args).await;
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["plan_id"], PLAN);
+    assert_eq!(v["status"], "pending_approval");
     assert_eq!(
-        v["next_steps"][1],
-        format!("deslicer change deploy --plan-id {PLAN}")
+        v["next_command"],
+        format!("deslicer change status --plan-id {PLAN}")
     );
+    assert_eq!(
+        v["next_commands"][1],
+        format!("deslicer change approve --plan-id {PLAN}")
+    );
+    // Deprecated alias kept for one release (#250 review).
+    assert_eq!(v["next_steps"], v["next_commands"]);
 }
 
 #[tokio::test]

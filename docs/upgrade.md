@@ -45,11 +45,12 @@ steps:
 
 ```
 plan_id: <id>
-next: deslicer change approve --plan-id <id>
-  then: deslicer change deploy --plan-id <id>
+next: deslicer change status --plan-id <id>
+  then: deslicer change approve --plan-id <id>
 ```
 
-`--json` returns `{plan_id, status: "pending_approval", next_steps, plan}`.
+`--json` returns `{plan_id, status, url, next_command, next_commands, next_steps, plan}`
+(`next_steps` is a deprecated alias of `next_commands`).
 
 ## Values
 

@@ -35,6 +35,10 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 println!("Status: {}", human_field(Some(&plan.status)));
                 println!("Name: {}", human_field(plan.name.as_deref()));
                 println!("Summary: {}", human_field(plan.summary.as_deref()));
+                let next = crate::plan_next::human_next_line(plan.external_id(), &plan.status);
+                if !next.is_empty() {
+                    print!("{next}");
+                }
                 emit_change_plan_ci_outputs(&plan)
             }
         };

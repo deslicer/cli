@@ -13,11 +13,9 @@ pub async fn run(ctx: Ctx, args: RollingArgs) -> i32 {
     }
 }
 
+/// Deprecated alias of `next_commands` for `upgrade plan` JSON (kept one release).
 pub(crate) fn next_steps(plan_id: &str) -> Vec<String> {
-    vec![
-        format!("deslicer change approve --plan-id {plan_id}"),
-        format!("deslicer change deploy --plan-id {plan_id}"),
-    ]
+    crate::plan_next::next_commands_for(plan_id, "pending_approval").1
 }
 
 async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i32, CliError> {
@@ -25,13 +23,24 @@ async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i
     let (_session, client) = authenticate(ctx, args.environment.as_deref(), None).await?;
     let body = rolling_request(&client, args).await?;
     let plan = client.create_upgrade_plan(&body).await?;
+    let status = "pending_approval";
+    let (next_command, next_commands) = crate::plan_next::next_commands_for(&plan.plan_id, status);
     Ok(match format {
-        LogFormat::Json => print_json(&serde_json::json!({
-            "plan_id": plan.plan_id,
-            "status": "pending_approval",
-            "next_steps": next_steps(&plan.plan_id),
-            "plan": plan,
-        })),
+        LogFormat::Json => {
+            // `mut` matches #254 so `"replayed": true` can insert additively.
+            #[allow(unused_mut)]
+            let mut doc = serde_json::json!({
+                "plan_id": plan.plan_id,
+                "status": status,
+                "url": serde_json::Value::Null,
+                "next_command": next_command,
+                "next_commands": next_commands,
+                // Deprecated alias of `next_commands` — remove after one release.
+                "next_steps": next_steps(&plan.plan_id),
+                "plan": plan,
+            });
+            print_json(&doc)
+        }
         LogFormat::Human => {
             print!("{}", format_human(&plan));
             0
@@ -41,6 +50,8 @@ async fn run_inner(ctx: &Ctx, args: &RollingArgs, format: LogFormat) -> Result<i
 
 fn format_human(plan: &UpgradePlanCreated) -> String {
     let steps = next_steps(&plan.plan_id);
+    let next = steps.first().cloned().unwrap_or_default();
+    let then = steps.get(1).cloned().unwrap_or_default();
     format!(
         "plan_id: {}\nupgrade plan created ({} → {}, {} host(s), {} phase(s)); Pending, nothing was approved or deployed\nnext: {}\n  then: {}\n",
         plan.plan_id,
@@ -48,8 +59,8 @@ fn format_human(plan: &UpgradePlanCreated) -> String {
         plan.to_version,
         plan.host_ids.len(),
         plan.phase_ids.len(),
-        steps[0],
-        steps[1]
+        next,
+        then
     )
 }
 
@@ -68,6 +79,7 @@ mod tests {
         .unwrap();
         let text = format_human(&plan);
         assert!(text.starts_with("plan_id: p-1\n"));
+        assert!(text.contains("deslicer change status --plan-id p-1"));
         assert!(text.contains("deslicer change approve --plan-id p-1"));
     }
 }
