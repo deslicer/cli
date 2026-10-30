@@ -142,6 +142,49 @@ async fn change_list_last_page_clears_next_cursor() {
 }
 
 #[tokio::test]
+async fn change_list_default_auto_paginates_to_completion() {
+    let server = MockServer::start().await;
+    let page0: Vec<Value> = (0..500).map(|i| plan_row(i, "draft")).collect();
+    let page1: Vec<Value> = (500..620).map(|i| plan_row(i, "draft")).collect();
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans"))
+        .and(query_param("limit", "500"))
+        .and(query_param("offset", "0"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("X-Total-Count", "620")
+                .set_body_json(page0),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/plans"))
+        .and(query_param("limit", "500"))
+        .and(query_param("offset", "500"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("X-Total-Count", "620")
+                .set_body_json(page1),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let config = TempDir::new().unwrap();
+    let output = command(&server, &config).output().expect("run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let v: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["items"].as_array().unwrap().len(), 620);
+    assert!(v["next_cursor"].is_null());
+    assert_eq!(v["total"], 620);
+}
+
+#[tokio::test]
 async fn change_list_does_not_send_ignored_filter_query_params() {
     let server = MockServer::start().await;
     // Mixed statuses across enough rows that a server-side ignore of filters

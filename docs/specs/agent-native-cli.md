@@ -107,11 +107,11 @@ Rules:
 
 ## 8. Pagination and filtering
 
-- List commands take `--limit` (default 50, max 500), `--cursor`, and typed filters such as `--status`, `--since`, and `--environment`.
-- Output: `{schema_version, items[], next_cursor|null, partial:false}`.
+- List commands take opt-in `--limit` (max 500) and `--cursor`, plus typed filters such as `--status`, `--since`, and `--environment`. Without `--limit`/`--cursor`, the CLI returns the **full** list (auto-paginating Observer `limit`/`offset` pages when needed) so defaults do not silently truncate.
+- Output: `{schema_version, items[], next_cursor|null, total?, partial:false}`.
 - **`change list`:** read-only tenant list so agents can find a plan they created earlier.
   - Auth like `change show`.
-  - Supports `--limit` / `--cursor` / filters.
+  - Supports `--limit` / `--cursor` / filters. `--status`/`--since` are client-side (Observer list has no filter query params); `--environment` scopes auth only.
   - If the Observer lacks the route → exit **15** (`endpoint not available`), not a misleading plan-not-found.
 
 ## 9. Timeouts, retries, and partial results

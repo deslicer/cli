@@ -126,7 +126,7 @@ mod tests {
         let page = page_slice(
             &plans,
             &PageArgs {
-                limit: 50,
+                limit: Some(50),
                 cursor: None,
             },
         );

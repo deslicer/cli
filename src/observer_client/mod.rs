@@ -335,20 +335,23 @@ impl Client {
     ///
     /// Observer `GET api/v1/plans` accepts only `limit` + `offset` and returns a
     /// bare array plus `X-Total-Count`. CLI `--cursor` is that offset encoded as
-    /// a decimal string. `--status` / `--since` are not Observer list params —
-    /// when set, the CLI fetches all pages and filters client-side, then pages.
+    /// a decimal string. Without `--limit`/`--cursor`, all pages are fetched so
+    /// the default is not a silent truncate. `--status` / `--since` are not
+    /// Observer list params — when set, the CLI fetches all pages and filters
+    /// client-side, then optionally pages.
     pub async fn list_plans_page(
         &self,
         status: Option<&str>,
         since: Option<&str>,
         page: &crate::pagination::PageArgs,
     ) -> Result<crate::pagination::Page<ChangePlan>, CliError> {
-        if status.is_some() || since.is_some() {
+        if status.is_some() || since.is_some() || !page.wants_paging() {
             let all = self.fetch_all_plans_pages().await?;
             let filtered = filter_plans(&all, status, since);
             return Ok(crate::pagination::page_slice(&filtered, page));
         }
 
+        let limit = page.effective_limit();
         let offset = crate::pagination::cursor_to_offset(page.cursor.as_deref())
             .map_err(CliError::InvalidInput)?;
         let query = crate::pagination::query_pairs(page, &[]).map_err(CliError::InvalidInput)?;
@@ -375,12 +378,11 @@ impl Client {
         }
 
         // Legacy Observer that ignores limit/offset and dumps the full array.
-        if plans.len() > page.limit as usize {
+        if plans.len() > limit as usize {
             return Ok(crate::pagination::page_slice(&plans, page));
         }
 
-        let next_cursor =
-            crate::pagination::next_offset_cursor(offset, plans.len(), page.limit, total);
+        let next_cursor = crate::pagination::next_offset_cursor(offset, plans.len(), limit, total);
         Ok(crate::pagination::Page {
             items: plans,
             next_cursor,
@@ -397,7 +399,7 @@ impl Client {
         let mut offset: u64 = 0;
         for _ in 0..MAX_PAGES {
             let args = crate::pagination::PageArgs {
-                limit: PAGE,
+                limit: Some(PAGE),
                 cursor: Some(offset.to_string()),
             };
             let query =

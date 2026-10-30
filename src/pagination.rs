@@ -2,23 +2,41 @@
 //!
 //! CLI cursors are opaque decimal offsets. Observer plan list understands
 //! `limit` + `offset` and returns `X-Total-Count` — never a `cursor` query param.
+//!
+//! By default (no `--limit` / `--cursor`), list commands return the **full**
+//! collection so existing scripts are not silently truncated. Pass `--limit`
+//! and/or `--cursor` to request a single page.
 
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+/// Default page size when `--cursor` is set without `--limit`.
 pub const DEFAULT_LIMIT: u32 = 50;
 pub const MAX_LIMIT: u32 = 500;
 
 #[derive(Debug, Clone, ClapArgs)]
 pub struct PageArgs {
-    /// Max items to return (default 50, max 500).
-    #[arg(long, default_value_t = DEFAULT_LIMIT, value_parser = clap::value_parser!(u32).range(1..=MAX_LIMIT as i64))]
-    pub limit: u32,
+    /// Max items to return in one page (max 500). Omit with `--cursor` unset to
+    /// return the full list.
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..=MAX_LIMIT as i64))]
+    pub limit: Option<u32>,
 
     /// Opaque continuation cursor from a previous page's `next_cursor`.
     #[arg(long)]
     pub cursor: Option<String>,
+}
+
+impl PageArgs {
+    /// True when the caller asked for a single page (`--limit` and/or `--cursor`).
+    pub fn wants_paging(&self) -> bool {
+        self.limit.is_some() || self.cursor.is_some()
+    }
+
+    /// Page size for Observer / in-memory slicing when paging is requested.
+    pub fn effective_limit(&self) -> u32 {
+        self.limit.unwrap_or(DEFAULT_LIMIT)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,6 +54,16 @@ impl<T: Serialize> Page<T> {
             items,
             next_cursor,
             total: None,
+            partial: false,
+        }
+    }
+
+    pub fn full(items: Vec<T>) -> Self {
+        let total = items.len() as u64;
+        Self {
+            items,
+            next_cursor: None,
+            total: Some(total),
             partial: false,
         }
     }
@@ -87,14 +115,18 @@ pub fn next_offset_cursor(
     }
 }
 
-/// Slice a full in-memory list using an offset cursor (`"0"`, `"50"`, …).
+/// Slice a full in-memory list. Without `--limit`/`--cursor`, returns everything.
 pub fn page_slice<T: Clone + Serialize>(items: &[T], args: &PageArgs) -> Page<T> {
+    if !args.wants_paging() {
+        return Page::full(items.to_vec());
+    }
+    let limit = args.effective_limit();
     let start = cursor_to_offset(args.cursor.as_deref()).unwrap_or(0) as usize;
-    let end = start.saturating_add(args.limit as usize);
+    let end = start.saturating_add(limit as usize);
     let page_items: Vec<T> = items
         .iter()
         .skip(start)
-        .take(args.limit as usize)
+        .take(limit as usize)
         .cloned()
         .collect();
     let next_cursor = if end < items.len() {
@@ -124,7 +156,7 @@ pub fn print_page_json<T: Serialize>(page: &Page<T>) -> i32 {
 pub fn query_pairs(args: &PageArgs, extra: &[(&str, Option<&str>)]) -> Result<String, String> {
     let offset = cursor_to_offset(args.cursor.as_deref())?;
     let mut pairs: Vec<(String, String)> = Vec::new();
-    pairs.push(("limit".into(), args.limit.to_string()));
+    pairs.push(("limit".into(), args.effective_limit().to_string()));
     pairs.push(("offset".into(), offset.to_string()));
     for (key, value) in extra {
         if let Some(v) = value {
@@ -224,7 +256,7 @@ mod tests {
         let page = page_slice(
             &items,
             &PageArgs {
-                limit: 50,
+                limit: Some(50),
                 cursor: None,
             },
         );
@@ -235,7 +267,7 @@ mod tests {
         let page2 = page_slice(
             &items,
             &PageArgs {
-                limit: 50,
+                limit: Some(50),
                 cursor: Some("50".into()),
             },
         );
@@ -244,10 +276,25 @@ mod tests {
     }
 
     #[test]
+    fn page_slice_default_returns_full_list() {
+        let items: Vec<u32> = (0..120).collect();
+        let page = page_slice(
+            &items,
+            &PageArgs {
+                limit: None,
+                cursor: None,
+            },
+        );
+        assert_eq!(page.items.len(), 120);
+        assert!(page.next_cursor.is_none());
+        assert_eq!(page.total, Some(120));
+    }
+
+    #[test]
     fn query_pairs_sends_offset_not_cursor() {
         let q = query_pairs(
             &PageArgs {
-                limit: 50,
+                limit: Some(50),
                 cursor: Some("50".into()),
             },
             &[],
