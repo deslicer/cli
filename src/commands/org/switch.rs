@@ -19,14 +19,13 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if !args.yes {
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "org_switch",
                     "tenant": args.tenant,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => println!(
                 "dry-run: would switch active org/tenant to {}\npass --yes to switch",
                 args.tenant
@@ -51,7 +50,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 });
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".into())
+                    crate::json_doc::to_pretty_string(&payload).unwrap_or_else(|_| "{}".into())
                 );
                 0
             }

@@ -14,6 +14,7 @@ pub mod errors;
 pub mod github_release;
 pub mod http;
 pub mod interactive;
+pub mod json_doc;
 pub mod observer_client;
 pub mod observer_token;
 pub mod oidc_exchange;

@@ -81,7 +81,7 @@ fn emit_report(format: OutputFormat, report: &PlanValidationReport) {
     match format {
         OutputFormat::Human => println!("{}", human_report(report)),
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string(report).unwrap_or_default());
+            let _ = crate::json_doc::print_success_compact(report);
         }
         OutputFormat::Markdown => println!("{}", markdown_report(report)),
     }

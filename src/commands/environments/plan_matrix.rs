@@ -42,7 +42,7 @@ pub fn run(ctx: Ctx, args: Args) -> i32 {
     let output = PlanMatrixOutput { include: entries };
 
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string(&output) {
+        LogFormat::Json => match crate::json_doc::to_compact_string(&output) {
             Ok(json) => {
                 println!("{json}");
                 0

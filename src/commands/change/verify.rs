@@ -94,7 +94,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     // The diff is best-effort output: verification already succeeded above.
     match client.get_dry_run_diff(&plan.id).await {
         Ok(diff) => {
-            println!("{}", serde_json::to_string(&diff).unwrap_or_default());
+            let _ = crate::json_doc::print_success_compact(&diff);
             let counts = diff_counts_from_observer_value(&diff);
             if let Some(ref counts) = counts {
                 emit_message(&crate::output::diff_count_pairs(counts));

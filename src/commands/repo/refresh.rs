@@ -38,14 +38,13 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         .refresh_repo_workflows(args.installation, args.repo_id)
         .await?;
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            serde_json::json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&serde_json::json!({
                 "installation": args.installation,
                 "repo_id": args.repo_id,
                 "enqueued": true,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => {
             println!(
                 "Enqueued a workflow refresh pull request for repo-id {}.",

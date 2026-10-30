@@ -23,14 +23,13 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if !args.yes {
         let hint = redact_key(&args.key);
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "license_bind",
                     "key_hint": hint,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => {
                 println!("dry-run: would bind license key {hint}\npass --yes to bind")
             }
@@ -44,7 +43,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     };
     match client.license_bind(&args.key).await {
         Ok(result) => match ctx.log_format {
-            LogFormat::Json => match serde_json::to_string_pretty(&result) {
+            LogFormat::Json => match crate::json_doc::to_pretty_string(&result) {
                 Ok(json) => {
                     println!("{json}");
                     if result.ok {

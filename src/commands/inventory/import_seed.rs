@@ -163,10 +163,9 @@ fn emit_dry_run(ctx: &Ctx, seeds: &[SeedHost], assign: bool) {
         })).collect::<Vec<_>>(),
     });
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            serde_json::to_string_pretty(&payload).unwrap_or_default()
-        ),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&payload);
+        }
         LogFormat::Human => {
             println!(
                 "Dry run: {} host(s){}",
@@ -195,10 +194,9 @@ fn emit_report(ctx: &Ctx, rows: &[ImportRow]) {
         })).collect::<Vec<_>>(),
     });
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            serde_json::to_string_pretty(&payload).unwrap_or_default()
-        ),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&payload);
+        }
         LogFormat::Human => {
             for row in rows {
                 if let Some(err) = &row.error {

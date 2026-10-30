@@ -27,7 +27,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     };
     match client.set_enabled(&args.id, true).await {
         Ok(routine) => match ctx.log_format {
-            LogFormat::Json => match serde_json::to_string_pretty(&routine) {
+            LogFormat::Json => match crate::json_doc::to_pretty_string(&routine) {
                 Ok(json) => {
                     println!("{json}");
                     0
@@ -48,10 +48,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
 fn print_dry_run(ctx: &Ctx, id: &str, action: &str) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({ "dry_run": true, "action": action, "routine_id": id })
-        ),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(
+                &json!({ "dry_run": true, "action": action, "routine_id": id }),
+            );
+        }
         LogFormat::Human => println!("dry-run: would {action} routine {id}\npass --yes to apply"),
     }
 }

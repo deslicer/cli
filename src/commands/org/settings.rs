@@ -55,15 +55,14 @@ async fn approval(ctx: Ctx, args: ApprovalArgs) -> i32 {
     let wants_update = args.require_human_approval.is_some() || args.auto_approve.is_some();
     if wants_update && !args.yes {
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "org_settings_approval",
                     "require_human_approval": args.require_human_approval,
                     "auto_approve": args.auto_approve,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => {
                 println!("dry-run: would update plan approval settings\npass --yes to apply")
             }
@@ -99,15 +98,14 @@ async fn execution(ctx: Ctx, args: ExecutionArgs) -> i32 {
     let wants_update = args.allow_ci_execute.is_some() || args.require_signed_approve.is_some();
     if wants_update && !args.yes {
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "org_settings_execution",
                     "allow_ci_execute": args.allow_ci_execute,
                     "require_signed_approve": args.require_signed_approve,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => {
                 println!("dry-run: would update plan execution settings\npass --yes to apply")
             }
@@ -140,7 +138,7 @@ async fn execution(ctx: Ctx, args: ExecutionArgs) -> i32 {
 
 fn emit_approval(ctx: &Ctx, settings: &PlanApprovalSettings) -> i32 {
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(settings) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(settings) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -170,7 +168,7 @@ fn emit_approval(ctx: &Ctx, settings: &PlanApprovalSettings) -> i32 {
 
 fn emit_execution(ctx: &Ctx, settings: &PlanExecutionSettings) -> i32 {
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(settings) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(settings) {
             Ok(json) => {
                 println!("{json}");
                 0

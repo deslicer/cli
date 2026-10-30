@@ -114,6 +114,7 @@ async fn acs_destination_sends_environment_and_apps_and_returns_plan_id() {
         .find(|l| l.contains("plan_id"))
         .expect("json line");
     let v: Value = serde_json::from_str(line).unwrap();
+    assert_eq!(v["schema_version"], 1);
     assert_eq!(v["plan_id"], PLAN_ID);
     assert_eq!(v["status"], "pending_approval");
     assert_eq!(v["item_count"], 1);

@@ -23,15 +23,14 @@ pub struct Args {
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     if !args.yes {
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "dry_run": true,
                     "action": "run",
                     "routine_id": args.id,
                     "model": args.model,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => {
                 let model = args.model.as_deref().unwrap_or("(default)");
                 println!(
@@ -48,7 +47,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     };
     match client.run(&args.id, args.model.as_deref()).await {
         Ok(run) => match ctx.log_format {
-            LogFormat::Json => match serde_json::to_string_pretty(&run) {
+            LogFormat::Json => match crate::json_doc::to_pretty_string(&run) {
                 Ok(json) => {
                     println!("{json}");
                     0

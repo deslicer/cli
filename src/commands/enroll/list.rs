@@ -37,7 +37,7 @@ async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
                 "shown": shown.len(),
                 "total": listed.total,
             });
-            let text = serde_json::to_string_pretty(&payload)
+            let text = crate::json_doc::to_pretty_string(&payload)
                 .map_err(|err| CliError::Other(format!("serialize tokens: {err}")))?;
             assert_no_secret(&text)?;
             println!("{text}");

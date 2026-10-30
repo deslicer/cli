@@ -48,7 +48,7 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
             let payload = json!({ "agents": cloned, "source_ids": ids });
             println!(
                 "{}",
-                serde_json::to_string_pretty(&payload)
+                crate::json_doc::to_pretty_string(&payload)
                     .map_err(|e| CliError::Other(format!("serialize: {e}")))?
             );
         }
@@ -59,10 +59,11 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 
 fn print_dry_run(ctx: &Ctx, ids: &[String]) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({ "dry_run": true, "action": "clone", "ids": ids })
-        ),
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(
+                &json!({ "dry_run": true, "action": "clone", "ids": ids }),
+            );
+        }
         LogFormat::Human => {
             println!(
                 "dry-run: would clone agent(s): {}\npass --yes to create copies",

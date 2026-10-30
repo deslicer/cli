@@ -40,7 +40,7 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
     };
 
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&stacks) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&stacks) {
             Ok(json) => {
                 println!("{json}");
                 0

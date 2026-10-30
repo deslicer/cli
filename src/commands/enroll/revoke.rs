@@ -33,7 +33,9 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 
     client.revoke_enrollment_token(&jti).await?;
     match ctx.log_format {
-        LogFormat::Json => println!("{}", serde_json::json!({ "revoked": jti })),
+        LogFormat::Json => {
+            crate::json_doc::print_success(&serde_json::json!({ "revoked": jti }));
+        }
         LogFormat::Human => println!("Revoked enrollment token {jti}."),
     }
     Ok(0)

@@ -349,9 +349,8 @@ fn print_check_results(
     ok: bool,
 ) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json!({
                 "ok": ok,
                 "installation": installation,
                 "org": org,
@@ -360,8 +359,8 @@ fn print_check_results(
                     "ok": c.ok,
                     "detail": c.detail,
                 })).collect::<Vec<_>>(),
-            })
-        ),
+            }));
+        }
         LogFormat::Human => {
             println!(
                 "repo bootstrap --check installation {installation}{}",
@@ -472,30 +471,28 @@ pub(crate) fn dry_run_text(org: &str, name: &str) -> String {
 
 fn print_dry_run(ctx: &Ctx, org: &str, name: &str) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            serde_json::json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&serde_json::json!({
                 "dry_run": true,
                 "org": org,
                 "name": name,
                 "visibility": "private",
-            })
-        ),
+            }));
+        }
         LogFormat::Human => println!("{}", dry_run_text(org, name)),
     }
 }
 
 fn print_created(ctx: &Ctx, created: &ProvisionRepoResponse) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            serde_json::json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&serde_json::json!({
                 "repo_full_name": created.repo_full_name,
                 "html_url": created.html_url,
                 "github_repo_id": created.github_repo_id,
                 "default_branch": created.default_branch,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => {
             println!(
                 "Created private repository {} ({})",

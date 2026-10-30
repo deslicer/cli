@@ -5,14 +5,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 fn cli_bin() -> PathBuf {
-    let bin_name = env!("CARGO_PKG_NAME").split('-').next().unwrap();
-    if let Ok(path) = std::env::var(format!("CARGO_BIN_EXE_{bin_name}")) {
-        return PathBuf::from(path);
-    }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
-        .join("debug")
-        .join(bin_name)
+    PathBuf::from(env!("CARGO_BIN_EXE_deslicer"))
 }
 
 fn api_url_flag() -> String {

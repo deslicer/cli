@@ -24,7 +24,7 @@ async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
     match ctx.log_format {
         LogFormat::Json => {
             let payload = serde_json::json!({ "agents": agents });
-            let text = serde_json::to_string_pretty(&payload)
+            let text = crate::json_doc::to_pretty_string(&payload)
                 .map_err(|err| CliError::Other(format!("serialize agents: {err}")))?;
             println!("{text}");
         }

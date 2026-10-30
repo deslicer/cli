@@ -39,7 +39,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     };
 
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&report) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&report) {
             Ok(json) => {
                 println!("{json}");
                 0

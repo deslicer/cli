@@ -28,7 +28,7 @@ async fn run_inner(ctx: Ctx) -> Result<i32, CliError> {
 
     match ctx.log_format {
         LogFormat::Json => {
-            let text = serde_json::to_string_pretty(&serde_json::json!({
+            let text = crate::json_doc::to_pretty_string(&serde_json::json!({
                 "runs": body.runs,
                 "nextCursor": body.next_cursor,
             }))

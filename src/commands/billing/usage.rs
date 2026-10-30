@@ -18,7 +18,7 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&usage) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&usage) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -52,7 +52,7 @@ fn format_usage_human(usage: &BillingUsage) -> String {
         lines.push(format!("cost: {cost} {currency}").trim().to_string());
     }
     if let Some(breakdown) = usage.breakdown.as_ref() {
-        if let Ok(json) = serde_json::to_string_pretty(breakdown) {
+        if let Ok(json) = crate::json_doc::to_pretty_string(breakdown) {
             lines.push(json);
         }
     }

@@ -115,7 +115,7 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(&mappings) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(&mappings) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -224,7 +224,7 @@ async fn adopt(ctx: Ctx, args: AdoptArgs) -> i32 {
 
 fn emit_mapping(ctx: &Ctx, mapping: &EnvironmentAppMapping) -> i32 {
     match ctx.log_format {
-        LogFormat::Json => match serde_json::to_string_pretty(mapping) {
+        LogFormat::Json => match crate::json_doc::to_pretty_string(mapping) {
             Ok(json) => {
                 println!("{json}");
                 0
@@ -250,9 +250,8 @@ fn emit_mapping(ctx: &Ctx, mapping: &EnvironmentAppMapping) -> i32 {
 
 fn print_set_dry_run(ctx: &Ctx, args: &SetArgs) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json!({
                 "dry_run": true,
                 "action": "set",
                 "environment": args.environment,
@@ -261,25 +260,24 @@ fn print_set_dry_run(ctx: &Ctx, args: &SetArgs) {
                 "group": args.group,
                 "dest_dir": args.dest_dir,
                 "host": args.host,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => print!("{}", set_dry_run_text(args)),
     }
 }
 
 fn print_adopt_dry_run(ctx: &Ctx, args: &AdoptArgs) {
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json!({
                 "dry_run": true,
                 "action": "adopt",
                 "environment": args.environment,
                 "app": args.app,
                 "group": args.group,
                 "host": args.host,
-            })
-        ),
+            }));
+        }
         LogFormat::Human => print!("{}", adopt_dry_run_text(args)),
     }
 }

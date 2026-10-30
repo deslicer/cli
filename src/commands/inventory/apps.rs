@@ -76,16 +76,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 }
 
 fn print_json(value: &impl serde::Serialize) -> i32 {
-    match serde_json::to_string_pretty(value) {
-        Ok(json) => {
-            println!("{json}");
-            0
-        }
-        Err(err) => {
-            eprintln!("failed to serialize output: {err}");
-            1
-        }
-    }
+    crate::json_doc::print_success(value)
 }
 
 /// Every enrolled host Observer listed (installed or missing) for any app.

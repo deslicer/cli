@@ -98,16 +98,7 @@ pub(crate) async fn rolling_request(
 }
 
 pub(crate) fn print_json(value: &impl serde::Serialize) -> i32 {
-    match serde_json::to_string_pretty(value) {
-        Ok(json) => {
-            println!("{json}");
-            0
-        }
-        Err(err) => {
-            eprintln!("failed to serialize output: {err}");
-            1
-        }
-    }
+    crate::json_doc::print_success(value)
 }
 
 pub async fn dispatch(ctx: Ctx, cmd: UpgradeCmd) -> i32 {

@@ -66,15 +66,14 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
             job.retry_count = job.retry_count.max(prior + 1);
         }
         match ctx.log_format {
-            LogFormat::Json => println!(
-                "{}",
-                json!({
+            LogFormat::Json => {
+                let _ = crate::json_doc::print_success(&json!({
                     "retried": true,
                     "plan_id": args.plan_id,
                     "execution_id": summary.execution_id,
                     "job": job,
-                })
-            ),
+                }));
+            }
             LogFormat::Human => {
                 println!(
                     "retried job {} on execution {} (status {}, retries {})",
@@ -106,16 +105,15 @@ fn print_dry_run(ctx: &Ctx, args: &Args) {
         None => "all failed jobs on the plan".into(),
     };
     match ctx.log_format {
-        LogFormat::Json => println!(
-            "{}",
-            json!({
+        LogFormat::Json => {
+            let _ = crate::json_doc::print_success(&json!({
                 "dry_run": true,
                 "plan_id": args.plan_id,
                 "job": args.job,
                 "execution_id": args.execution_id,
                 "action": "retry",
-            })
-        ),
+            }));
+        }
         LogFormat::Human => println!(
             "dry-run: would retry {scope} for plan {}\npass --yes to perform the retry",
             args.plan_id

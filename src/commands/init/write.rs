@@ -73,7 +73,7 @@ pub fn print_write_summary(
                 "written": written,
                 "skipped": skipped,
             });
-            println!("{payload}");
+            let _ = crate::json_doc::print_success(&payload);
         }
         LogFormat::Human => {
             println!(
