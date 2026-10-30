@@ -69,7 +69,7 @@ async fn whoami_rejected_api_token_is_not_logged_in() {
 }
 
 #[tokio::test]
-async fn whoami_rejected_api_token_json_emits_single_document() {
+async fn whoami_rejected_api_token_json_emits_envelope_on_stderr() {
     let observer = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/api/v1/me"))
@@ -93,24 +93,26 @@ async fn whoami_rejected_api_token_json_emits_single_document() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let combined = format!("{stdout}{stderr}");
-    let trimmed = combined.trim();
-
-    // Exactly one top-level JSON value across both streams (pretty-printed ok).
-    // A second document (e.g. emit_cli_error on stderr) makes from_str fail.
-    let value: Value = serde_json::from_str(trimmed).unwrap_or_else(|err| {
-        panic!("expected exactly one JSON value across stdout+stderr, got {err}: {trimmed}")
-    });
     assert!(
-        value.get("error").is_none(),
-        "must not also emit cli_error envelope: {trimmed}"
+        output.stdout.is_empty(),
+        "rejected-token whoami must not print a non-envelope document on stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
     );
-    assert_eq!(value["ok"], false);
-    assert_eq!(value["logged_in"], false);
-    assert_eq!(value["identity"], "none");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let line = stderr
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or(&stderr);
+    let value: Value = serde_json::from_str(line).unwrap_or_else(|err| {
+        panic!("last stderr line is not JSON ({err}): {line:?}\nfull stderr:\n{stderr}")
+    });
+    assert_eq!(value["schema_version"], 1);
+    assert_eq!(value["error"]["code"], "auth.api_token_rejected");
+    assert_eq!(value["error"]["exit_code"], 4);
+    assert_eq!(value["error"]["next_command"], "deslicer auth login");
+    assert!(value["error"]["hint"].is_string());
 }
 
 #[tokio::test]
