@@ -494,7 +494,7 @@ fn is_mutating_path(path: &str) -> bool {
         "auth logout",
         "update",
     ];
-    MUTATING_SUFFIXES.iter().any(|s| path == *s)
+    MUTATING_SUFFIXES.contains(&path)
 }
 
 #[cfg(test)]
