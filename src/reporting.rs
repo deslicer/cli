@@ -189,7 +189,7 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::EnvironmentNotBound(_) => "auth",
         CliError::AmbiguousBinding(_) | CliError::GitBackedChangeManagement(_) => "auth",
         CliError::UnsupportedPlatform(_) => "platform",
-        CliError::InvalidInput(_) => "usage",
+        CliError::InvalidInput(_) | CliError::MissingArgument(_) => "usage",
         CliError::RateLimited { .. } => "rate_limit",
         CliError::BackendUnavailable(_) => "transport",
         CliError::Transport(_) => "transport",
@@ -216,6 +216,7 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
         CliError::GitBackedChangeManagement(_) => "auth.git_backed_change_management",
         CliError::UnsupportedPlatform(_) => "platform.unsupported",
         CliError::InvalidInput(_) => "usage.invalid_input",
+        CliError::MissingArgument(_) => "usage.missing_argument",
         CliError::RateLimited { .. } => "transport.rate_limited",
         CliError::BackendUnavailable(_) => "transport.backend_unavailable",
         CliError::Transport(_) => "transport.error",
@@ -253,6 +254,19 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
         CliError::ApiTokenRejected(_) => {
             Some("mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login")
         }
+        CliError::MissingArgument(msg) if msg.contains("--provider") => {
+            Some("pass --provider github|github-token|gitlab|bitbucket|azure")
+        }
+        CliError::MissingArgument(msg) if msg.contains("--environment") => {
+            Some("pass --environment <tenant-slug>")
+        }
+        CliError::MissingArgument(msg) if msg.contains("--target-group") => {
+            Some("pass --target-group <host-group-uuid-or-name>")
+        }
+        CliError::MissingArgument(msg) if msg.contains("prompt") => {
+            Some("pass the prompt as an argument, e.g. deslicer agent run \"…\"")
+        }
+        CliError::MissingArgument(_) => Some("see the error message for the required flag"),
         _ => None,
     }
 }

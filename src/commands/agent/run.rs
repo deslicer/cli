@@ -53,6 +53,25 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         parse_conversation_id(id)?;
     }
 
+    // Usage failures for a missing/empty prompt must win over auth so agents
+    // see exit 2 / usage.missing_argument (issue #235), not a generic auth miss.
+    // When the prompt will be read from a non-TTY stdin, keep reading it after
+    // agent resolve so a mistyped --agent fails before stdin is consumed.
+    let prompt_ready = match args.prompt.as_deref() {
+        Some(text) if text.trim().is_empty() => {
+            return Err(CliError::MissingArgument("the prompt is empty".into()));
+        }
+        Some(text) => Some(text.trim().to_string()),
+        None if std::io::stdin().is_terminal() => {
+            return Err(CliError::MissingArgument(
+                "no prompt given. Pass it as an argument, or start a conversation \
+                 with `deslicer agent`:\n  deslicer agent run \"why did plan X fail?\""
+                    .into(),
+            ));
+        }
+        None => None,
+    };
+
     let client = AgentClient::from_ctx(&ctx)?;
     // Resolved before the prompt is read, so a mistyped name fails immediately
     // rather than after stdin has been consumed and can no longer be replayed.
@@ -61,7 +80,10 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         None => None,
     };
 
-    let prompt = resolve_prompt(args.prompt)?;
+    let prompt = match prompt_ready {
+        Some(text) => text,
+        None => resolve_prompt(None)?,
+    };
 
     if args.no_wait {
         return detach_now(
@@ -160,7 +182,7 @@ pub fn resolve_prompt(arg: Option<String>) -> Result<String, CliError> {
         Some(text) => text,
         None => {
             if std::io::stdin().is_terminal() {
-                return Err(CliError::Other(
+                return Err(CliError::MissingArgument(
                     "no prompt given. Pass it as an argument, or start a conversation \
                      with `deslicer agent`:\n  deslicer agent run \"why did plan X fail?\""
                         .into(),
@@ -176,7 +198,7 @@ pub fn resolve_prompt(arg: Option<String>) -> Result<String, CliError> {
 
     let prompt = prompt.trim().to_string();
     if prompt.is_empty() {
-        return Err(CliError::Other("the prompt is empty".into()));
+        return Err(CliError::MissingArgument("the prompt is empty".into()));
     }
     Ok(prompt)
 }
