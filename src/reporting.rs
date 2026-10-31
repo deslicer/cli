@@ -252,6 +252,8 @@ pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
         // Confirm which Observer the CLI is talking to (issue #248).
         CliError::EndpointNotAvailable(_) => Some("deslicer auth status"),
+        // Recover by listing known plans (issue #260).
+        CliError::PlanNotFound(_) => Some("deslicer change list"),
         // Plan id is not always known on the wire error; leave null (no placeholders).
         CliError::HumanApprovalRequired(_) => None,
         _ => None,
@@ -298,6 +300,7 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
         CliError::EndpointNotAvailable(_) => Some(
             "this Observer does not expose the requested API route; upgrade the backend or check --observer-api-url",
         ),
+        CliError::PlanNotFound(_) => Some("check the plan id or list plans"),
         _ => None,
     }
 }
@@ -590,6 +593,19 @@ mod tests {
             hint.contains("upgrade the backend") && hint.contains("--observer-api-url"),
             "hint should steer upgrade / URL check, got {hint:?}"
         );
+        assert_eq!(value["error"]["retryable"], false);
+    }
+
+    #[test]
+    fn plan_not_found_json_has_hint_and_next_command() {
+        let err = CliError::PlanNotFound("plan xyz not found".into());
+        let value = cli_error_json(&err);
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["error"]["code"], "plan.not_found");
+        assert_eq!(value["error"]["kind"], "plan");
+        assert_eq!(value["error"]["exit_code"], 11);
+        assert_eq!(value["error"]["next_command"], "deslicer change list");
+        assert_eq!(value["error"]["hint"], "check the plan id or list plans");
         assert_eq!(value["error"]["retryable"], false);
     }
 
