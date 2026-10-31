@@ -485,6 +485,11 @@ async fn client_get_plan_404_maps_to_exit_11() {
 
     assert!(matches!(err, CliError::PlanNotFound(_)));
     assert_eq!(err.exit_code(), 11);
+    // Exit-11 envelopes must carry hint + next_command (issue #260).
+    let envelope = deslicer_cli::reporting::cli_error_json(&err);
+    assert_eq!(envelope["error"]["code"], "plan.not_found");
+    assert_eq!(envelope["error"]["next_command"], "deslicer change list");
+    assert_eq!(envelope["error"]["hint"], "check the plan id or list plans");
 }
 
 #[tokio::test]

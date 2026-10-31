@@ -73,29 +73,20 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
+    // Always surface plan-not-found (and other load failures) via the error
+    // envelope — never print a plain-text line ahead of JSON (issue #260).
+    // `--jobs` historically did this (#207); the non-jobs path must match.
     let mut plan = match client.get_plan(&args.plan_id).await {
-        Ok(plan) => Some(plan),
-        Err(err) => {
-            // `--jobs` is a one-shot inspector: do not emit a placeholder success
-            // object when the plan itself failed to load (issue #207).
-            if args.jobs {
-                return map_cli_error(ctx.log_format, err);
-            }
-            eprintln!("could not load plan lifecycle status: {err}");
-            None
-        }
+        Ok(plan) => plan,
+        Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
-    let diff = if let Some(ref p) = plan {
-        load_diff(&client, p).await
-    } else {
-        None
-    };
+    let diff = load_diff(&client, &plan).await;
 
     // `--jobs` is a one-shot inspector: never enter the partial-progress poll loop.
     if args.jobs {
         let progress = progress_best_effort(&client, &args.plan_id).await;
-        let code = finish(plan.as_ref(), &progress, diff.as_ref());
+        let code = finish(Some(&plan), &progress, diff.as_ref());
         match load_execution_with_jobs(&client, &args.plan_id, args.execution_id.as_deref()).await {
             Ok(summary) => {
                 if summary.jobs.is_empty() {
@@ -115,11 +106,9 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         return code;
     }
 
-    if let Some(ref p) = plan {
-        if is_terminal_lifecycle(&p.status) {
-            let progress = progress_best_effort(&client, &args.plan_id).await;
-            return finish(plan.as_ref(), &progress, diff.as_ref());
-        }
+    if is_terminal_lifecycle(&plan.status) {
+        let progress = progress_best_effort(&client, &args.plan_id).await;
+        return finish(Some(&plan), &progress, diff.as_ref());
     }
 
     let deadline = Instant::now() + Duration::from_secs(args.timeout_secs);
@@ -130,7 +119,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 let progress = progress_best_effort(&client, &args.plan_id).await;
                 return finish(Some(&refreshed), &progress, diff.as_ref());
             }
-            plan = Some(refreshed);
+            plan = refreshed;
         }
 
         let progress = match client.progress(&args.plan_id).await {
@@ -139,7 +128,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         };
 
         if progress.is_terminal() || !progress.should_poll_for_updates() {
-            return finish(plan.as_ref(), &progress, diff.as_ref());
+            return finish(Some(&plan), &progress, diff.as_ref());
         }
 
         if Instant::now() >= deadline {
@@ -151,7 +140,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 progress.fully_completed_items,
                 progress.total_items
             );
-            return finish(plan.as_ref(), &progress, diff.as_ref());
+            return finish(Some(&plan), &progress, diff.as_ref());
         }
 
         eprintln!(
