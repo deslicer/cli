@@ -87,8 +87,9 @@ mod tests {
     }
 
     #[test]
-    fn does_not_overwrite_existing_schema_version() {
-        // Insert always sets the contract version; callers should not set their own.
+    fn overwrites_caller_schema_version() {
+        // Contract version is authoritative: a caller-supplied schema_version is
+        // replaced with SCHEMA_VERSION (issue #259 / #244).
         let out = attach_schema_version(json!({"schema_version": 99, "ok": true}));
         assert_eq!(out["schema_version"], 1);
         assert_eq!(out["ok"], true);
