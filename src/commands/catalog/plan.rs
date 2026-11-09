@@ -19,6 +19,7 @@ pub struct Args {
     #[arg(long)]
     pub name: Option<String>,
 
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 

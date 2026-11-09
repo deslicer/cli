@@ -78,3 +78,76 @@ fn change_status_help_documents_timeout() {
     );
     assert!(help.contains("Examples:"));
 }
+
+/// Flags called out as blank in the help sweep. Keep this list aligned with that set.
+const DOCUMENTED_FLAGS: &[(&[&str], &str)] = &[
+    (&["groups", "list"], "environment"),
+    (&["inventory", "list"], "environment"),
+    (&["inventory", "apps"], "environment"),
+    (&["inventory", "sync"], "environment"),
+    (&["inventory", "import-seed"], "environment"),
+    (&["init"], "environment"),
+    (&["catalog", "list"], "environment"),
+    (&["catalog", "show"], "environment"),
+    (&["catalog", "plan"], "environment"),
+    (&["license", "status"], "environment"),
+    (&["license", "bind"], "environment"),
+    (&["remediate", "analyse"], "environment"),
+    (&["remediate", "draft"], "environment"),
+    (&["upgrade", "plan"], "environment"),
+    (&["upgrade", "preview"], "environment"),
+    (&["upgrade", "readiness"], "environment"),
+    (&["enroll", "create"], "name"),
+    (&["enroll", "create"], "max-hosts"),
+    (&["enroll", "create"], "expires-days"),
+    (&["remediate", "analyse"], "host"),
+    (&["remediate", "analyse"], "app"),
+    (&["remediate", "analyse"], "group"),
+    (&["remediate", "draft"], "name"),
+];
+
+fn long_flag_help(path: &[&str], flag: &str) -> String {
+    let mut cmd = Cli::command();
+    let mut current = &mut cmd;
+    for name in path {
+        current = current
+            .find_subcommand_mut(name)
+            .unwrap_or_else(|| panic!("missing subcommand {name} in {}", path.join(" ")));
+    }
+    let argument = current
+        .get_arguments()
+        .find(|arg| arg.get_long() == Some(flag))
+        .unwrap_or_else(|| panic!("missing --{flag} on {}", path.join(" ")));
+    argument
+        .get_help()
+        .or_else(|| argument.get_long_help())
+        .map(|text| text.to_string())
+        .unwrap_or_default()
+}
+
+#[test]
+fn previously_blank_flags_have_one_line_help() {
+    assert_eq!(DOCUMENTED_FLAGS.len(), 23);
+    for (path, flag) in DOCUMENTED_FLAGS {
+        let help = long_flag_help(path, flag);
+        let label = format!("{} --{flag}", path.join(" "));
+        assert!(!help.trim().is_empty(), "empty help for `{label}`");
+        assert!(
+            !help.contains('\n'),
+            "help for `{label}` should be one line: {help}"
+        );
+        if *flag == "environment" {
+            assert!(
+                help.to_ascii_lowercase().contains("tenant slug"),
+                "`{label}` should say what --environment resolves to: {help}"
+            );
+        }
+    }
+
+    let hosts = long_flag_help(&["enroll", "create"], "max-hosts");
+    assert!(hosts.contains("500"), "{hosts}");
+    assert!(hosts.to_ascii_lowercase().contains("host"), "{hosts}");
+    let days = long_flag_help(&["enroll", "create"], "expires-days");
+    assert!(days.contains("30"), "{days}");
+    assert!(days.to_ascii_lowercase().contains("day"), "{days}");
+}

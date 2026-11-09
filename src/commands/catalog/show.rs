@@ -9,6 +9,7 @@ pub struct Args {
     /// Catalog blueprint id (from `catalog list`)
     pub id: String,
 
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 }

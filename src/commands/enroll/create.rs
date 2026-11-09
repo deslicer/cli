@@ -18,12 +18,15 @@ pub struct Args {
     #[arg(long, value_parser = ["insights", "bootstrap"])]
     pub purpose: String,
 
+    /// Label stored with the enrollment token.
     #[arg(long)]
     pub name: Option<String>,
 
+    /// Maximum hosts this token can enroll (1-10000). Default 500.
     #[arg(long)]
     pub max_hosts: Option<u32>,
 
+    /// Token lifetime in days (1-365). Default 30.
     #[arg(long)]
     pub expires_days: Option<u32>,
 
