@@ -20,6 +20,9 @@ pub use validate::{
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+    use std::path::Path;
+
     use super::*;
 
     fn groups(names: &[&str]) -> Vec<String> {
@@ -63,8 +66,28 @@ mod tests {
 \n\
 destinations:\n\
 \x20\x20- inventory_group: indexers\n\
-\x20\x20\x20\x20apps:\n";
+\x20\x20\x20\x20apps: []\n";
         assert_eq!(result.content, expected);
+    }
+
+    #[test]
+    fn generated_scaffold_passes_environment_validator() {
+        let result = generate_environment_yaml("dap-102", "DAP 102", &groups(&["Workers"]));
+        assert!(
+            result
+                .content
+                .contains("inventory_group: Workers\n    apps: []\n"),
+            "{}",
+            result.content
+        );
+        let known: HashSet<String> = ["Workers".to_string()].into_iter().collect();
+        let report =
+            validate_environment_yaml(&result.content, &result.path, Path::new("."), Some(&known));
+        assert!(
+            report.is_ok(),
+            "scaffold must pass inventory validate: {:?}",
+            report.issues
+        );
     }
 
     #[test]
@@ -124,10 +147,10 @@ destinations:\n\
         ));
         assert!(result
             .content
-            .contains("  - inventory_group: forwarders\n    apps:\n"));
+            .contains("  - inventory_group: forwarders\n    apps: []\n"));
         assert!(result
             .content
-            .contains("  - inventory_group: search_heads\n    apps:\n"));
+            .contains("  - inventory_group: search_heads\n    apps: []\n"));
         assert_eq!(result.added, vec!["search_heads".to_string()]);
         assert!(result.removed_empty.is_empty());
         assert!(result.blocked.is_empty());
