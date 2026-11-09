@@ -43,6 +43,7 @@ pub struct Args {
     #[arg(long, default_value = "auto")]
     pub provider: String,
 
+    /// Tenant slug; resolves to the environment file stem and GitHub Environment name.
     #[arg(long)]
     pub environment: Option<String>,
 

@@ -18,6 +18,7 @@ pub struct Args {
     #[arg(long, value_name = "FILE")]
     pub file: PathBuf,
 
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 

@@ -17,6 +17,7 @@ use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
+    /// Environment filename stem (GitHub Environment / tenant slug).
     #[arg(long)]
     pub environment: Option<String>,
 

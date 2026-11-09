@@ -39,8 +39,8 @@ pub fn generate_environment_yaml(
 
 /// Merge Observer groups with an existing file.
 ///
-/// * New groups are appended with an empty `apps:` list.
-/// * Existing `apps:` blocks for surviving groups are preserved.
+/// * New groups, and groups whose `apps:` value is null, are written as `apps: []`.
+/// * Existing `apps:` blocks that list entries or an inline value are preserved.
 /// * Removed groups with no `source_path` apps are dropped.
 /// * Removed groups that still list apps are kept and reported as blocked.
 pub fn merge_environment_yaml(
@@ -163,10 +163,15 @@ fn emit_blocked_groups(
 fn emit_destination(lines: &mut Vec<String>, name: &str, existing: Option<&ExistingAppsBlock>) {
     lines.push(format!("  - inventory_group: {}", format_scalar(name)));
     match existing {
-        Some(block) => {
+        Some(block) if apps_block_has_content(block) => {
             lines.push(format!("    apps:{}", block.inline_suffix));
             lines.extend(block.body_lines.iter().cloned());
         }
-        None => lines.push("    apps:".to_string()),
+        // A bare `apps:` is YAML null. `inventory validate` requires a list.
+        Some(_) | None => lines.push("    apps: []".to_string()),
     }
+}
+
+fn apps_block_has_content(block: &ExistingAppsBlock) -> bool {
+    !block.inline_suffix.trim().is_empty() || !block.body_lines.is_empty()
 }
