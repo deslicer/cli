@@ -49,6 +49,12 @@ can use the bundled [deslicer-repo-setup skill](.agents/skills/deslicer-repo-set
 Ask: “Use deslicer-repo-setup to configure this repository for Deslicer.”
 It separates Git initialization, CI scaffolding, remote creation, and binding.
 
+Agents that run the CLI should follow the
+[deslicer-cli skill](.agents/skills/deslicer-cli/SKILL.md): `-o json`, the <!-- pragma: allowlist secret -->
+[exit-code contract](docs/exit-codes.md), and no approve, deploy, or `--yes`
+without an explicit human go. Cursor loads the same skill from
+[`.cursor/skills/deslicer-cli`](.cursor/skills/deslicer-cli). <!-- pragma: allowlist secret -->
+
 New to the CLI? Follow the [Quickstart](docs/quickstart.md). The fastest way to a first plan — no GitHub App or OIDC setup required — is the bundle flow:
 
 ```bash
@@ -98,6 +104,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | **agent** | `deslicer agent run` | One-shot run (Orchestrator by default; `-a` for name or id) |
 | **agent** | `deslicer agent resume` | Continue the last conversation (REPL on a TTY; pass a prompt otherwise) |
 | **agent** | `deslicer agent logs` | Read or follow a run (`--follow`; omit the id for the latest) |
+| | `deslicer schema` | Machine-readable command, flag, and exit-code schema (JSON) | <!-- pragma: allowlist secret -->
 | | `deslicer update` | Self-update the binary from GitHub Releases (`--check` to preview) |
 
 ### Global flags and environment
@@ -108,7 +115,7 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 | `--observer-api-url` / `OBSERVER_API_URL` | _(unset)_ | Air-gapped escape hatch — skip resolve; requires `DESLICER_API_TOKEN` |
 | `DESLICER_API_TOKEN` (env only) | _(unset)_ | Observer API key (`tools` scope) for direct Observer access (bundle flow or git-sourced CI). Create under **Platform → API keys**. Not DAI's stored admin/read key. |
 | `--ci-platform` | `auto` | Force platform: `github`, `gitlab`, `azure`, `bitbucket`, `local` |
-| `--log-format` | `human` | `human` or `json` |
+| `-o`, `--output` / `DESLICER_OUTPUT` | json when stdout is not a TTY | `json` or `human`. `--json` is a hidden alias. `--log-format` is deprecated. | <!-- pragma: allowlist secret -->
 | `DESLICER_DOCS_BASE_URL` (env only) | GitHub `cli` blob on `main` | Hosted docs root when `/cli` exists (today `docs.deslicer.io` is Enterprise-only) |
 
 ## GitHub Actions
@@ -151,6 +158,8 @@ See [docs/installation.md](docs/installation.md) and [docs/quickstart.md](docs/q
 - [Local testing](docs/local-testing.md) — build from source and test against a local Observer
 - [Installation](docs/installation.md) — Homebrew, cargo, curl, Docker, and CI platform matrix
 - [OIDC troubleshooting](docs/oidc-troubleshooting.md) — exit codes and fixes
+- [Exit codes](docs/exit-codes.md) — process exit-code contract
+- [CLI skill](.agents/skills/deslicer-cli/SKILL.md) — how agents should run the CLI <!-- pragma: allowlist secret -->
 - [Environments](docs/environments.md) — `.deslicer/environments/` convention
 - [Contributing](docs/contributing.md) — local dev and PR guidelines
 - [Release process](docs/release-process.md) — tagging, signing, and publish pipeline

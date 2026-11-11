@@ -51,3 +51,4 @@ even though exit **4** is the auth class; agents may poll.
 
 - Per-platform OIDC troubleshooting: [oidc-troubleshooting.md](oidc-troubleshooting.md)
 - CI output sinks: [ci-outputs.md](ci-outputs.md)
+- Agent skill: [deslicer-cli](../.agents/skills/deslicer-cli/SKILL.md) <!-- pragma: allowlist secret -->
