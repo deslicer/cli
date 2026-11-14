@@ -37,8 +37,9 @@ If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), th
 |-----|-------------|
 | `plan_id` | External plan id (UUID v4) — use this in all follow-up commands |
 | `plan_row_id` | Internal row id (UUID v7) |
-| `plan_status` | e.g. `draft`, `pending_approval`, `approved_unsigned`, `rejected`, `failed` |
-| `plan_summary` | Human-readable summary (change counts when a dry-run diff is available) |
+| `plan_status` | e.g. `draft`, `pending_approval`, `no_changes`, `approved_unsigned`, `rejected`, `failed` |
+| `plan_outcome` | `already_synced` when compile finished with `no_changes` (nothing to approve or run). Omitted otherwise. |
+| `plan_summary` | Human-readable summary. For `no_changes`: compiled settings already match the host. |
 | `diff_total` | Total change items (verify / plan after compile) |
 | `diff_additions` | Additions in the dry-run diff |
 | `diff_modifications` | Modifications in the dry-run diff |
