@@ -126,6 +126,13 @@ pub fn emit_diff_counts(counts: &DiffCounts) -> i32 {
     emit_to_sink(&diff_count_pairs(counts))
 }
 
+const ALREADY_SYNCED_SUMMARY: &str =
+    "No change plan required. Compiled settings already match the host.";
+
+fn is_already_synced(status: &str) -> bool {
+    status == "no_changes"
+}
+
 fn plan_summary_markdown(
     title: &str,
     plan: &ChangePlan,
@@ -141,6 +148,9 @@ fn plan_summary_markdown(
         format!("| Row ID | `{}` |", plan.id),
         format!("| Status | **{}** |", plan.status),
     ];
+    if is_already_synced(&plan.status) {
+        lines.push("| Outcome | No change plan required |".to_string());
+    }
     let summary = plan.display_summary();
     if !summary.is_empty() {
         lines.push(format!("| Summary | {summary} |"));
@@ -155,6 +165,11 @@ fn plan_summary_markdown(
         }
     }
     let mut body = lines.join("\n");
+    if is_already_synced(&plan.status) {
+        body.push_str("\n\n");
+        body.push_str(ALREADY_SYNCED_SUMMARY);
+        body.push_str(" There is nothing to approve or run.");
+    }
     if let Some(labels) = preview {
         body.push_str("\n\n");
         body.push_str(&labels.markdown_section());
@@ -203,7 +218,9 @@ fn emit_plan_metadata(
     preview: Option<&PrPreviewLabels>,
     stdout_fallback: bool,
 ) -> i32 {
-    let summary = if let Some(labels) = preview.filter(|value| !value.is_empty()) {
+    let summary = if is_already_synced(&plan.status) {
+        ALREADY_SYNCED_SUMMARY.to_string()
+    } else if let Some(labels) = preview.filter(|value| !value.is_empty()) {
         let base = if let Some(counts) = diff {
             counts.human_summary()
         } else {
@@ -225,6 +242,9 @@ fn emit_plan_metadata(
         ("plan_status", plan.status.clone()),
         ("plan_summary", summary),
     ];
+    if is_already_synced(&plan.status) {
+        pairs.push(("plan_outcome", "already_synced".to_string()));
+    }
     if let Some(counts) = diff {
         pairs.extend(diff_count_pairs(counts));
     }
@@ -279,6 +299,10 @@ fn plans_summary_markdown(plans: &[ChangePlan]) -> String {
             plan.status
         ));
     }
+    if plans.iter().any(|plan| is_already_synced(&plan.status)) {
+        lines.push(String::new());
+        lines.push(ALREADY_SYNCED_SUMMARY.to_string());
+    }
     lines.join("\n")
 }
 
@@ -293,7 +317,11 @@ pub fn emit_plan_status(
 ) -> i32 {
     let _ = crate::json_doc::print_success_compact(progress);
     let plan_status = plan.map(|p| p.status.as_str()).unwrap_or_default();
-    let plan_summary = plan.map(ChangePlan::display_summary).unwrap_or_default();
+    let plan_summary = if is_already_synced(plan_status) {
+        ALREADY_SYNCED_SUMMARY.to_string()
+    } else {
+        plan.map(ChangePlan::display_summary).unwrap_or_default()
+    };
     let mut pairs = vec![
         ("plan_id", progress.plan_id.clone()),
         ("progress_status", progress.progress_status.clone()),
@@ -305,6 +333,9 @@ pub fn emit_plan_status(
         ("plan_status", plan_status.to_string()),
         ("plan_summary", plan_summary),
     ];
+    if is_already_synced(plan_status) {
+        pairs.push(("plan_outcome", "already_synced".to_string()));
+    }
     if let Some(counts) = diff {
         pairs.extend(diff_count_pairs(counts));
     }
@@ -471,5 +502,22 @@ mod tests {
         let markdown = plans_summary_markdown(&plans);
         assert!(markdown.contains("ext-1"));
         assert!(markdown.contains("ext-2"));
+    }
+
+    #[test]
+    fn already_synced_summary_names_the_outcome() {
+        let plan = ChangePlan {
+            id: "row".into(),
+            plan_id: Some("ext".into()),
+            status: "no_changes".into(),
+            name: None,
+            summary: None,
+            created_at: None,
+            updated_at: None,
+        };
+        let markdown = plan_summary_markdown("Deslicer plan", &plan, None, None);
+        assert!(markdown.contains("No change plan required"));
+        assert!(markdown.contains(ALREADY_SYNCED_SUMMARY));
+        assert!(markdown.contains("nothing to approve"));
     }
 }
