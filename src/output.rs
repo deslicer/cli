@@ -512,6 +512,8 @@ mod tests {
             status: "no_changes".into(),
             name: None,
             summary: None,
+            created_at: None,
+            updated_at: None,
         };
         let markdown = plan_summary_markdown("Deslicer plan", &plan, None, None);
         assert!(markdown.contains("No change plan required"));
