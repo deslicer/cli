@@ -34,6 +34,12 @@ fn write_session(home: &Path, observer: &str) {
 fn cli(home: &Path, observer: &str) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_deslicer")); // pragma: allowlist secret
     cmd.env_clear();
+    // Windows sockets need SystemRoot (and friends) to initialise.
+    for key in ["SystemRoot", "SYSTEMROOT", "windir", "TEMP", "TMP"] {
+        if let Ok(value) = std::env::var(key) {
+            cmd.env(key, value);
+        }
+    }
     cmd.env("HOME", home)
         .env("PATH", std::env::var("PATH").unwrap_or_default())
         .env("DESLICER_CONFIG_DIR", home.join("config")) // pragma: allowlist secret
