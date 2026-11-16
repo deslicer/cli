@@ -26,17 +26,21 @@ jobs:
       - name: Checkout CLI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Require CROSS_REPO_WORKFLOW_TOKEN
+      - name: Check CROSS_REPO_WORKFLOW_TOKEN
+        id: token
         env:
           CROSS_REPO_WORKFLOW_TOKEN: ${{ secrets.CROSS_REPO_WORKFLOW_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${CROSS_REPO_WORKFLOW_TOKEN:-}" ]; then
-            echo "::error::Missing secret CROSS_REPO_WORKFLOW_TOKEN (fail-closed)"
-            exit 1
+            echo "present=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::CROSS_REPO_WORKFLOW_TOKEN is unset; skipping CLI docs sync. See .github/workflows/README.md."
+          else
+            echo "present=true" >> "${GITHUB_OUTPUT}"
           fi
 
       - name: Clone docs and copy pages
+        if: steps.token.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_WORKFLOW_TOKEN }}
           GIT_SHA: ${{ github.sha }}

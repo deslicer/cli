@@ -17,7 +17,7 @@ Review and auto-fix workflows are the same `deslicer-code-harness` `@v1` reuseab
 | Workflow | What it checks |
 | --- | --- |
 | `ci.yml` (`Quality Gate`) | rustfmt, clippy `-D warnings`, `cargo test --all-features` on Linux/macOS/Windows, `deslicer --help` smoke, `shellcheck` on `scripts/install.sh`. Draft PRs and bot automation branches skip. |
-| `docs-sync.yml` | Push to `main` when `docs/**` (or the sync script/catalog) changes: copy curated pages into `deslicer/docs` `products/cli/` and open a PR. Does **not** publish to `docs.deslicer.io` (enterprise allowlist). Fail-closed without `CROSS_REPO_WORKFLOW_TOKEN`. |
+| `docs-sync.yml` | Push to `main` when `docs/**` (or the sync script/catalog) changes: copy curated pages into `deslicer/docs` `products/cli/` and open a PR. Does **not** publish to `docs.deslicer.io` (enterprise allowlist). Skips with a notice when `CROSS_REPO_WORKFLOW_TOKEN` is unset (the job stays green). | <!-- pragma: allowlist secret -->
 | `secret-scan.yml` | TruffleHog `--only-verified` (same posture as DAP) |
 | `workflow-syntax-check.yml` | actionlint on changed workflow YAML |
 | `build-main.yml` | Five release-target edge builds after merge to `main` |
@@ -41,7 +41,7 @@ Copy these from deslicer-ai / DAP (org inherit is enough if the org already shar
 | `CURSOR_API_KEY` | Code review, `@slicer-fix`, CI auto-fix, issue triage |
 | `OPENAI_API_KEY` | Optional Codex fallback in code review |
 | `CURSOR_CLOUD_API_KEY` | `agent:ready` → Cloud Agent PR (per-author `*_CURSOR_CLOUD_API_KEY` also works) |
-| `CROSS_REPO_WORKFLOW_TOKEN` | `docs-sync.yml` PR into `deslicer/docs` (`contents:write` + `pull-requests:write` on that repo) |
+| `CROSS_REPO_WORKFLOW_TOKEN` | `docs-sync.yml` PR into `deslicer/docs` (`contents:write` + `pull-requests:write` on that repo). The job skips with a notice when this secret is unset. | <!-- pragma: allowlist secret -->
 
 Existing publish secrets (`CARGO_REGISTRY_TOKEN`, `HOMEBREW_TAP_TOKEN`) are unchanged.
 

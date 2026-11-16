@@ -91,6 +91,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          close_stale_bump_prs() {
+            local keep_tag="$1" latest json number
+            latest="$(bash scripts/cut-release.sh latest-version || true)"
+            json="$(
+              gh pr list --repo "${GITHUB_REPOSITORY}" --base main --state open \
+                --limit 100 --json number,headRefName
+            )"
+            while IFS= read -r number; do
+              [ -n "${number}" ] || continue
+              gh pr close "${number}" --repo "${GITHUB_REPOSITORY}" \
+                --comment "Superseded by ${keep_tag}. Cut release keeps a single open bump PR."
+            done < <(printf '%s' "${json}" | bash scripts/cut-release.sh stale-bump-prs "${keep_tag}" "${latest}")
+          }
           echo "${REASON}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -98,6 +111,7 @@ jobs:
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "release ${TAG} already published"
             echo "tagged=false" >> "${GITHUB_OUTPUT}"
+            close_stale_bump_prs "${TAG}"
             exit 0
           fi
 
@@ -117,6 +131,14 @@ jobs:
             if [ -n "${existing}" ]; then
               echo "reusing open bump PR on ${existing}; refreshing it from main"
               git push --force origin "HEAD:refs/heads/${existing}"
+              pr_number="$(
+                gh pr list --repo "${GITHUB_REPOSITORY}" --base main --state open \
+                  --head "${existing}" --json number -q '.[0].number'
+              )"
+              if [ -n "${pr_number}" ]; then
+                gh pr edit "${pr_number}" --repo "${GITHUB_REPOSITORY}" \
+                  --title "chore(release): bump version to ${VERSION}"
+              fi
             else
               branch="release/${TAG}"
               # A stale branch with no open PR (e.g. a closed duplicate) is safe to overwrite.
@@ -126,6 +148,7 @@ jobs:
                 --base main --head "${branch}"
             fi
             echo "tagged=false" >> "${GITHUB_OUTPUT}"
+            close_stale_bump_prs "${TAG}"
             exit 0
           fi
 
@@ -133,6 +156,7 @@ jobs:
             git tag "${TAG}"
             git push origin "refs/tags/${TAG}"
           fi
+          close_stale_bump_prs "${TAG}"
           echo "tagged=true" >> "${GITHUB_OUTPUT}"
 
   publish:
