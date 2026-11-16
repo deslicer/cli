@@ -1,7 +1,8 @@
 use clap::Args as ClapArgs;
 use serde_json::json;
 
-use crate::auth_resolution::{AuthCredential, AuthCredentialResolver};
+use crate::auth_resolution::{AuthCredential, AuthCredentialResolver, LEGACY_DEV_TOKEN};
+use crate::ci::{self, CiPlatform};
 use crate::commands::auth::format::{login_human, login_unverified_human, print_output};
 use crate::commands::auth::probe::{identity_probe_forbidden, identity_probe_unavailable};
 use crate::commands::pipeline::{authenticate, map_cli_error, AuthenticatedSession};
@@ -27,6 +28,20 @@ pub struct Args {
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
+    // An implicit local automation login has no reason to consult the OS
+    // keyring, which may wait for an unlock or access prompt.
+    if interactive::is_non_interactive()
+        && !args.wait
+        && !args.no_wait
+        && ci::detect_platform(ctx.ci_override) == CiPlatform::Local
+        && !crate::observer_token::direct_auth_ready(&ctx)
+        // Preserve the retired-token diagnostic and existing device precedence
+        // when that legacy variable is explicitly present.
+        && std::env::var_os(LEGACY_DEV_TOKEN).is_none()
+    {
+        return map_cli_error(ctx.log_format, local_login_error());
+    }
+
     let credential = match AuthCredentialResolver::new(&ctx).resolve() {
         Ok(credential) => credential,
         Err(err) => return map_cli_error(ctx.log_format, err),
@@ -36,9 +51,6 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         AuthCredential::ExpiredDevice(_) | AuthCredential::None
     ) {
         return if interactive::is_non_interactive() && !args.wait && !args.no_wait {
-            // Fail fast for automation: do not start a portal device flow against
-            // a remote host without an explicit --wait / --no-wait (preserves #237 / D1).
-            // Agents pass --no-wait to start the flow, print codes, and exit pending.
             map_cli_error(ctx.log_format, local_login_error())
         } else {
             device_login(ctx, should_poll(&args)).await
