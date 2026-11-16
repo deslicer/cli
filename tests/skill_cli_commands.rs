@@ -81,6 +81,47 @@ fn discovery_copies_match_the_canonical_skill() {
     }
 }
 
+#[test]
+fn fenced_blocks_contain_no_html_comments() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for prefix in [".agents/skills", ".cursor/skills", ".claude/skills"] {
+        let path = skill_file(&root, prefix);
+        let markdown = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
+        for (index, (lang, block)) in fenced_blocks(&markdown).into_iter().enumerate() {
+            assert!(
+                !block.contains("<!--"),
+                "{} fence {index} contains an HTML comment",
+                path.display()
+            );
+            if lang == "json" {
+                serde_json::from_str::<serde_json::Value>(block.trim()).unwrap_or_else(|err| {
+                    panic!("{} fence {index} is not JSON: {err}", path.display())
+                });
+            }
+        }
+    }
+}
+
+#[test]
+fn skill_markdown_links_resolve() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for prefix in [".agents/skills", ".cursor/skills", ".claude/skills"] {
+        let path = skill_file(&root, prefix);
+        let markdown = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
+        let dir = path.parent().expect("skill directory");
+        for target in markdown_link_targets(&markdown) {
+            let relative = target.split('#').next().unwrap_or(target.as_str());
+            if relative.is_empty() {
+                continue;
+            }
+            let resolved = dir.join(relative);
+            assert!(resolved.is_file(), "{} links to {target}", path.display());
+        }
+    }
+}
+
 fn skill_markdown() -> String {
     let path = skill_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")), ".agents/skills");
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
@@ -90,6 +131,46 @@ fn skill_file(root: &std::path::Path, skills_dir: &str) -> PathBuf {
     root.join(skills_dir)
         .join(format!("{CLI_NAME}-cli"))
         .join("SKILL.md")
+}
+
+fn fenced_blocks(markdown: &str) -> Vec<(String, String)> {
+    let mut blocks = Vec::new();
+    let mut lang = String::new();
+    let mut body: Option<String> = None;
+    for line in markdown.lines() {
+        if let Some(text) = body.as_mut() {
+            if line.starts_with("```") {
+                blocks.push((std::mem::take(&mut lang), std::mem::take(text)));
+                body = None;
+            } else {
+                text.push_str(line);
+                text.push('\n');
+            }
+            continue;
+        }
+        if line.starts_with("```") {
+            lang = line.trim_start_matches('`').trim().to_string();
+            body = Some(String::new());
+        }
+    }
+    if let Some(text) = body {
+        blocks.push((lang, text));
+    }
+    blocks
+}
+
+fn markdown_link_targets(markdown: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    let mut rest = markdown;
+    while let Some(start) = rest.find("](") {
+        rest = &rest[start + 2..];
+        let Some(end) = rest.find(')') else {
+            break;
+        };
+        targets.push(rest[..end].to_string());
+        rest = &rest[end + 1..];
+    }
+    targets
 }
 
 fn table_line(markdown: &str, code: i32) -> String {
