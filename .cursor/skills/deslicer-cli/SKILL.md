@@ -13,14 +13,14 @@ Agents propose and inspect. Humans approve and run. The CLI is non-interactive: 
 
 Use this skill before any `deslicer` invocation: install, login, inventory, change plans, or a failed exit. <!-- pragma: allowlist secret -->
 
-Do not use it to approve, deploy, verify, or pass `--yes` on your own. Those need an explicit human instruction in this turn. Repository and CI setup is `[deslicer-repo-setup](../../../.agents/skills/deslicer-repo-setup/SKILL.md)`. A propose/inspect-only handoff is `[deslicer-cli-propose-inspect](../../../.agents/skills/deslicer-cli-propose-inspect/SKILL.md)`. <!-- pragma: allowlist secret -->
+Do not use it to approve, deploy, verify, or pass `--yes` on your own. Those need an explicit human instruction in this turn. Repository and CI setup is [deslicer-repo-setup](../../../.agents/skills/deslicer-repo-setup/SKILL.md). A propose/inspect-only handoff is [deslicer-cli-propose-inspect](../../../.agents/skills/deslicer-cli-propose-inspect/SKILL.md). <!-- pragma: allowlist secret -->
 
 ## Install and version
 
 Install from [docs/installation.md](../../../docs/installation.md): Homebrew, `cargo install deslicer-cli`, or `scripts/install.sh`. Confirm the binary you will execute: <!-- pragma: allowlist secret -->
 
 ```bash
-deslicer --version # pragma: allowlist secret
+deslicer --version
 ```
 
 Released v1.8.0 has `-o json` and the error envelope. It does not have `schema`. A build of current `main` does. If `deslicer schema` exits 2 with `usage.invalid`, discover commands with `--help` and keep using `-o json`. <!-- pragma: allowlist secret -->
@@ -28,9 +28,9 @@ Released v1.8.0 has `-o json` and the error envelope. It does not have `schema`.
 ## Discover commands
 
 ```bash
-deslicer schema # pragma: allowlist secret
-deslicer schema --command "change plan" # pragma: allowlist secret
-deslicer change plan --help # pragma: allowlist secret
+deslicer schema
+deslicer schema --command "change plan"
+deslicer change plan --help
 ```
 
 `--help --json` is the same document as `schema` for that command. Prefer `schema` over help text: some flags still ship with a blank description. If the description is empty, do not invent a meaning. Read `docs/` or ask.
@@ -100,8 +100,8 @@ Exit 0 does not mean `pending_approval`. Read `status`. `draft` and `not_started
 Check identity and origin before any other call. Never print tokens, dump the environment, enable shell tracing, or pass a token in argv. `DESLICER_API_TOKEN` is env-only. `DESLICER_DEV_TOKEN` is rejected; unset it. <!-- pragma: allowlist secret -->
 
 ```bash
-deslicer -o json --no-input auth whoami # pragma: allowlist secret
-deslicer -o json --no-input auth status # pragma: allowlist secret
+deslicer -o json --no-input auth whoami
+deslicer -o json --no-input auth status
 ```
 
 `whoami` is the identity check and exits 4 when nothing is logged in. `auth status` exits 0 even when logged out; use it for origin, not as proof of access.
@@ -115,7 +115,7 @@ deslicer -o json --no-input auth status # pragma: allowlist secret
 Device login from an agent:
 
 ```bash
-deslicer -o json --no-input auth login --no-wait # pragma: allowlist secret
+deslicer -o json --no-input auth login --no-wait
 ```
 
 Exit 4, `auth.pending`. Stdout has `user_code` and `verification_uri` (`logged_in: false`). Show those to the human and stop. After they say they approved, run `deslicer -o json --no-input auth login --wait`. `--no-input` never opens a browser. Without `--no-wait` or `--wait`, a non-interactive `auth login` fails fast instead of starting the flow. <!-- pragma: allowlist secret -->
@@ -136,15 +136,15 @@ Stop at the first step the human did not ask for. Plan ids are the external UUID
 2. **Init, only if this repo has no Deslicer config.** On a GitHub remote, `auto` selects GitHub App/OIDC (`github`), not the tools-token path. For the token path: <!-- pragma: allowlist secret -->
 
 ```bash
-deslicer -o json --no-input init --provider github-token --environment example-prod # pragma: allowlist secret
+deslicer -o json --no-input init --provider github-token --environment example-prod
 ```
 
    If init exits 1 with `template path … is not allowlisted`, you hit the App/OIDC templates. Pass `--provider github-token` for the token path, or `github` only when the human asked for the App. Then `deslicer -o json inventory validate --environment example-prod`. A null `apps:` key fails validation with `apps must be a list`. Set `apps: []` or real `source_path` entries, then validate again. <!-- pragma: allowlist secret -->
 3. **Plan.** Only when the human asked for a plan. This call creates it:
 
 ```bash
-deslicer -o json groups list --environment example-prod # pragma: allowlist secret
-deslicer -o json change plan --environment example-prod --target-group example_servers --name "example-change" # pragma: allowlist secret
+deslicer -o json groups list --environment example-prod
+deslicer -o json change plan --environment example-prod --target-group example_servers --name "example-change"
 ```
 
    `--target-group` is a group UUID or an exact `name` from `groups list`. `--no-wait` returns after the compile trigger; status may still be `draft`.
@@ -177,18 +177,18 @@ deslicer -o json change plan --environment example-prod --target-group example_s
 Identity and origin, before any plan:
 
 ```bash
-deslicer --version # pragma: allowlist secret
-deslicer schema --command "auth status" # pragma: allowlist secret
-deslicer -o json --no-input auth whoami # pragma: allowlist secret
-deslicer -o json --no-input auth status # pragma: allowlist secret
+deslicer --version
+deslicer schema --command "auth status"
+deslicer -o json --no-input auth whoami
+deslicer -o json --no-input auth status
 ```
 
 Create a plan and stop. `example-prod` and `example_servers` stand in for the human's environment and group. Do not copy them onto a real tenant:
 
 ```bash
-deslicer -o json change plan --environment example-prod --target-group example_servers --name "example-change" # pragma: allowlist secret
-deslicer -o json change show --plan-id "$PLAN_ID" # pragma: allowlist secret
-deslicer change validate --plan-id "$PLAN_ID" --format json --report-only # pragma: allowlist secret
+deslicer -o json change plan --environment example-prod --target-group example_servers --name "example-change"
+deslicer -o json change show --plan-id "$PLAN_ID"
+deslicer change validate --plan-id "$PLAN_ID" --format json --report-only
 ```
 
 Report `plan_id`, `status`, and `url`. Stop.
@@ -199,7 +199,7 @@ Direct CI, token already in the environment:
 
 ```bash
 export OBSERVER_API_URL="https://observer.example.test"
-deslicer -o json --no-input auth whoami # pragma: allowlist secret
+deslicer -o json --no-input auth whoami
 ```
 
 If `details.verified` is false, the next real call decides. A 401 ends the task until a human replaces the token.
