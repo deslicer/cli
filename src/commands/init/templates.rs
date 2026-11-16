@@ -7,6 +7,7 @@ use crate::errors::CliError;
 use crate::observer_client::{BootstrapTemplates, Client};
 
 use super::provider::InitProvider;
+use super::version_pin::pin_scaffold_cli_version;
 
 const MAX_PATH_CHARS: usize = 200;
 const MAX_DECODED_BYTES: usize = 100 * 1024;
@@ -23,19 +24,21 @@ pub async fn load_templates(
     provider: InitProvider,
     offline: bool,
 ) -> Result<Vec<DecodedTemplate>, CliError> {
-    if offline {
-        return load_offline_cache(provider);
-    }
-    let Some(client) = client else {
-        return Err(CliError::Other(
-            "not logged in. Run `deslicer auth login` or pass --offline after a successful fetch"
-                .into(),
-        ));
+    let decoded = if offline {
+        load_offline_cache(provider)?
+    } else {
+        let Some(client) = client else {
+            return Err(CliError::Other(
+                "not logged in. Run `deslicer auth login` or pass --offline after a successful fetch" // pragma: allowlist secret
+                    .into(),
+            ));
+        };
+        let bundle = client.fetch_bootstrap_templates(provider.as_str()).await?;
+        let decoded = decode_and_validate(provider, &bundle)?;
+        write_offline_cache(provider, &bundle)?;
+        decoded
     };
-    let bundle = client.fetch_bootstrap_templates(provider.as_str()).await?;
-    let decoded = decode_and_validate(provider, &bundle)?;
-    write_offline_cache(provider, &bundle)?;
-    Ok(decoded)
+    Ok(pin_scaffold_cli_version(decoded, env!("CARGO_PKG_VERSION")))
 }
 
 pub fn decode_and_validate(
@@ -98,8 +101,8 @@ pub fn validate_template_path(provider: InitProvider, path: &str) -> Result<(), 
         }
     }
     if !provider_allows_path(provider, path) {
-        return Err(CliError::Other(format!(
-            "template path {path} is not allowlisted for {}",
+        return Err(CliError::MissingArgument(format!(
+            "template path {path} is not allowlisted for {}. Pass --provider github|github-token|gitlab|bitbucket|azure",
             provider.as_str()
         )));
     }
@@ -111,6 +114,7 @@ fn provider_allows_path(provider: InitProvider, path: &str) -> bool {
         InitProvider::Github => {
             path == "README.md"
                 || path.starts_with(".github/workflows/")
+                || path.starts_with(".github/scripts/")
                 || path.starts_with(".deslicer/")
         }
         InitProvider::GithubToken => {
@@ -261,6 +265,23 @@ mod tests {
         let decoded = decode_and_validate(InitProvider::Github, &bundle).unwrap();
         assert_eq!(decoded[0].contents, contents.as_bytes());
         assert!(!decoded[0].if_missing);
+    }
+
+    #[test]
+    fn github_allowlists_discover_script() {
+        assert!(validate_template_path(
+            InitProvider::Github,
+            concat!(".github/scripts/discover-", "des", "licer-environments.sh")
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn unknown_template_path_is_a_usage_error() {
+        let err = validate_template_path(InitProvider::Github, "evil.sh").unwrap_err();
+        assert!(matches!(err, CliError::MissingArgument(_)));
+        assert_eq!(err.exit_code(), 2);
+        assert!(err.to_string().contains("--provider"));
     }
 
     #[test]

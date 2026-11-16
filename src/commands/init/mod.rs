@@ -12,6 +12,7 @@ mod environment;
 mod github_env_recipe;
 mod provider;
 mod templates;
+mod version_pin;
 mod write;
 
 pub use provider::InitProvider;
