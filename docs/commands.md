@@ -163,6 +163,7 @@ List commands accept `--filter` (case-insensitive substring) plus `--limit` / `-
 | `worker` | Print worker install recipes (device session) |  |
 | `worker instructions` | Print a worker install recipe from the portal (no SSH) |  |
 | `repo` | Provision or refresh a GitHub App config repo (device session) |  |
+| `repo auth` | Show the supported GitHub authentication paths for repository bootstrap | |
 | `repo bootstrap` | Create a private org repo via the GitHub App (dry-run unless --yes) | mutating, dry-run unless --yes |
 | `repo refresh` | Open a workflow refresh pull request for one repo | mutating |
 | `repo status` | List linked repos and bootstrap job fields |  |
