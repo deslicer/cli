@@ -114,3 +114,20 @@ Observer URL, environment, and target group from
 
 Live verification against a lab tenant remains a follow-up (device session +
 worker host). This runbook is the offline contract for operators and agents.
+
+## Offline harness
+
+`tests/e2e_plan_runner.rs` runs the same sequence against a fake Observer and
+portal. It checks:
+
+- enroll create writes a token file, worker instructions returns a snippet,
+  `change plan --source-dir` returns a pending plan, and `change approve`
+  moves it to approved
+- enroll with no session exits **4**
+- a worker recipe endpoint that returns 503 exits **10**
+- a compile result of `no_changes` exits **0**
+
+The harness does not SSH, deploy, or call a real tenant. A passing live
+checklist still needs a workshop operator with a device session and a host
+whose worker is online. Record Observer or worker blockers on
+[DAP #1140](https://github.com/deslicer/deslicer-automation-platform/issues/1140). <!-- pragma: allowlist secret -->
