@@ -245,4 +245,8 @@ See [quickstart.md](quickstart.md) for the complete plan lifecycle,
 approve smoke runbook, and [environments.md](environments.md) for
 environment-file rules.
 
+GitHub create/link, first push, and workflow-trigger auth are described in
+[github-bootstrap-auth.md](github-bootstrap-auth.md). `repo auth` prints that
+contract and does not call GitHub.
+
 Canonical contract: DAP `docs/components/dap/cli-repo-init-and-enroll-spec.md`.

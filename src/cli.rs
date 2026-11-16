@@ -157,6 +157,9 @@ pub enum Command {
     Doctor(crate::commands::doctor::Args),
     /// Emit machine-readable command / flag / exit-code schema (JSON)
     Schema(crate::commands::schema::Args),
+    /// Fingerprint a Splunk app directory and store immutable local objects.
+    #[command(name = "app-state", subcommand)]
+    AppState(crate::commands::app_state::AppStateCmd),
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
@@ -255,6 +258,7 @@ impl Cli {
             Command::Upgrade(cmd) => crate::commands::upgrade::dispatch(ctx, cmd).await,
             Command::Doctor(args) => crate::commands::doctor::run(ctx, args).await,
             Command::Schema(args) => crate::commands::schema::run(ctx, args),
+            Command::AppState(cmd) => crate::commands::app_state::dispatch(ctx, cmd),
         }
     }
 }

@@ -20,6 +20,10 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # uuid 1.27.0+ requires rustc 1.89, above rust-toolchain.toml (1.88.0).
+      - dependency-name: "uuid"
+        versions: [">= 1.27.0"]
 
   - package-ecosystem: github-actions
     directory: "/"
