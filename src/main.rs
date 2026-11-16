@@ -3,12 +3,14 @@ use clap::Parser;
 use deslicer_cli::cli::{Cli, LogFormat};
 use deslicer_cli::commands::agent::rewrite_agent_argv;
 use deslicer_cli::commands::schema::run_help_json_alias;
+use deslicer_cli::naming::emit_deprecations; // pragma: allowlist secret
 use deslicer_cli::reporting::{emit_clap_error, emit_output_conflict, output_format_from_args}; // pragma: allowlist secret
 use deslicer_cli::schema::{help_json_command_path, wants_help_json};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = rewrite_agent_argv(std::env::args_os());
+    emit_deprecations(&args);
     let args_str: Vec<String> = args
         .iter()
         .map(|a| a.to_string_lossy().into_owned())

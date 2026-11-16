@@ -97,9 +97,9 @@ pub enum Command {
     /// Create, inspect, approve, and deploy configuration change plans
     #[command(subcommand)]
     Change(crate::commands::change::ChangeCmd),
-    /// Splunk Cloud ACS stacks, credentials, and observe (read-only)
-    #[command(subcommand)]
-    Acs(crate::commands::acs::AcsCmd),
+    /// Splunk Cloud stacks, credentials, and observe (read-only).
+    #[command(name = "cloud", alias = "acs", subcommand)]
+    Cloud(crate::commands::acs::CloudCmd),
     /// DAI routines (list, enable/disable, run, runs, report)
     #[command(subcommand)]
     Routine(crate::commands::routine::RoutineCmd),
@@ -115,24 +115,24 @@ pub enum Command {
     /// Tenant license status and bind
     #[command(subcommand)]
     License(crate::commands::license::LicenseCmd),
-    /// Model catalogue and BYOK
-    #[command(subcommand)]
-    Models(crate::commands::models::ModelsCmd),
+    /// Model catalogue and BYOK.
+    #[command(name = "model", alias = "models", subcommand)]
+    Model(crate::commands::models::ModelsCmd),
     /// Billing usage and credits (read-only)
     #[command(subcommand)]
     Billing(crate::commands::billing::BillingCmd),
     /// Org roles, teams, switch, and plan settings
     #[command(subcommand)]
     Org(crate::commands::org::OrgCmd),
-    /// List host groups (`id` or exact `name` for `change plan --target-group`)
-    #[command(subcommand)]
-    Groups(crate::commands::groups::GroupsCmd),
+    /// List host groups (`id` or exact `name` for `change plan --target-group`).
+    #[command(name = "group", alias = "groups", subcommand)]
+    Group(crate::commands::groups::GroupsCmd),
     /// List Ansible inventory groups, sync, or validate tenant environment YAML
     #[command(subcommand)]
     Inventory(crate::commands::inventory::InventoryCmd),
-    /// Build CI helpers from `.deslicer/environments` files
-    #[command(subcommand)]
-    Environments(crate::commands::environments::EnvironmentsCmd),
+    /// Build CI helpers from the tenant environments directory.
+    #[command(name = "environment", alias = "environments", subcommand)]
+    Environment(crate::commands::environments::EnvironmentsCmd),
     /// Write CI templates for a config repo (optional --bind)
     Init(crate::commands::init::Args),
     /// Print documentation topic URLs (`--open` for a browser)
@@ -153,6 +153,8 @@ pub enum Command {
     /// Splunk package upgrade intent (plan / flapping-gate status)
     #[command(subcommand)]
     Upgrade(crate::commands::upgrade::UpgradeCmd),
+    /// Readiness: API URL drift, local workflows, optional GitHub App check.
+    Doctor(crate::commands::doctor::Args),
     /// Emit machine-readable command / flag / exit-code schema (JSON)
     Schema(crate::commands::schema::Args),
 }
@@ -231,18 +233,18 @@ impl Cli {
             Command::Agent(cmd) => crate::commands::agent::dispatch(ctx, cmd).await,
             Command::Auth(cmd) => crate::commands::auth::dispatch(ctx, cmd).await,
             Command::Change(cmd) => crate::commands::change::dispatch(ctx, cmd).await,
-            Command::Acs(cmd) => crate::commands::acs::dispatch(ctx, cmd).await,
+            Command::Cloud(cmd) => crate::commands::acs::dispatch(ctx, cmd).await,
             Command::Routine(cmd) => crate::commands::routine::dispatch(ctx, cmd).await,
             Command::Skill(cmd) => crate::commands::skill::dispatch(ctx, cmd).await,
             Command::Catalog(cmd) => crate::commands::catalog::dispatch(ctx, cmd).await,
             Command::Remediate(cmd) => crate::commands::remediate::dispatch(ctx, cmd).await,
             Command::License(cmd) => crate::commands::license::dispatch(ctx, cmd).await,
-            Command::Models(cmd) => crate::commands::models::dispatch(ctx, cmd).await,
+            Command::Model(cmd) => crate::commands::models::dispatch(ctx, cmd).await,
             Command::Billing(cmd) => crate::commands::billing::dispatch(ctx, cmd).await,
             Command::Org(cmd) => crate::commands::org::dispatch(ctx, cmd).await,
-            Command::Groups(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
+            Command::Group(cmd) => crate::commands::groups::dispatch(ctx, cmd).await,
             Command::Inventory(cmd) => crate::commands::inventory::dispatch(ctx, cmd).await,
-            Command::Environments(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
+            Command::Environment(cmd) => crate::commands::environments::dispatch(ctx, cmd).await,
             Command::Init(args) => crate::commands::init::run(ctx, args).await,
             Command::Docs(args) => crate::commands::docs::run(ctx, args),
             Command::Enroll(cmd) => crate::commands::enroll::dispatch(ctx, cmd).await,
@@ -251,6 +253,7 @@ impl Cli {
             Command::Completion(args) => crate::commands::completion::run(args),
             Command::Update(args) => crate::commands::update::run(ctx, args).await,
             Command::Upgrade(cmd) => crate::commands::upgrade::dispatch(ctx, cmd).await,
+            Command::Doctor(args) => crate::commands::doctor::run(ctx, args).await,
             Command::Schema(args) => crate::commands::schema::run(ctx, args),
         }
     }

@@ -3,7 +3,7 @@ use clap::Subcommand;
 use crate::Ctx;
 
 mod analyse;
-mod draft;
+pub mod draft;
 
 #[derive(Subcommand)]
 pub enum RemediateCmd {

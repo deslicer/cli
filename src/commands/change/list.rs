@@ -25,6 +25,10 @@ pub struct Args {
     #[arg(long)]
     pub environment: Option<String>,
 
+    /// Case-insensitive substring matched against plan id, status, and name.
+    #[arg(long)]
+    pub filter: Option<String>,
+
     #[command(flatten)]
     pub page: PageArgs,
 }
@@ -42,7 +46,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     };
 
     let page = match client
-        .list_plans_page(args.status.as_deref(), args.since.as_deref(), &args.page)
+        .list_plans_page(
+            args.status.as_deref(),
+            args.since.as_deref(),
+            args.filter.as_deref(),
+            &args.page,
+        )
         .await
     {
         Ok(page) => page,

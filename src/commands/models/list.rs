@@ -6,9 +6,13 @@ use crate::commands::pipeline::map_cli_error;
 use crate::Ctx;
 
 #[derive(ClapArgs)]
-pub struct Args {}
+pub struct Args {
+    /// Case-insensitive substring matched against the model id, name, and provider.
+    #[arg(long)]
+    pub filter: Option<String>,
+}
 
-pub async fn run(ctx: Ctx, _args: Args) -> i32 {
+pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let client = match ModelsClient::from_ctx(&ctx) {
         Ok(client) => client,
         Err(err) => return map_cli_error(ctx.log_format, err),
@@ -17,6 +21,14 @@ pub async fn run(ctx: Ctx, _args: Args) -> i32 {
         Ok(models) => models,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let models = crate::list_filter::apply(args.filter.as_deref(), models, |model| {
+        format!(
+            "{} {} {}",
+            model.id,
+            model.name.as_deref().unwrap_or(""),
+            model.provider.as_deref().unwrap_or("")
+        )
+    });
     match ctx.log_format {
         LogFormat::Json => match crate::json_doc::to_pretty_string(&models) {
             Ok(json) => {

@@ -7,16 +7,16 @@ approve, execute or deploy a change plan.
 
 | Command | Observer route | Notes |
 |---|---|---|
-| `acs stacks list` | `GET /api/v1/acs/stacks/credentials` | Stacks are the ones with a stored ACS credential. Observer has no separate stack-list route. |
-| `acs credentials list` | `GET /api/v1/acs/stacks/credentials` | Metadata only. Tokens are never returned or printed. |
-| `acs credentials set <stack> --token-stdin --yes` | `PUT /api/v1/acs/stacks/{stack}/credentials` | Admin role and a verified human identity. Token comes from stdin or `DESLICER_ACS_TOKEN`, never argv. `--acs-environment staging\|production` (default production). Dry-run without `--yes`. |
+| `cloud stack list` | `GET /api/v1/acs/stacks/credentials` | Stacks are the ones with a stored ACS credential. Observer has no separate stack-list route. |
+| `cloud stack credential list` | `GET /api/v1/acs/stacks/credentials` | Metadata only. Tokens are never returned or printed. |
+| `cloud stack credential set <stack> --token-stdin --yes` | `PUT /api/v1/acs/stacks/{stack}/credentials` | Admin role and a verified human identity. Token comes from stdin or `DESLICER_ACS_TOKEN`, never argv. `--acs-environment staging\|production` (default production). Dry-run without `--yes`. | <!-- pragma: allowlist secret -->
 | `acs credentials test --name <stack>` | `POST /api/v1/acs/stacks/{stack}/observe` | Read-only. Exit 0 when ACS answers, 1 when the credential is missing or ACS rejects it. |
-| `acs observe <stack> [--experience victoria\|classic]` | `POST /api/v1/acs/stacks/{stack}/observe` | Read-only inventory of ACS objects. |
+| `cloud stack observe <stack> [--experience victoria\|classic]` | `POST /api/v1/acs/stacks/{stack}/observe` | Read-only inventory of ACS objects. |
 
 ```sh
-printf '%s' "$ACS_JWT" | deslicer acs credentials set my-stack --token-stdin --yes
-deslicer acs credentials test --name my-stack
-deslicer --log-format json acs observe my-stack
+printf '%s' "$ACS_JWT" | deslicer cloud stack credential set my-stack --token-stdin --yes <!-- pragma: allowlist secret -->
+deslicer cloud stack credential test --name my-stack <!-- pragma: allowlist secret -->
+deslicer --log-format json cloud stack observe my-stack <!-- pragma: allowlist secret -->
 ```
 
 ## Environment app mappings

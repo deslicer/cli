@@ -12,6 +12,10 @@ pub struct Args {
     #[arg(long)]
     pub environment: Option<String>,
 
+    /// Case-insensitive substring matched against the group id and name.
+    #[arg(long)]
+    pub filter: Option<String>,
+
     #[command(flatten)]
     pub page: PageArgs,
 }
@@ -26,6 +30,14 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Ok(groups) => groups,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let groups = crate::list_filter::apply(args.filter.as_deref(), groups, |group| {
+        format!(
+            "{} {} {}",
+            group.id,
+            group.name,
+            group.display_name.as_deref().unwrap_or("")
+        )
+    });
     let page = page_slice(&groups, &args.page);
 
     match ctx.log_format {

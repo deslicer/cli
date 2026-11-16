@@ -25,6 +25,10 @@ pub struct Args {
     #[arg(long)]
     pub environment: Option<String>,
 
+    /// Case-insensitive substring matched against the app name and host.
+    #[arg(long)]
+    pub filter: Option<String>,
+
     #[command(flatten)]
     pub page: crate::pagination::PageArgs,
 
@@ -62,6 +66,7 @@ pub struct AdoptArgs {
     #[arg(long)]
     pub source_path: Option<String>,
 
+    /// Environment profile used for auth.
     #[arg(long)]
     pub environment: Option<String>,
 
@@ -70,10 +75,19 @@ pub struct AdoptArgs {
     pub yes: bool,
 }
 
+pub async fn adopt(ctx: Ctx, args: AdoptArgs) -> i32 {
+    let format = ctx.log_format;
+    adopt_run(&ctx, args)
+        .await
+        .unwrap_or_else(|err| map_cli_error(format, err))
+}
+
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
     let format = ctx.log_format;
     let result = match args.action {
-        Some(AppsAction::Adopt(adopt)) => adopt_run(&ctx, adopt).await,
+        Some(AppsAction::Adopt(adopt_args)) => {
+            return adopt(ctx, adopt_args).await;
+        }
         None => list_run(&ctx, args).await,
     };
     result.unwrap_or_else(|err| map_cli_error(format, err))
@@ -124,6 +138,9 @@ async fn list_run(ctx: &Ctx, args: Args) -> Result<i32, CliError> {
         None => None,
     };
     let rows = filter_rows(&apps, args.host.as_deref(), group_hosts.as_deref())?;
+    let rows = crate::list_filter::apply(args.filter.as_deref(), rows, |row| {
+        format!("{} {} {}", row.name, row.host, row.host_id)
+    });
     let page = crate::pagination::page_slice(&rows, &args.page);
     Ok(match ctx.log_format {
         LogFormat::Json => crate::pagination::print_page_json(&page),

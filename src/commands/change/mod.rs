@@ -5,6 +5,7 @@ use crate::Ctx;
 mod acs_inputs;
 pub mod approve;
 pub mod deploy;
+mod gated;
 pub mod jobs;
 pub mod lifecycle;
 pub mod list;
@@ -62,6 +63,21 @@ pub enum ChangeCmd {
     Verify(verify::Args),
     /// Report plan lifecycle status and rollout progress (for CI wait steps).
     Status(status::Args),
+    /// Create a Pending rolling upgrade plan (never approves or deploys).
+    #[command(subcommand)]
+    Upgrade(gated::UpgradeCmd),
+    /// Create Pending plan(s) from a catalog blueprint (dry-run unless --yes).
+    #[command(subcommand)]
+    Catalog(gated::CatalogCmd),
+    /// Create a draft remediation plan (dry-run unless --yes).
+    #[command(subcommand)]
+    Remediate(gated::RemediateCmd),
+    /// Adopt a live app (dry-run unless --yes).
+    #[command(subcommand)]
+    App(gated::AppCmd),
+    /// Write an environment app mapping (dry-run unless --yes).
+    #[command(subcommand)]
+    Mapping(gated::MappingCmd),
 }
 
 pub async fn dispatch(ctx: Ctx, cmd: ChangeCmd) -> i32 {
@@ -78,5 +94,10 @@ pub async fn dispatch(ctx: Ctx, cmd: ChangeCmd) -> i32 {
         ChangeCmd::Validate(args) => validate::run(ctx, args).await,
         ChangeCmd::Verify(args) => verify::run(ctx, args).await,
         ChangeCmd::Status(args) => status::run(ctx, args).await,
+        ChangeCmd::Upgrade(cmd) => gated::dispatch_upgrade(ctx, cmd).await,
+        ChangeCmd::Catalog(cmd) => gated::dispatch_catalog(ctx, cmd).await,
+        ChangeCmd::Remediate(cmd) => gated::dispatch_remediate(ctx, cmd).await,
+        ChangeCmd::App(cmd) => gated::dispatch_app(ctx, cmd).await,
+        ChangeCmd::Mapping(cmd) => gated::dispatch_mapping(ctx, cmd).await,
     }
 }

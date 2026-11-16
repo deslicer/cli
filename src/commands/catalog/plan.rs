@@ -11,8 +11,15 @@ pub struct Args {
     /// Catalog blueprint id (from `catalog list`)
     pub id: String,
 
-    /// Target inventory groups (comma-separated), e.g. indexers,search_heads
-    #[arg(long, value_delimiter = ',', num_args = 1.., required = true)]
+    /// Target inventory group. Repeatable. `--targets a,b` remains accepted.
+    #[arg(
+        long = "target",
+        alias = "targets",
+        value_delimiter = ',',
+        num_args = 1,
+        action = clap::ArgAction::Append,
+        required = true
+    )]
     pub targets: Vec<String>,
 
     /// Optional plan name shown in Deslicer Changes/Runs
@@ -97,7 +104,7 @@ mod tests {
         let mut buf = Vec::new();
         plan.write_long_help(&mut buf).expect("help");
         let help = String::from_utf8(buf).expect("utf8");
-        assert!(help.contains("--targets"));
+        assert!(help.contains("--target"));
         assert!(help.contains("--yes"));
         assert!(help.contains("never auto-approved") || help.contains("Pending"));
     }

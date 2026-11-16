@@ -3,6 +3,7 @@ use clap::Subcommand;
 use crate::Ctx;
 
 mod bootstrap;
+pub(crate) mod readiness;
 mod refresh;
 mod session;
 mod status;

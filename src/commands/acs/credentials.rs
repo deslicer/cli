@@ -9,7 +9,7 @@ use crate::errors::CliError;
 use crate::observer_client::{validate_acs_environment, AcsCredential};
 use crate::Ctx;
 
-/// Environment variable read by `acs credentials set` when `--token-stdin` is not given.
+/// Environment variable read by `cloud stack credential set` when `--token-stdin` is not given.
 pub const ACS_TOKEN_ENV: &str = "DESLICER_ACS_TOKEN";
 
 #[derive(Subcommand)]
@@ -17,8 +17,8 @@ pub enum CredentialsCmd {
     /// List ACS stack credentials (metadata only; tokens are never shown)
     ///
     /// Examples:
-    ///   deslicer acs credentials list
-    ///   deslicer --log-format json acs credentials list
+    ///   cloud stack credential list
+    ///   --output json cloud stack credential list
     List(ListArgs),
     /// Test that the stored credential for a stack can reach ACS (read-only observe)
     ///
@@ -26,7 +26,7 @@ pub enum CredentialsCmd {
     /// or rejected.
     ///
     /// Examples:
-    ///   deslicer acs credentials test --name my-stack
+    ///   cloud stack credential test --name my-stack
     Test(TestArgs),
     /// Store or rotate the ACS JWT for a stack (dry-run unless --yes)
     ///
@@ -34,8 +34,8 @@ pub enum CredentialsCmd {
     /// never accepted on the command line, printed or logged.
     ///
     /// Examples:
-    ///   printf '%s' "$ACS_JWT" | deslicer acs credentials set my-stack --token-stdin --yes
-    ///   DESLICER_ACS_TOKEN=... deslicer acs credentials set my-stack --acs-environment staging --yes
+    ///   printf '%s' "$ACS_JWT" | cloud stack credential set my-stack --token-stdin --yes
+    ///   cloud stack credential set my-stack --acs-environment staging --yes
     Set(SetArgs),
 }
 
@@ -44,11 +44,15 @@ pub struct ListArgs {
     /// Deslicer environment profile used for auth
     #[arg(long)]
     pub environment: Option<String>,
+
+    /// Case-insensitive substring matched against the stack name.
+    #[arg(long)]
+    pub filter: Option<String>,
 }
 
 #[derive(ClapArgs)]
 pub struct TestArgs {
-    /// ACS stack name as shown by `acs credentials list`
+    /// ACS stack name as shown by `cloud stack credential list`
     #[arg(long)]
     pub name: String,
 
@@ -97,6 +101,13 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
         Ok(credentials) => credentials,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let credentials = crate::list_filter::apply(args.filter.as_deref(), credentials, |row| {
+        format!(
+            "{} {}",
+            row.stack_name,
+            row.environment.as_deref().unwrap_or("")
+        )
+    });
 
     match ctx.log_format {
         LogFormat::Json => match crate::json_doc::to_pretty_string(&credentials) {
@@ -252,7 +263,10 @@ fn print_set_dry_run(ctx: &Ctx, args: &SetArgs) {
 
 fn format_credentials_human(credentials: &[AcsCredential]) -> String {
     if credentials.is_empty() {
-        return "No ACS stack credentials. Add one with `deslicer acs credentials set <stack> --token-stdin --yes`.\n".to_string();
+        const SET: &str = "deslicer cloud stack credential set"; // pragma: allowlist secret
+        return format!(
+            "No ACS stack credentials. Add one with `{SET} <stack> --token-stdin --yes`.\n"
+        );
     }
     let mut lines = vec!["STACK  ACS_ENV  TOKEN  UPDATED".to_string()];
     for cred in credentials {

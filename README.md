@@ -65,11 +65,16 @@ See [docs/bundle-flow.md](docs/bundle-flow.md) for the full walkthrough, limits,
 
 ## Commands
 
+Singular nouns are canonical (`group`, `model`, `environment`, `cloud stack`). Plural names and `acs` stay as hidden aliases for two minor versions and print a stderr warning. Splunk writes that used to sit outside `change` (`upgrade plan`, `catalog plan`, `remediate draft`, `inventory apps adopt`, `environment mapping set|adopt`) are also available as `change …` and warn on the old path.
+
 | Group | Command | Description |
 |-------|---------|-------------|
 | **auth** | `deslicer auth login` | Exchange CI OIDC for a session; resolve Observer backend |
 | **auth** | `deslicer auth status` | Print OIDC/platform binding diagnostics |
-| **groups** | `deslicer groups list` | List host groups (`id` is the value for `--target-group`) |
+| **group** | `deslicer group list` | List host groups (`id` is the value for `--target-group`). `groups` remains a hidden alias | <!-- pragma: allowlist secret -->
+| **cloud** | `deslicer cloud stack list` | List Splunk Cloud stacks. Credential and observe live under `cloud stack`. `acs` remains a hidden alias | <!-- pragma: allowlist secret -->
+| **model** | `deslicer model list` | List tenant models. `models` remains a hidden alias | <!-- pragma: allowlist secret -->
+| **doctor** | `deslicer doctor` | API URL drift, local OIDC workflows, optional GitHub App readiness | <!-- pragma: allowlist secret -->
 | **inventory** | `deslicer inventory list` | List Ansible inventory groups and their hosts |
 | **init** | `deslicer init` | Write CI templates from Observer (`--provider`, optional `--bind`) |
 | **docs** | `deslicer docs` | Print a topic URL (`path-a2`, `init`, …). `--print` for URL only; `--open` for a browser |

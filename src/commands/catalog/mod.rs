@@ -3,7 +3,7 @@ use clap::Subcommand;
 use crate::Ctx;
 
 mod list;
-mod plan;
+pub mod plan;
 mod show;
 
 #[derive(Subcommand)]

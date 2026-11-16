@@ -10,6 +10,10 @@ pub struct Args {
     /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
+
+    /// Case-insensitive substring matched against the inventory group name and hosts.
+    #[arg(long)]
+    pub filter: Option<String>,
 }
 
 pub async fn run(ctx: Ctx, args: Args) -> i32 {
@@ -22,6 +26,9 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Ok(groups) => groups,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let groups = crate::list_filter::apply(args.filter.as_deref(), groups, |group| {
+        format!("{} {}", group.name, group.hosts.join(" "))
+    });
 
     match ctx.log_format {
         LogFormat::Json => match crate::json_doc::to_pretty_string(&groups) {
