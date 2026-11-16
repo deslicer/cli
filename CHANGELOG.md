@@ -40,6 +40,12 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
 
 ### Features
 
+- [Command reference](docs/commands.md) lists every clap command, including the
+  surfaces added in #163–#181 (cloud/acs, routine, remediate, model, billing,
+  inventory apps, environment mappings, agent clone, registry plans,
+  `repo bootstrap --check`, org, skill, license, catalog, upgrade).
+  `docs commands` opens it. The GitHub-token init spec now says `repo doctor`
+  was not shipped. (fixes #185)
 - Command names follow noun-verb, singular nouns (#187). Canonical paths are
   `cloud stack` (alias `acs`), `model` (alias `models`), `environment`
   (alias `environments`), and `group` (alias `groups`). Splunk-changing

@@ -136,6 +136,16 @@ pub const TOPICS: &[Topic] = &[
         sync: true,
     },
     Topic {
+        id: "commands",
+        aliases: &["command-reference", "reference"],
+        title: "Command reference",
+        summary: "Every command from the clap tree, with dry-run and alias notes",
+        source_file: "docs/commands.md",
+        dest_file: "10-commands.md",
+        anchor: None,
+        sync: true,
+    },
+    Topic {
         id: "local-testing",
         aliases: &[],
         title: "Local testing",

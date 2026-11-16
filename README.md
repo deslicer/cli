@@ -147,6 +147,8 @@ See [docs/installation.md](docs/installation.md) and [docs/quickstart.md](docs/q
 
 ## Documentation
 
+- [Command reference](docs/commands.md) — every command from the clap tree, including cloud, routine, remediate, model, billing, inventory apps, environment mapping, agent clone, registry plans, and `repo bootstrap --check`
+
 - [Architecture](docs/architecture.md) — how the CLI integrates with DAP and deslicer-ai
 - [Quickstart](docs/quickstart.md) — zero to an approved, deployed change (both auth paths)
 - [Plan-runner E2E](docs/plan-runner-e2e.md) — enroll → worker → draft → approve smoke runbook
