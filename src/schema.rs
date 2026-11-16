@@ -493,6 +493,8 @@ fn is_mutating_path(path: &str) -> bool {
         "auth login",
         "auth logout",
         "update",
+        "app-state publish",
+        "app-state fetch",
     ];
     MUTATING_SUFFIXES.contains(&path)
 }
