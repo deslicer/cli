@@ -2,7 +2,6 @@ use crate::ci::{detect_platform, CiPlatform};
 use crate::diff_summary::DiffCounts;
 use crate::observer_client::{ChangePlan, ExecutionQueued, ExecutionSummary, PlanProgress};
 use crate::pr_preview::PrPreviewLabels;
-use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -38,22 +37,16 @@ fn append_kv_file(path: &str, pairs: &[(&str, String)]) -> io::Result<()> {
     Ok(())
 }
 
-fn write_stdout_json(pairs: &[(&str, String)]) -> io::Result<()> {
-    let map: BTreeMap<&str, &str> = pairs.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let json = serde_json::to_string(&map).map_err(|e| io::Error::other(e.to_string()))?;
-    println!("{json}");
-    Ok(())
-}
-
 fn write_outputs(sink: OutputSink, pairs: &[(&str, String)]) -> io::Result<()> {
     match sink {
         OutputSink::GithubOutput => match std::env::var("GITHUB_OUTPUT") {
             Ok(path) => append_kv_file(&path, pairs),
-            Err(_) => write_stdout_json(pairs),
+            // A second JSON line breaks `json.load` on the primary document (#264).
+            Err(_) => Ok(()),
         },
         OutputSink::GitlabDotenv => match std::env::var("DESLICER_DOTENV_PATH") {
             Ok(path) => append_kv_file(&path, pairs),
-            Err(_) => write_stdout_json(pairs),
+            Err(_) => Ok(()),
         },
         OutputSink::AzureLogging => {
             let mut stdout = io::stdout();
@@ -67,7 +60,8 @@ fn write_outputs(sink: OutputSink, pairs: &[(&str, String)]) -> io::Result<()> {
             let path = PathBuf::from(dir).join("deslicer-output.env");
             append_kv_file(&path.to_string_lossy(), pairs)
         }
-        OutputSink::Stdout => write_stdout_json(pairs),
+        // Local runs already printed the primary document. Do not add another.
+        OutputSink::Stdout => Ok(()),
     }
 }
 
@@ -307,15 +301,23 @@ fn plans_summary_markdown(plans: &[ChangePlan]) -> String {
 }
 
 pub fn emit_plan_progress(progress: &PlanProgress) -> i32 {
-    emit_plan_status(None, progress, None)
+    emit_plan_status(None, progress, None, crate::cli::LogFormat::Json)
 }
 
 pub fn emit_plan_status(
     plan: Option<&ChangePlan>,
     progress: &PlanProgress,
     diff: Option<&DiffCounts>,
+    format: crate::cli::LogFormat,
 ) -> i32 {
-    let _ = crate::json_doc::print_success_compact(progress);
+    match format {
+        crate::cli::LogFormat::Json => {
+            let _ = crate::json_doc::print_success_compact(progress);
+        }
+        crate::cli::LogFormat::Human => {
+            print!("{}", human_plan_status(plan, progress));
+        }
+    }
     let plan_status = plan.map(|p| p.status.as_str()).unwrap_or_default();
     let plan_summary = if is_already_synced(plan_status) {
         ALREADY_SYNCED_SUMMARY.to_string()
@@ -348,6 +350,18 @@ pub fn emit_plan_status(
         ));
     }
     emit_to_sink(&pairs)
+}
+
+fn human_plan_status(plan: Option<&ChangePlan>, progress: &PlanProgress) -> String {
+    let status = plan.map(|row| row.status.as_str()).unwrap_or("-");
+    let name = plan.and_then(|row| row.name.as_deref()).unwrap_or("-");
+    format!(
+        "Plan ID: {}\nStatus: {status}\nName: {name}\nProgress: {} ({}/{})\n",
+        progress.plan_id,
+        progress.progress_status,
+        progress.fully_completed_items,
+        progress.total_items,
+    )
 }
 
 pub fn emit_execution_queued(execution: &ExecutionQueued) -> i32 {
@@ -426,11 +440,12 @@ mod tests {
     }
 
     #[test]
-    fn github_missing_env_falls_back_to_stdout_json() {
+    fn github_missing_env_does_not_require_a_stdout_fallback() {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("GITHUB_OUTPUT");
         let pairs = [("plan_id", "fallback".to_string())];
         write_outputs(OutputSink::GithubOutput, &pairs).unwrap();
+        write_outputs(OutputSink::Stdout, &pairs).unwrap();
     }
 
     #[test]
@@ -502,6 +517,31 @@ mod tests {
         let markdown = plans_summary_markdown(&plans);
         assert!(markdown.contains("ext-1"));
         assert!(markdown.contains("ext-2"));
+    }
+
+    #[test]
+    fn human_status_names_plan_and_progress() {
+        let plan = ChangePlan {
+            id: "row".into(),
+            plan_id: Some("ext".into()),
+            status: "pending_approval".into(),
+            name: Some("workers".into()),
+            summary: None,
+            created_at: None,
+            updated_at: None,
+        };
+        let progress = PlanProgress {
+            plan_id: "ext".into(),
+            progress_status: "partial".into(),
+            total_items: 3,
+            fully_completed_items: 1,
+        };
+        let text = human_plan_status(Some(&plan), &progress);
+        assert!(text.contains("Plan ID: ext"));
+        assert!(text.contains("Status: pending_approval"));
+        assert!(text.contains("Name: workers"));
+        assert!(text.contains("Progress: partial (1/3)"));
+        assert!(!text.contains('{'));
     }
 
     #[test]

@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use clap::Args as ClapArgs;
 use uuid::Uuid;
 
+use serde_json::{json, Value};
+
+use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::errors::CliError;
 use crate::Ctx;
@@ -17,7 +20,9 @@ mod write;
 pub use provider::InitProvider;
 
 use bind::{bind_next_step, bind_repo, print_bind_outcome};
-use environment::{print_environment_write, should_write_environment, write_tenant_environment};
+use environment::{
+    print_environment_write, should_write_environment, write_tenant_environment, EnvironmentWrite,
+};
 use provider::{detect_provider, origin_for_dir, OriginRepo};
 use templates::load_templates;
 use write::{print_write_summary, write_templates};
@@ -102,8 +107,7 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
 
     let files = load_templates(client.as_ref(), provider, args.offline).await?;
     let summary = write_templates(&dir, provider, &files, args.force)?;
-    print_write_summary(&ctx, provider, &dir, summary.written, summary.skipped);
-    maybe_write_environment(
+    let environment = maybe_write_environment(
         &ctx,
         &args,
         provider,
@@ -115,14 +119,22 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     .await?;
 
     if !args.bind {
-        println!();
-        if matches!(provider, InitProvider::GithubToken) {
-            println!("Next steps:");
-        } else {
-            println!("Bind this repo (optional):");
-        }
-        println!("{}", bind_next_step(provider));
+        print_init_result(
+            &ctx,
+            provider,
+            &dir,
+            summary.written,
+            summary.skipped,
+            environment.as_ref(),
+            origin.as_ref(),
+        );
         return Ok(0);
+    }
+    if !matches!(ctx.log_format, LogFormat::Json) {
+        print_write_summary(&ctx, provider, &dir, summary.written, summary.skipped);
+        if let Some(written) = environment.as_ref() {
+            print_environment_write(&ctx, written, origin.as_ref());
+        }
     }
 
     let session = session
@@ -154,22 +166,85 @@ async fn maybe_write_environment(
     session: Option<&crate::commands::pipeline::AuthenticatedSession>,
     client: Option<&crate::observer_client::Client>,
     dir: &std::path::Path,
-    origin: Option<&OriginRepo>,
-) -> Result<(), CliError> {
+    _origin: Option<&OriginRepo>,
+) -> Result<Option<EnvironmentWrite>, CliError> {
     if !should_write_environment(provider, session) {
-        return Ok(());
+        return Ok(None);
     }
     if args.offline {
-        println!("Skipped tenant environment file (--offline; cannot reach Observer).");
-        return Ok(());
+        if !matches!(ctx.log_format, LogFormat::Json) {
+            println!("Skipped tenant environment file (--offline; cannot reach Observer).");
+        }
+        return Ok(None);
     }
     let Some(client) = client else {
-        println!("Skipped tenant environment file (Observer client unavailable).");
-        return Ok(());
+        if !matches!(ctx.log_format, LogFormat::Json) {
+            println!("Skipped tenant environment file (Observer client unavailable).");
+        }
+        return Ok(None);
     };
     let written = write_tenant_environment(dir, client, args.environment.as_deref()).await?;
-    print_environment_write(ctx, &written, origin);
-    Ok(())
+    Ok(Some(written))
+}
+
+fn print_init_result(
+    ctx: &Ctx,
+    provider: InitProvider,
+    dir: &std::path::Path,
+    written: usize,
+    skipped: usize,
+    environment: Option<&EnvironmentWrite>,
+    origin: Option<&OriginRepo>,
+) {
+    let heading = if matches!(provider, InitProvider::GithubToken) {
+        "Next steps:"
+    } else {
+        "Bind this repo (optional):"
+    };
+    let mut steps = vec![heading.to_string(), bind_next_step(provider)];
+    if let Some(environment) = environment {
+        if matches!(provider, InitProvider::GithubToken) {
+            let repo = github_env_recipe::origin_repo_slug(origin);
+            steps.push(github_env_recipe::github_environment_recipe(
+                &environment.stem,
+                repo.as_deref(),
+            ));
+        }
+    }
+    match ctx.log_format {
+        LogFormat::Json => {
+            let mut doc = json!({
+                "schema_version": 1,
+                "provider": provider.as_str(),
+                "dir": dir.display().to_string(),
+                "written": written,
+                "skipped": skipped,
+                "next_steps": steps,
+            });
+            if let Some(environment) = environment {
+                if let Some(obj) = doc.as_object_mut() {
+                    obj.insert(
+                        "wrote".into(),
+                        Value::String(environment.relative_path.clone()),
+                    );
+                    obj.insert(
+                        "github_environment".into(),
+                        Value::String(environment.stem.clone()),
+                    );
+                }
+            }
+            let _ = crate::json_doc::print_success(&doc);
+        }
+        LogFormat::Human => {
+            print_write_summary(ctx, provider, dir, written, skipped);
+            if let Some(environment) = environment {
+                print_environment_write(ctx, environment, origin);
+            }
+            println!();
+            println!("{heading}");
+            println!("{}", bind_next_step(provider));
+        }
+    }
 }
 
 fn resolve_provider(

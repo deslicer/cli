@@ -27,8 +27,10 @@ pub struct Args {
     pub report_only: bool,
 
     /// Report output written to stdout.
-    #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
-    pub format: OutputFormat,
+    ///
+    /// When omitted, follows `-o` / `--output` (JSON when stdout is not a TTY).
+    #[arg(long, value_enum)]
+    pub format: Option<OutputFormat>,
 
     /// Finding level that makes the command exit non-zero.
     #[arg(long, value_enum, default_value_t = FailOn::Block)]
@@ -73,8 +75,21 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
-    emit_report(args.format, &report);
+    emit_report(resolve_format(args.format, ctx.log_format), &report);
     report_exit_code(&report, args.fail_on)
+}
+
+fn resolve_format(
+    explicit: Option<OutputFormat>,
+    log_format: crate::cli::LogFormat,
+) -> OutputFormat {
+    if let Some(format) = explicit {
+        return format;
+    }
+    match log_format {
+        crate::cli::LogFormat::Json => OutputFormat::Json,
+        crate::cli::LogFormat::Human => OutputFormat::Human,
+    }
 }
 
 fn emit_report(format: OutputFormat, report: &PlanValidationReport) {
@@ -287,6 +302,22 @@ mod tests {
         report.report = serde_json::json!({"summary": "All checked settings passed."});
         let output = human_report(&report);
         assert!(output.contains("All checked settings passed."));
+    }
+
+    #[test]
+    fn format_follows_global_output_unless_set() {
+        assert!(matches!(
+            resolve_format(None, crate::cli::LogFormat::Json),
+            OutputFormat::Json
+        ));
+        assert!(matches!(
+            resolve_format(None, crate::cli::LogFormat::Human),
+            OutputFormat::Human
+        ));
+        assert!(matches!(
+            resolve_format(Some(OutputFormat::Markdown), crate::cli::LogFormat::Json),
+            OutputFormat::Markdown
+        ));
     }
 
     #[test]

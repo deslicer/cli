@@ -10,11 +10,10 @@ and human-readable text on a TTY: a list with plan ID, status, and name, or
 labeled fields for `--plan-id`. Missing fields display as `-`. Pin
 `--output human` (or `DESLICER_OUTPUT=human`) when CI logs must stay text —
 for example `deslicer/change-action`, which runs `deslicer change <cmd>` with
-no format flag today. Use `--output json` / `--json` for the machine-readable
-format explicitly: a JSON array for lists, or a plan object followed by the
-local metadata record for a single plan. Single-plan human output still writes
-CI outputs and GitHub step summaries, but does not append fallback JSON when no
-CI output file is configured. Azure logging commands remain enabled in human
+no format flag today. `change status` honours the same flag. Use `--output json` / `--json` for
+the machine-readable format: one JSON document (`schema_version` included).
+CI key/value outputs go only to the platform sink. They are not printed as a
+second JSON document on stdout. Azure logging commands remain enabled in human
 mode. List output does not emit CI keys.
 
 ## Output sinks per platform
@@ -25,9 +24,9 @@ mode. List output does not emit CI keys.
 | GitLab CI | Appends to the file at `DESLICER_DOTENV_PATH` | `artifacts:reports:dotenv` |
 | Azure DevOps | `##vso[task.setvariable ...]` logging commands | `$(plan_id)` in later steps |
 | Bitbucket Pipelines | Appends to the file at `DESLICER_DOTENV_PATH` | `source` the file in later steps |
-| Local / unknown | Single-line JSON on stdout | `jq` |
+| Local / unknown | No extra stdout record | Read the primary JSON document |
 
-If the platform's file path variable is missing (e.g. `GITHUB_OUTPUT` unset), the CLI falls back to single-line JSON on stdout.
+If the platform file path is missing (for example `GITHUB_OUTPUT` unset), the CLI does not print a second JSON document. The command's primary stdout document is the only JSON value.
 
 ## Output keys per command
 
@@ -77,7 +76,9 @@ When `plan_status` is a terminal failure (`failed`, `compile_failed`, `rejected`
 ### `change validate`
 
 Validation is plan-ID scoped. It validates only items already persisted in a
-DAP plan; it does not upload or validate arbitrary local files.
+DAP plan; it does not upload or validate arbitrary local files. `--format`
+follows `-o` / the non-TTY JSON default unless `--format` is set explicitly
+(`human`, `json`, or `markdown`).
 
 ```bash
 # Human output; triggers validation and fails on blocking findings.
