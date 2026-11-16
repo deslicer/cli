@@ -19,14 +19,9 @@ pub fn git_identity(platform: CiPlatform) -> Result<CiGitIdentity, CliError> {
         CiPlatform::Local => github_identity()
             .or_else(|_| gitlab_identity())
             .map_err(|_| {
-                CliError::Other(
-                    "git-sourced `change plan` with DESLICER_API_TOKEN needs \
-                 GITHUB_REPOSITORY + GITHUB_SHA (or GitLab CI_PROJECT_URL + \
-                 CI_COMMIT_SHA). In GitHub Actions these are set automatically after \
-                 checkout. Git-backed tenants require the repository to be connected via \
-                 the GitHub App; a long-lived tools token may still be rejected — use CI OIDC \
-                 (no OBSERVER_API_URL override) or the portal Propose change flow. \
-                 See the github-token docs topic in `deslicer docs`." // pragma: allowlist secret
+                CliError::MissingArgument(
+                    "missing GITHUB_REPOSITORY and GITHUB_SHA (or GitLab CI_PROJECT_URL and \
+                 CI_COMMIT_SHA). Set them, or run in CI."
                         .into(),
                 )
             }),
@@ -73,7 +68,12 @@ fn required_trimmed(name: &str) -> Result<String, CliError> {
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| CliError::Other(format!("missing environment variable: {name}")))
+        .ok_or_else(|| {
+            CliError::MissingArgument(format!(
+                "missing {name}. Set GITHUB_REPOSITORY and GITHUB_SHA \
+                 (or GitLab CI_PROJECT_URL and CI_COMMIT_SHA), or run in CI."
+            ))
+        })
 }
 
 fn validate_repo_slug(slug: &str) -> Result<(), CliError> {
@@ -87,7 +87,7 @@ fn validate_repo_slug(slug: &str) -> Result<(), CliError> {
         || owner.starts_with('.')
         || repo.starts_with('.')
     {
-        return Err(CliError::Other(
+        return Err(CliError::InvalidInput(
             "GITHUB_REPOSITORY must be owner/repo with no path traversal".into(),
         ));
     }
@@ -97,7 +97,7 @@ fn validate_repo_slug(slug: &str) -> Result<(), CliError> {
 fn validate_commit_sha(sha: &str) -> Result<(), CliError> {
     let valid_len = (7..=64).contains(&sha.len());
     if !valid_len || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(CliError::Other(
+        return Err(CliError::InvalidInput(
             "commit SHA must be 7-64 hexadecimal characters".into(),
         ));
     }
@@ -106,19 +106,21 @@ fn validate_commit_sha(sha: &str) -> Result<(), CliError> {
 
 fn validate_https_origin(value: &str, env_name: &str) -> Result<(), CliError> {
     let url = url::Url::parse(value)
-        .map_err(|_| CliError::Other(format!("{env_name} is not a valid URL")))?;
+        .map_err(|_| CliError::InvalidInput(format!("{env_name} is not a valid URL")))?;
     if url.scheme() != "https" {
-        return Err(CliError::Other(format!(
+        return Err(CliError::InvalidInput(format!(
             "{env_name} must be an https:// URL"
         )));
     }
     if !url.username().is_empty() || url.password().is_some() {
-        return Err(CliError::Other(format!(
+        return Err(CliError::InvalidInput(format!(
             "{env_name} must not contain userinfo"
         )));
     }
     if url.host_str().is_none() {
-        return Err(CliError::Other(format!("{env_name} is missing a host")));
+        return Err(CliError::InvalidInput(format!(
+            "{env_name} is missing a host"
+        )));
     }
     Ok(())
 }
@@ -189,6 +191,21 @@ mod tests {
         assert!(git_identity(CiPlatform::Gitlab).is_err());
         std::env::set_var("CI_PROJECT_URL", "https://user:pass@gitlab.com/acme/repo");
         assert!(git_identity(CiPlatform::Gitlab).is_err());
+        clear_git_env();
+    }
+
+    #[test]
+    fn missing_github_sha_is_usage_exit_2() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        clear_git_env();
+        std::env::set_var("GITHUB_REPOSITORY", "acme/splunk-config");
+        let err = git_identity(CiPlatform::Github).unwrap_err();
+        assert!(matches!(err, CliError::MissingArgument(_)));
+        assert_eq!(err.exit_code(), 2);
+        let local = git_identity(CiPlatform::Local).unwrap_err();
+        assert!(matches!(local, CliError::MissingArgument(_)));
+        assert_eq!(local.exit_code(), 2);
+        assert!(!local.to_string().contains("OIDC"));
         clear_git_env();
     }
 

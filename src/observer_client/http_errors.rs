@@ -26,7 +26,9 @@ pub(crate) fn map_observer_error_with_auth(
         return error;
     }
     match status.as_u16() {
-        400 => CliError::UnsupportedPlatform(message),
+        // A generic Observer 400 is bad input, not "unsupported CI platform"
+        // (exit 8). Exit 8 stays on the OIDC/CI-platform path only (issue #263).
+        400 => CliError::InvalidInput(message),
         401 => match auth {
             AuthRejectionKind::Oidc => CliError::OidcRejected(message),
             AuthRejectionKind::ApiToken => CliError::ApiTokenRejected(message),
@@ -392,6 +394,26 @@ mod tests {
             "",
         );
         assert!(matches!(model, CliError::ValidationModelUnavailable));
+    }
+
+    #[test]
+    fn generic_http_400_is_invalid_input_not_unsupported_platform() {
+        let err = map_observer_error_with_auth(
+            reqwest::StatusCode::BAD_REQUEST,
+            r#"{"detail":"Invalid path parameter format"}"#,
+            None,
+            AuthRejectionKind::Oidc,
+            "api/v1/plans/not-a-uuid",
+        );
+        match &err {
+            CliError::InvalidInput(message) => {
+                assert!(message.contains("Invalid path parameter format"));
+            }
+            other => panic!("expected InvalidInput, got {other}"),
+        }
+        assert_eq!(err.exit_code(), 2);
+        let text = err.to_string();
+        assert!(!text.contains("unsupported CI platform"));
     }
 
     #[test]

@@ -7,7 +7,7 @@ use crate::Ctx;
 #[derive(ClapArgs)]
 pub struct Args {
     /// External plan id.
-    #[arg(long)]
+    #[arg(long, value_parser = super::plan_id::parse_plan_id)]
     pub plan_id: String,
 
     /// Rejection reason recorded on the plan (or set `DESLICER_REJECT_REASON`).

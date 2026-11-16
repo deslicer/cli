@@ -45,6 +45,11 @@ const EXIT_CODE_ROWS: &[(i32, &str, bool)] = &[
         false,
     ),
     (15, "endpoint not available on this Observer", false),
+    (
+        16,
+        "validation report missing (change validate --report-only)",
+        false,
+    ),
     (20, "validation blocked", false),
     (
         21,

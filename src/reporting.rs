@@ -202,7 +202,8 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::DeviceSessionRequired(_) | CliError::AuthPending(_) => "auth",
         CliError::ValidationModelUnavailable
         | CliError::ValidationTimeout
-        | CliError::ValidationUnavailable => "validation",
+        | CliError::ValidationUnavailable
+        | CliError::ValidationReportMissing(_) => "validation",
         CliError::Other(msg) if msg.contains("not logged in") || msg.contains("OIDC") => "auth",
         CliError::Other(_) => "error",
     }
@@ -232,6 +233,7 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
         CliError::ValidationModelUnavailable => "validation.model_unavailable",
         CliError::ValidationTimeout => "validation.timeout",
         CliError::ValidationUnavailable => "validation.unavailable",
+        CliError::ValidationReportMissing(_) => "validation.report_missing",
         CliError::Other(msg) if msg.contains("not logged in") => "auth.not_logged_in",
         CliError::Other(msg) if msg.contains("OIDC") => "auth.oidc",
         CliError::Other(_) => "error.other",
@@ -295,49 +297,85 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
         CliError::MissingArgument(msg) if msg.contains("prompt") => {
             Some("pass the prompt as an argument, e.g. deslicer agent run \"…\"")
         }
+        CliError::MissingArgument(msg)
+            if msg.contains("GITHUB_SHA") || msg.contains("GITHUB_REPOSITORY") =>
+        {
+            Some("set GITHUB_REPOSITORY and GITHUB_SHA, or run in CI")
+        }
         CliError::MissingArgument(_) => Some("see the error message for the required flag"),
         // Path detail lives in the error message; hint steers upgrade / URL check (issue #248).
         CliError::EndpointNotAvailable(_) => Some(
             "this Observer does not expose the requested API route; upgrade the backend or check --observer-api-url",
         ),
         CliError::PlanNotFound(_) => Some("check the plan id or list plans"),
+        CliError::ValidationReportMissing(_) => Some(
+            "the plan has no validation report yet; check change status, or run change validate without --report-only after compile succeeds",
+        ),
         _ => None,
     }
 }
 
-fn error_envelope(
-    code: &str,
-    kind: &str,
+struct ErrorEnvelope<'a> {
+    code: &'a str,
+    kind: &'a str,
     message: String,
-    hint: Option<&str>,
-    next_command: Option<&str>,
+    hint: Option<&'a str>,
+    next_command: Option<&'a str>,
     retryable: bool,
     exit_code: i32,
-) -> Value {
+    details: &'a Value,
+}
+
+fn error_envelope(envelope: ErrorEnvelope<'_>) -> Value {
     json!({
         "schema_version": 1,
         "error": {
-            "code": code,
-            "kind": kind,
-            "message": message,
-            "hint": hint,
-            "next_command": next_command,
-            "retryable": retryable,
-            "exit_code": exit_code,
-            "details": {},
+            "code": envelope.code,
+            "kind": envelope.kind,
+            "message": envelope.message,
+            "hint": envelope.hint,
+            "next_command": envelope.next_command,
+            "retryable": envelope.retryable,
+            "exit_code": envelope.exit_code,
+            "details": envelope.details,
         }
     })
 }
 
 pub fn cli_error_json(err: &CliError) -> Value {
-    error_envelope(
-        cli_error_code(err),
-        cli_error_kind(err),
-        redact_secrets(&err.to_string()),
-        cli_error_hint(err),
-        cli_error_next_command(err),
+    let (hint, next_command, retryable, details) = error_presentation(err);
+    error_envelope(ErrorEnvelope {
+        code: cli_error_code(err),
+        kind: cli_error_kind(err),
+        message: redact_secrets(&err.to_string()),
+        hint: hint.as_deref(),
+        next_command: next_command.as_deref(),
+        retryable,
+        exit_code: err.exit_code(),
+        details: &details,
+    })
+}
+
+fn error_presentation(err: &CliError) -> (Option<String>, Option<String>, bool, Value) {
+    if let CliError::Transport(message) = err {
+        if let Some(diag) = crate::transport_cause::diagnose(message) {
+            let details = json!({
+                "url": diag.url,
+                "cause": diag.cause.as_str(),
+            });
+            return (
+                Some(diag.hint.to_string()),
+                Some("deslicer auth status".to_string()), // pragma: allowlist secret
+                diag.retryable,
+                details,
+            );
+        }
+    }
+    (
+        cli_error_hint(err).map(str::to_string),
+        cli_error_next_command(err).map(str::to_string),
         err.retryable(),
-        err.exit_code(),
+        json!({}),
     )
 }
 
@@ -349,15 +387,17 @@ pub fn oidc_error_json(err: &OidcError) -> Value {
         OidcError::Http(_) => ("transport.oidc_http", "oidc", true),
         OidcError::Other(_) => ("error.oidc", "oidc", false),
     };
-    error_envelope(
+    let details = json!({});
+    error_envelope(ErrorEnvelope {
         code,
         kind,
-        redact_secrets(&err.to_string()),
-        None,
-        None,
+        message: redact_secrets(&err.to_string()),
+        hint: None,
+        next_command: None,
         retryable,
         exit_code,
-    )
+        details: &details,
+    })
 }
 
 pub fn oidc_exit_code(err: &OidcError) -> i32 {
@@ -426,16 +466,18 @@ pub fn emit_clap_error(format: LogFormat, err: &clap::Error) -> i32 {
     match format {
         LogFormat::Json => {
             let message = redact_secrets(&err.to_string());
+            let details = json!({});
             write_stderr_line(
-                &serde_json::to_string(&error_envelope(
-                    "usage.invalid",
-                    "usage",
+                &serde_json::to_string(&error_envelope(ErrorEnvelope {
+                    code: "usage.invalid",
+                    kind: "usage",
                     message,
-                    None,
-                    None,
-                    false,
-                    2,
-                ))
+                    hint: None,
+                    next_command: None,
+                    retryable: false,
+                    exit_code: 2,
+                    details: &details,
+                }))
                 .unwrap_or_default(),
             );
         }
@@ -577,6 +619,75 @@ mod tests {
             .unwrap()
             .contains("DESLICER_API_TOKEN"));
         assert!(!value["error"]["message"].as_str().unwrap().contains("OIDC"));
+    }
+
+    #[test]
+    fn transport_dns_json_names_cause_and_is_not_retryable() {
+        let err = CliError::Transport(
+            "error sending request for url (https://nonexistent.invalid/api/v1/groups): \
+             dns error: failed to lookup address information: Name or service not known"
+                .into(),
+        );
+        let value = cli_error_json(&err);
+        assert_eq!(value["error"]["code"], "transport.error");
+        assert_eq!(value["error"]["exit_code"], 10);
+        assert_eq!(value["error"]["retryable"], false);
+        assert_eq!(value["error"]["details"]["cause"], "dns");
+        assert_eq!(
+            value["error"]["details"]["url"],
+            "https://nonexistent.invalid/api/v1/groups"
+        );
+        let hint = value["error"]["hint"].as_str().unwrap();
+        assert!(hint.contains("DNS resolution failed"));
+        assert!(hint.contains("OBSERVER_API_URL"));
+        assert_eq!(value["error"]["next_command"], "deslicer auth status"); // pragma: allowlist secret
+    }
+
+    #[test]
+    fn transport_timeout_stays_retryable() {
+        let err = CliError::Transport(
+            "error sending request for url (https://slow.example/api): operation timed out".into(),
+        );
+        let value = cli_error_json(&err);
+        assert_eq!(value["error"]["details"]["cause"], "timeout");
+        assert_eq!(value["error"]["retryable"], true);
+    }
+
+    #[test]
+    fn unclassified_transport_keeps_generic_envelope() {
+        let err = CliError::Transport("invalid plan JSON: expected value".into());
+        let value = cli_error_json(&err);
+        assert_eq!(value["error"]["retryable"], true);
+        assert!(value["error"]["hint"].is_null());
+        assert!(value["error"]["next_command"].is_null());
+        assert_eq!(value["error"]["details"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn validation_report_missing_json() {
+        let err = CliError::ValidationReportMissing("plan is compile_failed".into());
+        let value = cli_error_json(&err);
+        assert_eq!(value["error"]["code"], "validation.report_missing");
+        assert_eq!(value["error"]["exit_code"], 16);
+        assert_eq!(value["error"]["retryable"], false);
+        assert!(value["error"]["hint"]
+            .as_str()
+            .unwrap()
+            .contains("no validation report"));
+    }
+
+    #[test]
+    fn missing_github_sha_hint() {
+        let err = CliError::MissingArgument(
+            "missing GITHUB_SHA. Set GITHUB_REPOSITORY and GITHUB_SHA, or run in CI.".into(),
+        );
+        let value = cli_error_json(&err);
+        assert_eq!(value["error"]["code"], "usage.missing_argument");
+        assert_eq!(value["error"]["exit_code"], 2);
+        assert_eq!(
+            value["error"]["hint"],
+            "set GITHUB_REPOSITORY and GITHUB_SHA, or run in CI"
+        );
     }
 
     #[test]
