@@ -3,7 +3,7 @@ use crate::errors::CliError;
 use crate::token_store::{load_stored_session, StoredSession};
 use crate::Ctx;
 
-const LEGACY_DEV_TOKEN: &str = "DESLICER_DEV_TOKEN";
+pub(crate) const LEGACY_DEV_TOKEN: &str = "DESLICER_DEV_TOKEN";
 
 pub enum AuthCredential {
     DirectObserver { platform: CiPlatform },
