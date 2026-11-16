@@ -63,6 +63,10 @@ List commands accept `--filter` (case-insensitive substring) plus `--limit` / `-
 | `agent logs` | Read the output of a run that is already going |  |
 | `agent resume` | Continue this session's last conversation |  |
 | `agent repl` | Start a conversation. `cli agent` with no subcommand does this |  |
+| `app-state` | Fingerprint a Splunk app directory and manage immutable local objects | |
+| `app-state fingerprint` | Hash an app directory | |
+| `app-state publish` | Store immutable objects for an app directory | mutating, dry-run unless --yes |
+| `app-state fetch` | Read an object by digest | writes a file with --yes and --output |
 | `auth` | Sign in, check CI identity, and manage stored credentials |  |
 | `auth login` | Exchange CI OIDC or start device login and store credentials for later commands | mutating |
 | `auth logout` | Clear the stored device session (environment tokens are unchanged) | mutating |
