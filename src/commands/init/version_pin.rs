@@ -130,7 +130,7 @@ mod tests {
         let current = env!("CARGO_PKG_VERSION");
         let marker = concat!("DES", "LICER_VERSION");
         let body = format!("{marker}=\"v1.3.2\"\nrun: grep -F \"1.3.2\"\nversion: v1.3.2\n");
-        let pinned = pin_scaffold_cli_version(vec![workflow(body)], current);
+        let pinned = pin_scaffold_cli_version(vec![workflow(&body)], current);
         let text = String::from_utf8(pinned[0].contents.clone()).unwrap();
         assert!(!text.contains("1.3.2"), "{text}");
         assert!(text.contains(&format!("v{current}")));
@@ -141,7 +141,7 @@ mod tests {
     fn newer_pin_is_left_alone() {
         let marker = concat!("DES", "LICER_VERSION");
         let body = format!("{marker}=\"v99.0.0\"\nversion: v99.0.0\n");
-        let pinned = pin_scaffold_cli_version(vec![workflow(body)], env!("CARGO_PKG_VERSION"));
+        let pinned = pin_scaffold_cli_version(vec![workflow(&body)], env!("CARGO_PKG_VERSION"));
         let text = String::from_utf8(pinned[0].contents.clone()).unwrap();
         assert!(text.contains("v99.0.0"));
     }
