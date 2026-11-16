@@ -10,6 +10,7 @@ pub mod lifecycle;
 pub mod list;
 pub mod plan;
 mod plan_env;
+pub mod plan_id;
 mod plan_name;
 pub mod reject;
 pub mod retry;

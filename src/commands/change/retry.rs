@@ -12,7 +12,7 @@ use crate::Ctx;
 #[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
     /// External plan id.
-    #[arg(long)]
+    #[arg(long, value_parser = super::plan_id::parse_plan_id)]
     pub plan_id: String,
 
     /// Retry only this job id (requires resolving the plan's latest execution).
