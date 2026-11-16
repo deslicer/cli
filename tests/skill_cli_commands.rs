@@ -27,7 +27,7 @@ fn skill_commands_exist_in_the_cli_tree() {
         "auth status",
         "init",
         "inventory validate",
-        "groups list",
+        "group list",
         "change plan",
         "change show",
         "change status",

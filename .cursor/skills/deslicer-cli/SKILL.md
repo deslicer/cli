@@ -82,6 +82,10 @@ Branch on the process exit code. The envelope field `error.exit_code` matches it
 | 13 | agent run failed | no |
 | 14 | `change status` saw a failed lifecycle (`failed`, `compile_failed`, `rejected`, `expired`) | no |
 | 15 | this Observer does not expose the route | no |
+| 16 | VCS credential unavailable (reserved) | no |
+| 17 | VCS host rejected (reserved) | no |
+| 18 | Review provider error (reserved) | no |
+| 19 | Validation report missing | no |
 | 20 | `change validate` blocked (`--fail-on block`, the default) | no |
 | 21 | `change validate` warning, when `--fail-on warning` | no |
 | 22 | validation model unavailable | yes |
@@ -143,13 +147,13 @@ deslicer -o json --no-input init --provider github-token --environment example-p
 3. **Plan.** Only when the human asked for a plan. This call creates it:
 
 ```bash
-deslicer -o json groups list --environment example-prod
+deslicer -o json group list --environment example-prod
 deslicer -o json change plan --environment example-prod --target-group example_servers --name "example-change"
 ```
 
-   `--target-group` is a group UUID or an exact `name` from `groups list`. `--no-wait` returns after the compile trigger; status may still be `draft`.
+   `--target-group` is a group UUID or an exact `name` from `group list`. `--no-wait` returns after the compile trigger; status may still be `draft`.
 4. **Read.** `deslicer -o json change show --plan-id "$PLAN_ID"` and `deslicer -o json change status --plan-id "$PLAN_ID"`. <!-- pragma: allowlist secret -->
-5. **Validate.** `deslicer change validate --plan-id "$PLAN_ID" --format json`. Add `--report-only` to read the current report without triggering validation. Exit 20 means blocked. Exit 15 on `--report-only` can mean the report is missing or the route is absent; check `change show` before treating it as a missing API. Exit 15 is not retryable. <!-- pragma: allowlist secret -->
+5. **Validate.** `deslicer change validate --plan-id "$PLAN_ID" --format json`. Add `--report-only` to read the current report without triggering validation. Exit 20 means blocked. On `--report-only`, exit 19 means the report is missing and exit 15 means the route is unavailable; check `change show` before treating it as a missing API. Exit 15 is not retryable. <!-- pragma: allowlist secret -->
 6. **Human approval.** Stop. Hand over `plan_id`, `status`, and `url` when it is present. Do not run `deslicer change approve`. <!-- pragma: allowlist secret -->
 7. **Deploy.** Only after the human explicitly says to deploy this plan. `deslicer -o json change deploy --plan-id "$PLAN_ID"` queues the rollout. It has no `--yes` dry-run. <!-- pragma: allowlist secret -->
 8. **Verify.** Only after that same go. `deslicer -o json change verify --plan-id "$PLAN_ID"` starts a compile. It is not a read. <!-- pragma: allowlist secret -->
