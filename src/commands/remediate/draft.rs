@@ -20,7 +20,7 @@ pub struct Args {
     #[arg(long, required_unless_present = "host")]
     pub group: Option<String>,
 
-  /// Optional plan name shown in Changes/Runs.
+    /// Optional plan name shown in Changes/Runs.
     #[arg(long)]
     pub name: Option<String>,
 
