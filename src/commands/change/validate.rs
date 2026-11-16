@@ -101,7 +101,7 @@ fn validation_report_absent(err: &crate::errors::CliError) -> bool {
             || text.contains("no validation"))
 }
 
-/// Unknown plan → exit 11. Existing plan with no report → exit 16 (issue #271).
+/// Unknown plan → exit 11. Existing plan with no report → exit 19 (issue #271).
 async fn missing_report_error(
     client: &crate::observer_client::Client,
     plan_id: &str,
@@ -362,7 +362,7 @@ mod tests {
         }
         assert_eq!(
             CliError::ValidationReportMissing("plan is compile_failed".into()).exit_code(),
-            16
+            19
         );
     }
 }

@@ -409,7 +409,7 @@ mod tests {
             CliError::InvalidInput(message) => {
                 assert!(message.contains("Invalid path parameter format"));
             }
-            other => panic!("expected InvalidInput, got {other}"),
+            _ => panic!("expected InvalidInput"),
         }
         assert_eq!(err.exit_code(), 2);
         let text = err.to_string();

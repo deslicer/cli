@@ -45,8 +45,11 @@ const EXIT_CODE_ROWS: &[(i32, &str, bool)] = &[
         false,
     ),
     (15, "endpoint not available on this Observer", false),
+    (16, "vcs credential unavailable (reserved)", false),
+    (17, "vcs host rejected (reserved)", false),
+    (18, "review provider error (reserved)", false),
     (
-        16,
+        19,
         "validation report missing (change validate --report-only)",
         false,
     ),

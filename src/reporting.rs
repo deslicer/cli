@@ -668,7 +668,7 @@ mod tests {
         let err = CliError::ValidationReportMissing("plan is compile_failed".into());
         let value = cli_error_json(&err);
         assert_eq!(value["error"]["code"], "validation.report_missing");
-        assert_eq!(value["error"]["exit_code"], 16);
+        assert_eq!(value["error"]["exit_code"], 19);
         assert_eq!(value["error"]["retryable"], false);
         assert!(value["error"]["hint"]
             .as_str()

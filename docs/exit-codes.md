@@ -24,7 +24,10 @@ this table.
 | 13 | agent run failed | no |
 | 14 | plan lifecycle failed (`change status` terminal failure) | no |
 | 15 | endpoint not available on this Observer | no |
-| 16 | validation report missing (`change validate --report-only` on a plan that exists but has no report) | no |
+| 16 | vcs credential unavailable (reserved; not emitted yet) | no |
+| 17 | vcs host rejected (reserved; not emitted yet) | no |
+| 18 | review provider error (reserved; not emitted yet) | no |
+| 19 | validation report missing (`change validate --report-only` on a plan that exists but has no report) | no |
 | 20 | validation blocked | no |
 | 21 | validation warning (treated as failure unless policy says otherwise) | no |
 | 22 | validation model unavailable | yes |
@@ -54,7 +57,10 @@ even though exit **4** is the auth class; agents may poll.
   generic Observer HTTP 400. Exit **8** is only the unsupported CI platform /
   OIDC path. `change plan` without `GITHUB_REPOSITORY` and `GITHUB_SHA` (or the
   GitLab equivalents) is **2** `usage.missing_argument`, not **1**.
-- **16** is `validation.report_missing` from `change validate --report-only`
+- **16** / **17** / **18** are reserved for the multi-VCS proposal
+  (`vcs.credential_unavailable`, `vcs.host_rejected`, `review.provider_error`)
+  and are not emitted yet.
+- **19** is `validation.report_missing` from `change validate --report-only`
   when the plan exists but has no report. An unknown plan on that path is
   still **11** `plan.not_found`.
 - **20** / **21** come from `change validate` (`--fail-on block|warning`).
