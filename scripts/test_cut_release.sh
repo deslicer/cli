@@ -76,10 +76,34 @@ test_select_open_bump_branch() {
   pass "select_open_bump_branch"
 }
 
+# #266: a new bump must supersede older release/* PRs, including ones <= the latest tag.
+test_stale_bump_pr_numbers() {
+  local json numbers
+  json='[
+    {"number":201,"headRefName":"release/v1.8.0"},
+    {"number":213,"headRefName":"release/v1.7.4"},
+    {"number":233,"headRefName":"release/v1.8.1"},
+    {"number":251,"headRefName":"release/v1.9.0"},
+    {"number":9,"headRefName":"feature/not-a-bump"}
+  ]'
+  numbers="$(printf '%s' "${json}" | stale_bump_pr_numbers v1.9.0 1.8.0)"
+  printf '%s\n' "${numbers}" | grep -qx 201 || fail "expected to close released 1.8.0, got ${numbers}"
+  printf '%s\n' "${numbers}" | grep -qx 213 || fail "expected to close downgrade 1.7.4, got ${numbers}"
+  printf '%s\n' "${numbers}" | grep -qx 233 || fail "expected to close superseded 1.8.1, got ${numbers}"
+  printf '%s\n' "${numbers}" | grep -q 251 && fail "must keep the current bump 1.9.0"
+  printf '%s\n' "${numbers}" | grep -q 9 && fail "must ignore non-bump PRs"
+
+  numbers="$(printf '%s' "${json}" | stale_bump_pr_numbers "" 1.8.0)"
+  printf '%s\n' "${numbers}" | grep -qx 201 || fail "released tag closes without a keep target"
+  printf '%s\n' "${numbers}" | grep -q 251 && fail "ahead-of-tag bump stays when keep is empty"
+  pass "stale_bump_pr_numbers"
+}
+
 test_bump_semver
 test_decide_bump
 test_version_gt
 test_plan_when_cargo_already_ahead
 test_should_tag_cargo_as_is
 test_select_open_bump_branch
+test_stale_bump_pr_numbers
 echo "cut-release tests passed"

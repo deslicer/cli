@@ -196,12 +196,48 @@ select_open_bump_branch() {
   '
 }
 
+# Open bump PRs to close so only the PR for keep_tag stays.
+# keep_tag is vX.Y.Z (empty keeps every PR newer than latest).
+# latest is X.Y.Z with no v (empty skips the "already released" check).
+# JSON is `gh pr list --json number,headRefName` on stdin or as $3.
+# Prints PR numbers, one per line.
+stale_bump_pr_numbers() {
+  local keep_tag="${1:-}" latest="${2:-}" json="${3:-}"
+  if [ -z "${json}" ]; then
+    json="$(cat)"
+  fi
+  local keep_ver
+  keep_ver="$(tag_version "${keep_tag}")"
+  printf '%s' "${json}" | jq -r --arg keep "${keep_ver}" --arg latest "${latest}" '
+    def semver($x): $x | split(".") | map(tonumber);
+    def ver:
+      .headRefName
+      | (try capture("^release/v(?<v>[0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?$") catch null)
+      | .v // empty;
+    .[]
+    | (ver) as $v
+    | select($v != "")
+    | select($keep == "" or $v != $keep)
+    | select(
+        ($keep != "" and $v != $keep)
+        or ($latest != "" and (semver($v) <= semver($latest)))
+      )
+    | .number
+  '
+}
+
+latest_version() {
+  tag_version "$(latest_stable_tag || true)"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
   scripts/cut-release.sh plan [--bump auto|patch|minor|major]
   scripts/cut-release.sh apply <version>
   scripts/cut-release.sh select-open-bump-branch <tag>   # JSON on stdin
+  scripts/cut-release.sh stale-bump-prs <keep-tag> <latest-version>  # JSON on stdin
+  scripts/cut-release.sh latest-version
 EOF
 }
 
@@ -229,6 +265,13 @@ main() {
     select-open-bump-branch)
       [ $# -eq 1 ] || { usage >&2; return 1; }
       select_open_bump_branch "$1"
+      ;;
+    stale-bump-prs)
+      [ $# -eq 2 ] || { usage >&2; return 1; }
+      stale_bump_pr_numbers "$1" "$2"
+      ;;
+    latest-version)
+      latest_version
       ;;
     *)
       usage >&2
