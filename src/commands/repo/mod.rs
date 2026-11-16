@@ -2,6 +2,7 @@ use clap::Subcommand;
 
 use crate::Ctx;
 
+mod auth;
 mod bootstrap;
 pub(crate) mod readiness;
 mod refresh;
@@ -16,6 +17,8 @@ pub enum RepoCmd {
     Refresh(refresh::Args),
     /// List linked repos and bootstrap job fields
     Status(status::Args),
+    /// Print how bootstrap authenticates to GitHub (no network, no secrets)
+    Auth(auth::Args),
 }
 
 pub async fn dispatch(ctx: Ctx, cmd: RepoCmd) -> i32 {
@@ -23,5 +26,6 @@ pub async fn dispatch(ctx: Ctx, cmd: RepoCmd) -> i32 {
         RepoCmd::Bootstrap(args) => bootstrap::run(ctx, args).await,
         RepoCmd::Refresh(args) => refresh::run(ctx, args).await,
         RepoCmd::Status(args) => status::run(ctx, args).await,
+        RepoCmd::Auth(args) => auth::run(ctx, args),
     }
 }
