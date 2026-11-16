@@ -81,6 +81,7 @@ impl RoutineClient {
                     .into(),
             )
         })?;
+        crate::session_portal::reject_incompatible_session(ctx, &session)?;
         Ok(Self {
             base: resolve_deslicer_api_url(ctx, &session),
             token: session.cli_session_token,

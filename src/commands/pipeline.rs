@@ -23,7 +23,7 @@ pub async fn authenticate(
         AuthCredential::DirectObserver { platform } => {
             client_from_observer_token(ctx, platform, environment)
         }
-        AuthCredential::Device(session) => client_from_device_session(session),
+        AuthCredential::Device(session) => client_from_device_session(ctx, session),
         AuthCredential::CiOidc { platform } => {
             authenticate_with_ci_oidc(ctx, platform, environment, plan_id).await
         }
@@ -96,8 +96,11 @@ fn client_from_observer_token(
 }
 
 fn client_from_device_session(
+    ctx: &Ctx,
     session: StoredSession,
 ) -> Result<(AuthenticatedSession, Client), CliError> {
+    // Reject a cross-origin override before the client, and its token, exist.
+    crate::session_portal::reject_incompatible_session(ctx, &session)?;
     let observer_api_url = url::Url::parse(&session.observer_api_url)
         .map_err(|e| CliError::Transport(format!("invalid stored observer_api_url: {e}")))?;
     crate::http::assert_url_allowed(&observer_api_url)?;

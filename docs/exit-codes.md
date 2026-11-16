@@ -46,6 +46,12 @@ even though exit **4** is the auth class; agents may poll.
   `CliError` variant.
 - **20** / **21** come from `change validate` (`--fail-on block|warning`).
 - Not logged in (device session missing) exits **4** (auth), not **1**.
+- A device session whose API origin does not match an explicit
+  `DESLICER_API_URL` / `--deslicer-api-url` or `OBSERVER_API_URL` / <!-- pragma: allowlist secret -->
+  `--observer-api-url` exits **4** `auth.session_origin_mismatch` before any
+  authenticated request. `DESLICER_IGNORE_DEVICE_SESSION=1` skips the stored <!-- pragma: allowlist secret -->
+  session (including the kernel keyring) without deleting it. Empty `HOME`
+  does not isolate the kernel keyring.
 
 ## Related
 

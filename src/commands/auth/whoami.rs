@@ -47,14 +47,28 @@ async fn print_direct_whoami(ctx: Ctx) -> i32 {
         Err(err) if identity_probe_forbidden(&err) => {
             print_token_logged_in(&ctx, url.as_deref(), true)
         }
-        // Missing /me → soft "logged in, unverified" (issue #246), not exit 15.
+        // Missing /me: confirm the token with a cheap authenticated read (issue #265).
         Err(err) if identity_probe_unavailable(&err) => {
-            print_token_logged_in(&ctx, url.as_deref(), false)
+            probe_token_without_me(&ctx, &client, url.as_deref()).await
         }
         // Rejected token → auth exit 4 + error envelope on stderr; empty stdout
         // (issue #247). Same contract as logged-out whoami (#241) and auth login (#242).
         Err(err @ (CliError::ApiTokenRejected(_) | CliError::OidcRejected(_))) => {
             map_cli_error(ctx.log_format, err)
+        }
+        Err(err) => map_cli_error(ctx.log_format, err),
+    }
+}
+
+async fn probe_token_without_me(
+    ctx: &Ctx,
+    client: &crate::observer_client::Client,
+    url: Option<&str>,
+) -> i32 {
+    match client.probe_groups_auth().await {
+        Ok(()) => print_token_logged_in(ctx, url, true),
+        Err(err) if identity_probe_forbidden(&err) || identity_probe_unavailable(&err) => {
+            print_token_logged_in(ctx, url, false)
         }
         Err(err) => map_cli_error(ctx.log_format, err),
     }
@@ -66,18 +80,18 @@ fn print_token_logged_in(ctx: &Ctx, url: Option<&str>, verified: bool) -> i32 {
     } else {
         whoami_token_unverified_human(url)
     };
-    print_output(
-        ctx.log_format,
-        &json!({
-            "ok": true,
-            "logged_in": true,
-            "identity": "observer_api_token",
-            "observer_api_url": url,
-            "details": { "verified": verified },
-        }),
-        &human,
-    );
+    print_output(ctx.log_format, &token_whoami_value(url, verified), &human);
     0
+}
+
+fn token_whoami_value(url: Option<&str>, verified: bool) -> serde_json::Value {
+    json!({
+        "ok": verified,
+        "logged_in": true,
+        "identity": "observer_api_token",
+        "observer_api_url": url,
+        "details": { "verified": verified },
+    })
 }
 
 async fn print_ci_whoami(ctx: &Ctx, platform: CiPlatform) -> i32 {
@@ -113,6 +127,9 @@ async fn print_ci_whoami(ctx: &Ctx, platform: CiPlatform) -> i32 {
 }
 
 fn print_device_whoami(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
+    if let Err(err) = crate::session_portal::reject_incompatible_session(ctx, session) {
+        return emit_cli_error(ctx.log_format, &err);
+    }
     if !session.is_active() {
         // Expired session → auth exit 4 + envelope (issue #236), not exit 1
         // with a non-envelope document on stdout.
@@ -185,5 +202,15 @@ mod tests {
 
         let without = device_whoami_json(&session(None));
         assert!(without["tenant_slug"].is_null());
+    }
+
+    #[test]
+    fn unverified_token_is_not_ok() {
+        let value = token_whoami_value(Some("https://observer.example"), false);
+        assert_eq!(value["ok"], false);
+        assert_eq!(value["details"]["verified"], false);
+        assert_eq!(value["logged_in"], true);
+        let verified = token_whoami_value(None, true);
+        assert_eq!(verified["ok"], true);
     }
 }

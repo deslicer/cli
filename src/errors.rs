@@ -57,6 +57,9 @@ pub enum CliError {
     /// `auth.device_session_required` code (issue #234).
     #[error("{0}")]
     DeviceSessionRequired(String),
+    /// Stored device session does not match the requested API origin (issue #268).
+    #[error("{0}")]
+    SessionOriginMismatch(String),
     #[error("plan validation model unavailable")]
     ValidationModelUnavailable,
     #[error("plan validation timed out")]
@@ -75,6 +78,7 @@ impl CliError {
             CliError::OidcRejected(_)
             | CliError::ApiTokenRejected(_)
             | CliError::DeviceSessionRequired(_)
+            | CliError::SessionOriginMismatch(_)
             | CliError::AuthPending(_) => 4,
             CliError::RepoNotAllowlisted(_) => 5,
             CliError::EnvironmentNotBound(_) => 6,
@@ -156,6 +160,9 @@ mod tests {
             CliError::HumanApprovalRequired("x".into()),
             CliError::AgentRunFailed("x".into()),
             CliError::DeviceSessionRequired("no active device session".into()),
+            CliError::SessionOriginMismatch(
+                "session origin does not match the requested API".into(),
+            ),
             CliError::ValidationModelUnavailable,
             CliError::ValidationTimeout,
             CliError::ValidationUnavailable,
@@ -216,6 +223,7 @@ mod tests {
                 | CliError::HumanApprovalRequired(_)
                 | CliError::AgentRunFailed(_)
                 | CliError::DeviceSessionRequired(_)
+                | CliError::SessionOriginMismatch(_)
                 | CliError::ValidationModelUnavailable
                 | CliError::ValidationTimeout
                 | CliError::ValidationUnavailable
