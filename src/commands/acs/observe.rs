@@ -8,11 +8,11 @@ use crate::Ctx;
 /// Read-only scan of a Splunk Cloud stack through ACS. Never applies changes.
 ///
 /// Examples:
-///   deslicer acs observe my-stack
-///   deslicer --log-format json acs observe my-stack --experience classic
+///   deslicer cloud stack observe my-stack // pragma: allowlist secret
+///   deslicer --log-format json cloud stack observe my-stack --experience classic // pragma: allowlist secret
 #[derive(ClapArgs)]
 pub struct Args {
-    /// ACS stack name (from `acs stacks list`)
+    /// ACS stack name (from `cloud stack list`)
     pub stack: String,
 
     /// Splunk Cloud experience: victoria (default on Observer) or classic

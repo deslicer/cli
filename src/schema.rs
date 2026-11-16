@@ -280,6 +280,9 @@ fn walk(cmd: &Command, parent_path: &str, out: &mut Vec<SchemaCommand>, is_root:
 
     if is_root {
         for sub in cmd.get_subcommands() {
+            if sub.is_hide_set() {
+                continue;
+            }
             walk(sub, "", out, false);
         }
         return;
@@ -295,6 +298,9 @@ fn walk(cmd: &Command, parent_path: &str, out: &mut Vec<SchemaCommand>, is_root:
     out.push(describe_command(cmd, &path));
 
     for sub in cmd.get_subcommands() {
+        if sub.is_hide_set() {
+            continue;
+        }
         walk(sub, &path, out, false);
     }
 }
@@ -471,10 +477,20 @@ fn is_mutating_path(path: &str) -> bool {
         "change deploy",
         "catalog plan",
         "upgrade plan",
+        "change catalog plan",
+        "change upgrade plan",
+        "change remediate draft",
+        "change app adopt",
+        "change mapping set",
+        "change mapping adopt",
         "remediate draft",
+        "inventory apps adopt",
+        "environment mapping set",
+        "environment mapping adopt",
         "enroll create",
         "enroll revoke",
         "license bind",
+        "model byok set",
         "models byok set",
         "org switch",
         "org settings approval",

@@ -16,6 +16,8 @@ pub mod http;
 pub mod idempotency;
 pub mod interactive;
 pub mod json_doc;
+pub mod list_filter;
+pub mod naming;
 pub mod observer_client;
 pub mod observer_token;
 pub mod oidc_exchange;

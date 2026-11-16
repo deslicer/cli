@@ -20,9 +20,11 @@ pub struct Args {
     #[arg(long, required_unless_present = "host")]
     pub group: Option<String>,
 
+    /// Optional plan name shown in Deslicer Changes/Runs. // pragma: allowlist secret
     #[arg(long)]
     pub name: Option<String>,
 
+    /// Deslicer environment profile used for auth. // pragma: allowlist secret
     #[arg(long)]
     pub environment: Option<String>,
 

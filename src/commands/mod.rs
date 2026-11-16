@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod change;
 pub mod completion;
 pub mod docs;
+pub mod doctor;
 pub mod enroll;
 pub mod environments;
 pub mod groups;

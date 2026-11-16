@@ -9,7 +9,7 @@ use crate::cli::LogFormat;
 use crate::observer_client::{UPGRADE_FAMILIES, UPGRADE_ROLE_GROUPS};
 use crate::Ctx;
 
-mod plan;
+pub mod plan;
 mod preview;
 mod readiness;
 
@@ -33,8 +33,15 @@ pub struct RollingArgs {
     #[arg(long, required = true, value_parser = clap::builder::PossibleValuesParser::new(UPGRADE_FAMILIES))]
     pub family: String,
 
-    /// Host to upgrade (hostname or host UUID). Repeatable.
-    #[arg(long = "target", required = true, num_args = 1)]
+    /// Host to upgrade (hostname or host UUID). Repeatable. `--targets a,b` remains accepted.
+    #[arg(
+        long = "target",
+        alias = "targets",
+        value_delimiter = ',',
+        num_args = 1,
+        action = clap::ArgAction::Append,
+        required = true
+    )]
     pub targets: Vec<String>,
 
     /// Splunk version to upgrade to (e.g. 9.4.1)
@@ -49,6 +56,7 @@ pub struct RollingArgs {
     #[arg(long = "role-group", num_args = 1, value_parser = clap::builder::PossibleValuesParser::new(UPGRADE_ROLE_GROUPS))]
     pub role_groups: Vec<String>,
 
+    /// Deslicer environment profile used for auth. // pragma: allowlist secret
     #[arg(long)]
     pub environment: Option<String>,
 

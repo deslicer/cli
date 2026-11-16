@@ -8,6 +8,10 @@ use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
+    /// Case-insensitive substring matched against the token name, jti, and purpose.
+    #[arg(long)]
+    pub filter: Option<String>,
+
     #[command(flatten)]
     pub page: crate::pagination::PageArgs,
 }
@@ -29,7 +33,21 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
     }
 
     let listed = client.list_enrollment_tokens().await?;
-    let page = crate::pagination::page_slice(&listed.tokens, &args.page);
+    let tokens = crate::list_filter::apply(args.filter.as_deref(), listed.tokens, |token| {
+        format!(
+            "{} {} {}",
+            token.jti,
+            token.name.as_deref().unwrap_or(""),
+            token.token_purpose
+        )
+    });
+    let filtered_total = tokens.len() as i64;
+    let total = if args.filter.is_some() {
+        filtered_total
+    } else {
+        listed.total
+    };
+    let page = crate::pagination::page_slice(&tokens, &args.page);
 
     match ctx.log_format {
         LogFormat::Json => {
@@ -37,7 +55,7 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
                 .to_json_value()
                 .map_err(|err| CliError::Other(format!("serialize tokens: {err}")))?;
             if let Some(obj) = payload.as_object_mut() {
-                obj.insert("total".into(), serde_json::json!(listed.total));
+                obj.insert("total".into(), serde_json::json!(total));
             }
             let text = crate::json_doc::to_pretty_string(&payload)
                 .map_err(|err| CliError::Other(format!("serialize tokens: {err}")))?;
@@ -46,7 +64,7 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         }
         LogFormat::Human => {
             let shown: Vec<&EnrollmentTokenSummary> = page.items.iter().collect();
-            print!("{}", format_tokens_human(&shown, listed.total));
+            print!("{}", format_tokens_human(&shown, total));
         }
     }
     Ok(0)

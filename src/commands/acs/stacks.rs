@@ -1,34 +1,22 @@
-use clap::{Args as ClapArgs, Subcommand};
+use clap::Args as ClapArgs;
 
 use crate::cli::LogFormat;
 use crate::commands::pipeline::{authenticate, map_cli_error};
 use crate::observer_client::AcsStack;
 use crate::Ctx;
 
-#[derive(Subcommand)]
-pub enum StacksCmd {
-    /// List ACS stacks that have a stored credential
-    ///
-    /// Examples:
-    ///   deslicer acs stacks list
-    ///   deslicer --log-format json acs stacks list
-    List(ListArgs),
-}
-
 #[derive(ClapArgs)]
 pub struct ListArgs {
     /// Deslicer environment profile used for auth
     #[arg(long)]
     pub environment: Option<String>,
+
+    /// Case-insensitive substring matched against the stack name.
+    #[arg(long)]
+    pub filter: Option<String>,
 }
 
-pub async fn dispatch(ctx: Ctx, cmd: StacksCmd) -> i32 {
-    match cmd {
-        StacksCmd::List(args) => list(ctx, args).await,
-    }
-}
-
-async fn list(ctx: Ctx, args: ListArgs) -> i32 {
+pub async fn list(ctx: Ctx, args: ListArgs) -> i32 {
     let (_session, client) = match authenticate(&ctx, args.environment.as_deref(), None).await {
         Ok(pair) => pair,
         Err(err) => return map_cli_error(ctx.log_format, err),
@@ -38,6 +26,13 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
         Ok(stacks) => stacks,
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
+    let stacks = crate::list_filter::apply(args.filter.as_deref(), stacks, |stack| {
+        format!(
+            "{} {}",
+            stack.name,
+            stack.environment.as_deref().unwrap_or("")
+        )
+    });
 
     match ctx.log_format {
         LogFormat::Json => match crate::json_doc::to_pretty_string(&stacks) {
@@ -59,7 +54,10 @@ async fn list(ctx: Ctx, args: ListArgs) -> i32 {
 
 fn format_stacks_human(stacks: &[AcsStack]) -> String {
     if stacks.is_empty() {
-        return "No ACS stacks. Store a stack credential with `deslicer acs credentials set <stack> --token-stdin`.\n".to_string();
+        const SET: &str = "deslicer cloud stack credential set"; // pragma: allowlist secret
+        return format!(
+            "No ACS stacks. Store a stack credential with `{SET} <stack> --token-stdin`.\n"
+        );
     }
     let mut lines = vec!["NAME  ACS_ENV  TOKEN  UPDATED".to_string()];
     for stack in stacks {
@@ -98,6 +96,6 @@ mod tests {
 
     #[test]
     fn empty_list_points_at_credentials_set() {
-        assert!(format_stacks_human(&[]).contains("acs credentials set"));
+        assert!(format_stacks_human(&[]).contains("cloud stack credential set"));
     }
 }

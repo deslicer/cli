@@ -40,6 +40,17 @@ Minor release with a **breaking default** for non-TTY stdout. Compare with
 
 ### Features
 
+- Command names follow noun-verb, singular nouns (#187). Canonical paths are
+  `cloud stack` (alias `acs`), `model` (alias `models`), `environment`
+  (alias `environments`), and `group` (alias `groups`). Splunk-changing
+  verbs also live under `change` (`change upgrade plan`, `change catalog plan`,
+  `change remediate draft`, `change app adopt`, `change mapping set|adopt`);
+  the previous paths remain and print a stderr deprecation warning for two
+  minor versions. `deslicer doctor` reports API URL drift and local workflow <!-- pragma: allowlist secret -->
+  readiness, and with `--installation` runs the same GitHub App checks as
+  `repo bootstrap --check`. List commands accept `--filter`. `catalog plan`
+  and `upgrade plan` take repeatable `--target` (`--targets a,b` still works).
+
 - Global `--timeout` / `DESLICER_TIMEOUT` (per-request HTTP) and `--retries`
   / `DESLICER_RETRIES` (default 2; `0` disables) with jittered backoff for
   idempotent GETs/HEADs on 429/502/503/504 and connect/timeout errors,

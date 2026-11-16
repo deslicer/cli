@@ -343,11 +343,12 @@ impl Client {
         &self,
         status: Option<&str>,
         since: Option<&str>,
+        filter: Option<&str>,
         page: &crate::pagination::PageArgs,
     ) -> Result<crate::pagination::Page<ChangePlan>, CliError> {
-        if status.is_some() || since.is_some() || !page.wants_paging() {
+        if status.is_some() || since.is_some() || filter.is_some() || !page.wants_paging() {
             let all = self.fetch_all_plans_pages().await?;
-            let filtered = filter_plans(&all, status, since);
+            let filtered = filter_plans(&all, status, since, filter);
             return Ok(crate::pagination::page_slice(&filtered, page));
         }
 
@@ -825,6 +826,7 @@ fn filter_plans(
     plans: &[ChangePlan],
     status: Option<&str>,
     since: Option<&str>,
+    filter: Option<&str>,
 ) -> Vec<ChangePlan> {
     plans
         .iter()
@@ -833,6 +835,16 @@ fn filter_plans(
                 if !plan.status.eq_ignore_ascii_case(want) {
                     return false;
                 }
+            }
+            if !crate::list_filter::matches(
+                filter,
+                &[
+                    Some(plan.external_id()),
+                    Some(plan.status.as_str()),
+                    plan.name.as_deref(),
+                ],
+            ) {
+                return false;
             }
             if let Some(since) = since {
                 let ts = plan
