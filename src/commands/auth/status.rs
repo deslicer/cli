@@ -130,6 +130,9 @@ fn print_no_identity(ctx: &Ctx) -> i32 {
 }
 
 fn print_device_status(ctx: &Ctx, session: &crate::token_store::StoredSession) -> i32 {
+    if let Err(err) = crate::session_portal::reject_incompatible_session(ctx, session) {
+        return crate::reporting::emit_cli_error(ctx.log_format, &err);
+    }
     let logged_in = session.is_active();
     let drift = api_url_drift(ctx, session);
     let mut output = json!({

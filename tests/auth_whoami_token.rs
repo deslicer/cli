@@ -166,8 +166,8 @@ async fn whoami_forbidden_scoped_api_token_is_still_logged_in() {
     std::env::remove_var("DESLICER_API_TOKEN");
 }
 
-/// Observer without `GET /me` (HTML 404) → exit 0, logged_in, details.verified=false
-/// (issue #246). Must not exit 15 / endpoint.not_available.
+/// Observer without `GET /me` (HTML 404). A groups 403 cannot decide the token,
+/// so whoami stays exit 0 with `verified: false` and `ok: false` (issues #246, #265).
 #[tokio::test]
 async fn whoami_missing_me_endpoint_is_logged_in_unverified() {
     let observer = MockServer::start().await;
@@ -179,6 +179,15 @@ async fn whoami_missing_me_endpoint_is_logged_in_unverified() {
                 .insert_header("content-type", "text/html")
                 .set_body_string("<html><body>404 Not Found</body></html>"),
         )
+        .expect(1)
+        .mount(&observer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/groups"))
+        .and(header("Authorization", "Bearer tools-key"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({
+            "error": "forbidden"
+        })))
         .expect(1)
         .mount(&observer)
         .await;
@@ -196,12 +205,61 @@ async fn whoami_missing_me_endpoint_is_logged_in_unverified() {
     );
     assert!(
         output.stderr.is_empty(),
-        "soft success must not emit an error envelope: {}",
+        "undecided token must not emit an error envelope: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     let doc: Value = serde_json::from_slice(&output.stdout).expect("whoami JSON on stdout");
-    assert_eq!(doc["ok"], true);
+    assert_eq!(doc["ok"], false);
     assert_eq!(doc["logged_in"], true);
     assert_eq!(doc["identity"], "observer_api_token");
     assert_eq!(doc["details"]["verified"], false);
+}
+
+/// Missing `/me` plus a successful groups read means the token is accepted.
+#[tokio::test]
+async fn whoami_missing_me_groups_ok_is_verified() {
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me"))
+        .respond_with(ResponseTemplate::new(404).set_body_string("missing"))
+        .mount(&observer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/groups"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&observer)
+        .await;
+
+    let mut cmd = whoami_json_cmd(&observer);
+    cmd.env("DESLICER_API_TOKEN", "tools-key"); // pragma: allowlist secret
+    let output = cmd.output().expect("run auth whoami");
+    assert_eq!(output.status.code(), Some(0));
+    let doc: Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(doc["ok"], true);
+    assert_eq!(doc["details"]["verified"], true);
+}
+
+/// Missing `/me` plus groups 401 is a rejected token, not a soft login.
+#[tokio::test]
+async fn whoami_missing_me_groups_401_is_rejected() {
+    let observer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me"))
+        .respond_with(ResponseTemplate::new(404).set_body_string("missing"))
+        .mount(&observer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/groups"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "error": "unauthorized"
+        })))
+        .expect(1)
+        .mount(&observer)
+        .await;
+
+    let mut cmd = whoami_json_cmd(&observer);
+    cmd.env("DESLICER_API_TOKEN", "tools-key"); // pragma: allowlist secret
+    let output = cmd.output().expect("run auth whoami");
+    assert_eq!(output.status.code(), Some(4));
 }

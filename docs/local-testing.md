@@ -117,3 +117,24 @@ More detail in [bundle-flow.md](bundle-flow.md#troubleshooting). Local
 automation uses `OBSERVER_API_URL` with `DESLICER_API_TOKEN`; interactive
 portal access uses `deslicer auth login`. The retired `DESLICER_DEV_TOKEN` is
 never transmitted. See [oidc-troubleshooting.md](oidc-troubleshooting.md).
+
+## Isolating a stored device session
+
+The device session lives in the OS keyring (kernel keyring on Linux) and, if
+that is unavailable, in `~/.config/deslicer/credentials.toml`. An empty `HOME` <!-- pragma: allowlist secret -->
+or a fresh XDG directory does **not** hide the kernel keyring, so a later
+command can still select that session.
+
+To run logged out without deleting another workflow's session:
+
+```bash
+DESLICER_IGNORE_DEVICE_SESSION=1 deslicer auth whoami # pragma: allowlist secret
+```
+
+Accepted values are `1`, `true`, and `yes`. The stored session is left in place.
+
+If you instead point `DESLICER_API_URL` / `--deslicer-api-url` or <!-- pragma: allowlist secret -->
+`OBSERVER_API_URL` at a different origin than the one that issued the session,
+the CLI exits **4** `auth.session_origin_mismatch` and does not send the device
+credential. Re-run `deslicer auth login` against the intended API, or drop the <!-- pragma: allowlist secret -->
+override.

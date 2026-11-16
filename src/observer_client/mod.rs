@@ -520,6 +520,13 @@ impl Client {
         self.get_json("api/v1/me").await
     }
 
+    /// Cheap authenticated read used when `GET /me` is not on this Observer (issue #265).
+    pub async fn probe_groups_auth(&self) -> Result<(), CliError> {
+        self.get_json::<serde_json::Value>("api/v1/groups?limit=1")
+            .await
+            .map(|_| ())
+    }
+
     /// Host groups for `change plan --target-group`.
     pub async fn list_groups(&self) -> Result<Vec<HostGroup>, CliError> {
         self.get_json("api/v1/groups").await

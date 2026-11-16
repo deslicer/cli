@@ -31,6 +31,13 @@ impl<'a> AuthCredentialResolver<'a> {
             return Ok(AuthCredential::CiOidc { platform });
         }
 
+        if ignore_device_session() {
+            if std::env::var_os(LEGACY_DEV_TOKEN).is_some() {
+                return Err(legacy_dev_token_error());
+            }
+            return Ok(AuthCredential::None);
+        }
+
         let stored_session = load_stored_session()?;
         if let Some(session) = stored_session
             .as_ref()
@@ -48,6 +55,22 @@ impl<'a> AuthCredentialResolver<'a> {
     }
 }
 
+/// Skip the kernel keyring and the file credential without deleting them.
+///
+/// Empty `HOME` does not isolate the kernel keyring. Set this to `1`, `true`,
+/// or `yes` for a noninteractive logged-out run (issue #268).
+pub fn ignore_device_session() -> bool {
+    matches!(
+        std::env::var("DESLICER_IGNORE_DEVICE_SESSION") // pragma: allowlist secret
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
 pub fn legacy_dev_token_error() -> CliError {
     CliError::Other(
         "DESLICER_DEV_TOKEN has been retired and was not sent. For interactive use, \
@@ -56,4 +79,23 @@ pub fn legacy_dev_token_error() -> CliError {
          tools-scope API key)."
             .into(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ignore_flag_reads_true_yes_and_one() {
+        let _guard = crate::observer_token::ENV_LOCK.lock().expect("env lock");
+        std::env::set_var("DESLICER_IGNORE_DEVICE_SESSION", "true"); // pragma: allowlist secret
+        assert!(ignore_device_session());
+        std::env::set_var("DESLICER_IGNORE_DEVICE_SESSION", "yes"); // pragma: allowlist secret
+        assert!(ignore_device_session());
+        std::env::set_var("DESLICER_IGNORE_DEVICE_SESSION", "1"); // pragma: allowlist secret
+        assert!(ignore_device_session());
+        std::env::set_var("DESLICER_IGNORE_DEVICE_SESSION", "0"); // pragma: allowlist secret
+        assert!(!ignore_device_session());
+        std::env::remove_var("DESLICER_IGNORE_DEVICE_SESSION"); // pragma: allowlist secret
+    }
 }

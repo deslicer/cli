@@ -199,7 +199,9 @@ pub fn cli_error_kind(err: &CliError) -> &'static str {
         CliError::EndpointNotAvailable(_) => "endpoint",
         CliError::HumanApprovalRequired(_) => "approval",
         CliError::AgentRunFailed(_) => "agent",
-        CliError::DeviceSessionRequired(_) | CliError::AuthPending(_) => "auth",
+        CliError::DeviceSessionRequired(_)
+        | CliError::SessionOriginMismatch(_)
+        | CliError::AuthPending(_) => "auth",
         CliError::ValidationModelUnavailable
         | CliError::ValidationTimeout
         | CliError::ValidationUnavailable
@@ -230,6 +232,7 @@ pub fn cli_error_code(err: &CliError) -> &'static str {
         CliError::HumanApprovalRequired(_) => "approval.required",
         CliError::AgentRunFailed(_) => "agent.run_failed",
         CliError::DeviceSessionRequired(_) => "auth.device_session_required",
+        CliError::SessionOriginMismatch(_) => "auth.session_origin_mismatch",
         CliError::ValidationModelUnavailable => "validation.model_unavailable",
         CliError::ValidationTimeout => "validation.timeout",
         CliError::ValidationUnavailable => "validation.unavailable",
@@ -251,6 +254,7 @@ pub fn cli_error_next_command(err: &CliError) -> Option<&'static str> {
         CliError::InputRequired(_) => Some("deslicer --no-input <command> …"),
         CliError::Other(msg) if msg.contains("not logged in") => Some("deslicer auth login"),
         CliError::DeviceSessionRequired(_) => Some("deslicer auth login"),
+        CliError::SessionOriginMismatch(_) => Some("deslicer auth login"), // pragma: allowlist secret
         CliError::ApiTokenRejected(_) => Some("deslicer auth login"),
         // Confirm which Observer the CLI is talking to (issue #248).
         CliError::EndpointNotAvailable(_) => Some("deslicer auth status"),
@@ -279,6 +283,9 @@ pub fn cli_error_hint(err: &CliError) -> Option<&'static str> {
         CliError::DeviceSessionRequired(_) => {
             Some("run deslicer auth login and approve the code in the portal")
         }
+        CliError::SessionOriginMismatch(_) => Some(
+            "re-authenticate against the intended API, drop the override, or set DESLICER_IGNORE_DEVICE_SESSION=1 to skip the stored session without logging out. Empty HOME does not isolate the kernel keyring.", // pragma: allowlist secret
+        ),
         CliError::ApiTokenRejected(_) => {
             Some("mint a tools-scope DESLICER_API_TOKEN in the portal, or run deslicer auth login")
         }
