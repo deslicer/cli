@@ -149,15 +149,15 @@ async fn single_json_preserves_plan_and_local_ci_records() {
         .into_iter()
         .collect::<Result<_, _>>()
         .unwrap();
-    assert_eq!(records.len(), 2);
+    // Local JSON is one document. CI keys are not a second stdout record (#264).
+    assert_eq!(records.len(), 1);
     assert_eq!(records[0]["schema_version"], 1);
     assert_eq!(records[0]["plan_id"], "external-id");
     assert_eq!(
         records[0]["next_command"],
         "deslicer change status --plan-id external-id"
     );
-    assert_eq!(records[1]["plan_id"], "external-id");
-    assert_eq!(records[1]["plan_row_id"], "row-id");
+    assert!(records[0].get("plan_row_id").is_none());
 }
 
 #[tokio::test]
