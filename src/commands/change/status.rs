@@ -1,6 +1,7 @@
 use clap::Args as ClapArgs;
 use std::time::{Duration, Instant};
 
+use crate::cli::LogFormat;
 use crate::commands::change::jobs::{format_job_line, load_execution_with_jobs};
 use crate::commands::change::lifecycle::{is_terminal_lifecycle, plan_status_exit_code};
 use crate::commands::pipeline::{authenticate, map_cli_error};
@@ -57,8 +58,9 @@ fn finish(
     plan: Option<&ChangePlan>,
     progress: &PlanProgress,
     diff: Option<&crate::diff_summary::DiffCounts>,
+    format: LogFormat,
 ) -> i32 {
-    let mut code = emit_plan_status(plan, progress, diff);
+    let mut code = emit_plan_status(plan, progress, diff, format);
     if code == 0 {
         if let Some(plan) = plan {
             code = plan_status_exit_code(&plan.status);
@@ -86,7 +88,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     // `--jobs` is a one-shot inspector: never enter the partial-progress poll loop.
     if args.jobs {
         let progress = progress_best_effort(&client, &args.plan_id).await;
-        let code = finish(Some(&plan), &progress, diff.as_ref());
+        let code = finish(Some(&plan), &progress, diff.as_ref(), ctx.log_format);
         match load_execution_with_jobs(&client, &args.plan_id, args.execution_id.as_deref()).await {
             Ok(summary) => {
                 if summary.jobs.is_empty() {
@@ -108,7 +110,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
 
     if is_terminal_lifecycle(&plan.status) {
         let progress = progress_best_effort(&client, &args.plan_id).await;
-        return finish(Some(&plan), &progress, diff.as_ref());
+        return finish(Some(&plan), &progress, diff.as_ref(), ctx.log_format);
     }
 
     let deadline = Instant::now() + Duration::from_secs(args.timeout_secs);
@@ -117,7 +119,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         if let Ok(refreshed) = client.get_plan(&args.plan_id).await {
             if is_terminal_lifecycle(&refreshed.status) {
                 let progress = progress_best_effort(&client, &args.plan_id).await;
-                return finish(Some(&refreshed), &progress, diff.as_ref());
+                return finish(Some(&refreshed), &progress, diff.as_ref(), ctx.log_format);
             }
             plan = refreshed;
         }
@@ -128,7 +130,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         };
 
         if progress.is_terminal() || !progress.should_poll_for_updates() {
-            return finish(Some(&plan), &progress, diff.as_ref());
+            return finish(Some(&plan), &progress, diff.as_ref(), ctx.log_format);
         }
 
         if Instant::now() >= deadline {
@@ -140,7 +142,7 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
                 progress.fully_completed_items,
                 progress.total_items
             );
-            return finish(Some(&plan), &progress, diff.as_ref());
+            return finish(Some(&plan), &progress, diff.as_ref(), ctx.log_format);
         }
 
         eprintln!(
