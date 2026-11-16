@@ -230,13 +230,15 @@ async fn direct_api_token_401_is_not_oidc() {
 }
 
 #[tokio::test]
-async fn client_orchestrated_plan_returns_both_ids() {
+async fn client_orchestrated_plan_passes_the_comparison_baseline_and_returns_both_ids() {
     let server = MockServer::start().await;
+    let git_base_sha = "b".repeat(40);
     Mock::given(method("POST"))
         .and(path("/api/cli/observer/v1/plan"))
         .and(body_json(serde_json::json!({
             "environment": "staging",
-            "target_group_id": "019f36d6-3f61-7eea-9417-7ac4a8a10f69"
+            "target_group_id": "019f36d6-3f61-7eea-9417-7ac4a8a10f69",
+            "git_base_sha": git_base_sha,
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "plan_id": "plan-external",
@@ -250,9 +252,10 @@ async fn client_orchestrated_plan_returns_both_ids() {
     let base = url::Url::parse(&format!("{}/api/cli/observer/", server.uri())).unwrap();
     let client = Client::new(base, "ci-jwt".to_string());
     let created = client
-        .create_plan_orchestrated(
+        .create_plan_orchestrated_with_baseline(
             Some("staging"),
             Some("019f36d6-3f61-7eea-9417-7ac4a8a10f69"),
+            Some(&git_base_sha),
         )
         .await
         .unwrap();
