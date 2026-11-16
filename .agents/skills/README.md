@@ -1,6 +1,13 @@
 # Repository skills
 
-## Use the two skills together
+## CLI contract
+
+[deslicer-cli](deslicer-cli/SKILL.md) is how agents run the CLI: JSON output, <!-- pragma: allowlist secret -->
+exit codes, auth, and the change loop. Approve, deploy, and `--yes` still need
+an explicit human go. The workflow skills below assume that contract. Cursor
+loads the same directory through `.cursor/skills/deslicer-cli`. <!-- pragma: allowlist secret -->
+
+## Use the workflow skills together
 
 Start with [deslicer-repo-setup](deslicer-repo-setup/SKILL.md) for authentication,
 Git, CI configuration, and publishing; continue with

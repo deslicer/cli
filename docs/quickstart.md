@@ -10,7 +10,10 @@ For system context (components, sequence diagrams, DAP vs DAI boundaries), see [
 | [A2. CI pipeline (Observer API token)](#path-a2-ci-pipeline-with-an-observer-api-token) | GitHub Actions, GitLab CI | Static Observer API key | `OBSERVER_API_URL` + `DESLICER_API_TOKEN` + `--target-group` (runner must reach Observer management) |
 | [B. Bundle upload (GitHub-App-free)](#path-b-bundle-upload-github-app-free) | Any machine or CI runner | Static Observer API key | `OBSERVER_API_URL` + `DESLICER_API_TOKEN` |
 
-Install the CLI first — see [installation.md](installation.md).
+Install the CLI first — see [installation.md](installation.md). Agents driving
+these steps should follow the [deslicer-cli skill](../.agents/skills/deslicer-cli/SKILL.md) <!-- pragma: allowlist secret -->
+(`-o json`, the [exit-code contract](exit-codes.md), no approve or deploy without
+an explicit human go).
 
 ---
 
