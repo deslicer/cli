@@ -501,14 +501,66 @@ async fn discover_environments(
     Ok(environments_for_plan(explicit, discovered))
 }
 
+fn github_plan_base_sha<'a>(
+    event_name: &str,
+    event: &'a serde_json::Value,
+    head: &str,
+) -> Option<&'a str> {
+    fn is_commit_sha(value: &str) -> bool {
+        value.len() == 40
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            && value.bytes().any(|b| b != b'0')
+    }
+
+    let base = match event_name {
+        "push" if event.get("after").and_then(serde_json::Value::as_str) == Some(head) => {
+            event.get("before")?
+        }
+        "pull_request" => event.pointer("/pull_request/base/sha")?,
+        _ => return None,
+    }
+    .as_str()?;
+    (is_commit_sha(base) && is_commit_sha(head) && base != head).then_some(base)
+}
+
+fn github_event_plan_baseline(platform: CiPlatform) -> Result<Option<String>, CliError> {
+    if platform != CiPlatform::Github {
+        return Ok(None);
+    }
+    let event_name = std::env::var("GITHUB_EVENT_NAME").unwrap_or_default();
+    if !matches!(event_name.as_str(), "push" | "pull_request") {
+        return Ok(None);
+    }
+
+    let baseline = (|| {
+        let event_path = std::env::var_os("GITHUB_EVENT_PATH")?;
+        let event = serde_json::from_slice(&std::fs::read(event_path).ok()?).ok()?;
+        let head = std::env::var("GITHUB_SHA").ok()?;
+        github_plan_base_sha(&event_name, &event, &head).map(str::to_owned)
+    })();
+    baseline.map(Some).ok_or_else(|| {
+        CliError::InvalidInput(
+            concat!(
+                "GitHub did not provide a usable comparison commit. ",
+                "Rerun with the original GitHub event. If the branch has no previous commit, ",
+                "use workflow_dispatch to reconcile the mapped apps.",
+            )
+            .into(),
+        )
+    })
+}
+
 async fn compile_one_environment(
     client: &Client,
     environment: Option<&str>,
     target_group_id: Option<&str>,
+    git_base_sha: Option<&str>,
     no_wait: bool,
 ) -> Result<(ChangePlan, bool), CliError> {
     let created = client
-        .create_plan_orchestrated(environment, target_group_id)
+        .create_plan_orchestrated_with_baseline(environment, target_group_id, git_base_sha)
         .await?;
     if no_wait || created.plan_row_id.is_none() {
         return Ok((orchestrated_as_change_plan(&created), false));
@@ -580,6 +632,7 @@ async fn run_git_plans(
     args: &Args,
     environment: Option<&str>,
 ) -> Result<i32, CliError> {
+    let git_base_sha = github_event_plan_baseline(session.platform)?;
     let environments = discover_environments(ctx, session, environment).await?;
     let target_group_id = match args.target_group.as_deref() {
         Some(spec) => Some(resolve_plan_target_group(client, spec).await?),
@@ -594,6 +647,7 @@ async fn run_git_plans(
             client,
             environment.as_deref(),
             target_group_id.as_deref(),
+            git_base_sha.as_deref(),
             args.no_wait,
         )
         .await
@@ -680,6 +734,51 @@ mod tests {
         );
         assert!(parse_acs_stack_destination("acs-stack:").is_err());
         assert!(parse_acs_stack_destination("k8s:ns").is_err());
+    }
+
+    #[test]
+    fn github_push_plan_uses_the_event_before_commit() {
+        let event = serde_json::json!({
+            "before": "a".repeat(40),
+            "after": "b".repeat(40),
+            "commits": [{"id": "c".repeat(40)}, {"id": "b".repeat(40)}],
+        });
+
+        assert_eq!(
+            super::github_plan_base_sha("push", &event, &"b".repeat(40)),
+            Some("a".repeat(40).as_str()),
+        );
+        assert_eq!(
+            super::github_plan_base_sha("push", &event, &"d".repeat(40)),
+            None,
+        );
+    }
+
+    #[test]
+    fn github_pull_request_plan_uses_the_event_base_commit() {
+        let event = serde_json::json!({
+            "pull_request": {"base": {"sha": "a".repeat(40), "ref": "main"}},
+        });
+
+        assert_eq!(
+            super::github_plan_base_sha("pull_request", &event, &"b".repeat(40)),
+            Some("a".repeat(40).as_str()),
+        );
+        assert_eq!(
+            super::github_plan_base_sha("workflow_dispatch", &event, &"b".repeat(40)),
+            None,
+        );
+    }
+
+    #[test]
+    fn github_push_plan_rejects_new_branch_and_mutable_bases() {
+        for before in ["0".repeat(40), "HEAD^".to_owned(), "b".repeat(40)] {
+            let event = serde_json::json!({"before": before, "after": "b".repeat(40)});
+            assert_eq!(
+                super::github_plan_base_sha("push", &event, &"b".repeat(40)),
+                None,
+            );
+        }
     }
 
     #[test]

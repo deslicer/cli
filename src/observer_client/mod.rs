@@ -143,17 +143,30 @@ impl Client {
         environment: Option<&str>,
         target_group_id: Option<&str>,
     ) -> Result<OrchestratedPlan, CliError> {
+        self.create_plan_orchestrated_with_baseline(environment, target_group_id, None)
+            .await
+    }
+
+    pub async fn create_plan_orchestrated_with_baseline(
+        &self,
+        environment: Option<&str>,
+        target_group_id: Option<&str>,
+        git_base_sha: Option<&str>,
+    ) -> Result<OrchestratedPlan, CliError> {
         #[derive(Serialize)]
         struct Body<'a> {
             #[serde(skip_serializing_if = "Option::is_none")]
             environment: Option<&'a str>,
             #[serde(skip_serializing_if = "Option::is_none")]
             target_group_id: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            git_base_sha: Option<&'a str>,
         }
 
         let body = Body {
             environment,
             target_group_id,
+            git_base_sha,
         };
         self.request_json(Method::POST, "v1/plan", Some(&body))
             .await
