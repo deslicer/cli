@@ -17,8 +17,8 @@ pub enum CredentialsCmd {
     /// List ACS stack credentials (metadata only; tokens are never shown)
     ///
     /// Examples:
-    ///   deslicer cloud stack credential list // pragma: allowlist secret
-    ///   deslicer --log-format json cloud stack credential list // pragma: allowlist secret
+    ///   cloud stack credential list
+    ///   --output json cloud stack credential list
     List(ListArgs),
     /// Test that the stored credential for a stack can reach ACS (read-only observe)
     ///
@@ -26,7 +26,7 @@ pub enum CredentialsCmd {
     /// or rejected.
     ///
     /// Examples:
-    ///   deslicer cloud stack credential test --name my-stack // pragma: allowlist secret
+    ///   cloud stack credential test --name my-stack
     Test(TestArgs),
     /// Store or rotate the ACS JWT for a stack (dry-run unless --yes)
     ///
@@ -34,8 +34,8 @@ pub enum CredentialsCmd {
     /// never accepted on the command line, printed or logged.
     ///
     /// Examples:
-    ///   printf '%s' "$ACS_JWT" | deslicer cloud stack credential set my-stack --token-stdin --yes // pragma: allowlist secret
-    ///   DESLICER_ACS_TOKEN=... deslicer cloud stack credential set my-stack --acs-environment staging --yes // pragma: allowlist secret
+    ///   printf '%s' "$ACS_JWT" | cloud stack credential set my-stack --token-stdin --yes
+    ///   cloud stack credential set my-stack --acs-environment staging --yes
     Set(SetArgs),
 }
 

@@ -65,7 +65,7 @@ pub struct AdoptArgs {
     #[arg(long)]
     pub source_path: Option<String>,
 
-    /// Deslicer environment profile used for auth. // pragma: allowlist secret
+    /// Environment profile used for auth.
     #[arg(long)]
     pub environment: Option<String>,
 

@@ -130,7 +130,7 @@ pub enum Command {
     /// List Ansible inventory groups, sync, or validate tenant environment YAML
     #[command(subcommand)]
     Inventory(crate::commands::inventory::InventoryCmd),
-    /// Build CI helpers from `.deslicer/environments` files. // pragma: allowlist secret
+    /// Build CI helpers from the tenant environments directory.
     #[command(name = "environment", alias = "environments", subcommand)]
     Environment(crate::commands::environments::EnvironmentsCmd),
     /// Write CI templates for a config repo (optional --bind)

@@ -56,7 +56,7 @@ pub struct RollingArgs {
     #[arg(long = "role-group", num_args = 1, value_parser = clap::builder::PossibleValuesParser::new(UPGRADE_ROLE_GROUPS))]
     pub role_groups: Vec<String>,
 
-    /// Deslicer environment profile used for auth. // pragma: allowlist secret
+    /// Environment profile used for auth.
     #[arg(long)]
     pub environment: Option<String>,
 

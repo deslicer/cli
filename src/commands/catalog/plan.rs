@@ -26,7 +26,7 @@ pub struct Args {
     #[arg(long)]
     pub name: Option<String>,
 
-    /// Deslicer environment profile used for auth. // pragma: allowlist secret
+    /// Environment profile used for auth.
     #[arg(long)]
     pub environment: Option<String>,
 
