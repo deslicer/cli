@@ -9,7 +9,7 @@ use crate::Ctx;
 #[command(after_long_help = super::CHANGE_WORKFLOW_EXAMPLES)]
 pub struct Args {
     /// External plan id (omit to list plans for `--environment`).
-    #[arg(long)]
+    #[arg(long, value_parser = super::plan_id::parse_plan_id)]
     pub plan_id: Option<String>,
 
     /// Environment name or tenant slug used to scope plan listing and CI auth.

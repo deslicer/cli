@@ -9,7 +9,7 @@ use crate::Ctx;
 #[derive(ClapArgs)]
 pub struct Args {
     /// External plan id (the `plan_id` output of `change plan`).
-    #[arg(long)]
+    #[arg(long, value_parser = super::plan_id::parse_plan_id)]
     pub plan_id: String,
 
     /// Environment binding for CI proxy authentication.

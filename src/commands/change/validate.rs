@@ -11,7 +11,7 @@ const EXIT_UNAVAILABLE: i32 = 24;
 #[derive(ClapArgs)]
 pub struct Args {
     /// External plan id returned by `deslicer change plan`.
-    #[arg(long, value_parser = parse_plan_id)]
+    #[arg(long, value_parser = super::plan_id::parse_plan_id)]
     pub plan_id: String,
 
     /// Environment binding for CI proxy authentication.
@@ -72,6 +72,12 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
     };
     let report = match report {
         Ok(report) => report,
+        Err(err) if args.report_only && validation_report_absent(&err) => {
+            return map_cli_error(
+                ctx.log_format,
+                missing_report_error(&client, &args.plan_id, err).await,
+            );
+        }
         Err(err) => return map_cli_error(ctx.log_format, err),
     };
 
@@ -102,10 +108,36 @@ fn emit_report(format: OutputFormat, report: &PlanValidationReport) {
     }
 }
 
-fn parse_plan_id(raw: &str) -> Result<String, String> {
-    uuid::Uuid::parse_str(raw)
-        .map(|_| raw.to_string())
-        .map_err(|_| "plan id must be a UUID".to_string())
+fn validation_report_absent(err: &crate::errors::CliError) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("validation report")
+        && (text.contains("not found")
+            || text.contains("does not exist")
+            || text.contains("no validation"))
+}
+
+/// Unknown plan → exit 11. Existing plan with no report → exit 19 (issue #271).
+async fn missing_report_error(
+    client: &crate::observer_client::Client,
+    plan_id: &str,
+    original: crate::errors::CliError,
+) -> crate::errors::CliError {
+    error_for_missing_report(
+        client.get_plan(plan_id).await.map(|plan| plan.status),
+        original,
+    )
+}
+
+fn error_for_missing_report(
+    lookup: Result<String, crate::errors::CliError>,
+    original: crate::errors::CliError,
+) -> crate::errors::CliError {
+    match lookup {
+        Ok(status) => crate::errors::CliError::ValidationReportMissing(format!("plan is {status}")),
+        Err(err @ crate::errors::CliError::PlanNotFound(_)) => err,
+        Err(crate::errors::CliError::EndpointNotAvailable(_)) => original,
+        Err(err) => err,
+    }
 }
 
 fn report_summary(report: &PlanValidationReport) -> Option<&str> {
@@ -322,7 +354,46 @@ mod tests {
 
     #[test]
     fn plan_id_parser_rejects_non_uuid_values() {
-        assert!(parse_plan_id("totally-not-a-plan").is_err());
-        assert!(parse_plan_id("87597ca8-ac36-409f-9b68-a4db995172f1").is_ok());
+        assert!(super::super::plan_id::parse_plan_id("totally-not-a-plan").is_err());
+        assert!(
+            super::super::plan_id::parse_plan_id("87597ca8-ac36-409f-9b68-a4db995172f1").is_ok()
+        );
+    }
+
+    #[test]
+    fn report_absent_text_is_not_a_generic_not_found() {
+        use crate::errors::CliError;
+        assert!(validation_report_absent(&CliError::EndpointNotAvailable(
+            "Validation report not found".into()
+        )));
+        assert!(!validation_report_absent(&CliError::EndpointNotAvailable(
+            "Not Found".into()
+        )));
+    }
+
+    #[test]
+    fn unknown_plan_stays_plan_not_found() {
+        use crate::errors::CliError;
+        let original = CliError::EndpointNotAvailable("Validation report not found".into());
+        let err = error_for_missing_report(Err(CliError::PlanNotFound("missing".into())), original);
+        assert!(matches!(err, CliError::PlanNotFound(_)));
+        assert_eq!(err.exit_code(), 11);
+    }
+
+    #[test]
+    fn existing_plan_without_report_is_report_missing() {
+        use crate::errors::CliError;
+        let original = CliError::EndpointNotAvailable("Validation report not found".into());
+        let err = error_for_missing_report(Ok("compile_failed".into()), original);
+        match err {
+            CliError::ValidationReportMissing(message) => {
+                assert!(message.contains("compile_failed"));
+            }
+            other => panic!("expected ValidationReportMissing, got {other}"),
+        }
+        assert_eq!(
+            CliError::ValidationReportMissing("plan is compile_failed".into()).exit_code(),
+            19
+        );
     }
 }

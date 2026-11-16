@@ -105,9 +105,10 @@ mod tests {
     fn failed_suggests_existing_retry_yes() {
         use clap::Parser;
 
-        let (next, nexts) = next_commands_for("p-3", "failed");
-        let suggested = "deslicer change retry --plan-id p-3 --yes";
-        assert_eq!(next.as_deref(), Some(suggested));
+        let plan_id = "87597ca8-ac36-409f-9b68-a4db995172f1";
+        let (next, nexts) = next_commands_for(plan_id, "failed");
+        let suggested = format!("deslicer change retry --plan-id {plan_id} --yes"); // pragma: allowlist secret
+        assert_eq!(next.as_deref(), Some(suggested.as_str()));
         assert_eq!(nexts[0], suggested);
         // Agents run next_command verbatim — argv must parse as a real command.
         let argv: Vec<&str> = suggested.split_whitespace().collect();
