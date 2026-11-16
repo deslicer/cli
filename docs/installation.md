@@ -83,6 +83,12 @@ If the binary lives in a root-owned directory (e.g. `/usr/local/bin`), re-run th
 
 ### `HTTP 302 Found` while updating
 
+Current installs use the channels above and should track the latest release.
+The v1.6.0 pin in this section is only the one-time bridge for binaries older
+than v1.6.0, which cannot follow GitHub release redirects
+([issue #110](https://github.com/deslicer/cli/issues/110)). After that bridge, <!-- pragma: allowlist secret -->
+`--version` should report a current release.
+
 CLI versions before v1.6.0 cannot follow GitHub release redirects. Upgrade once
 with current Homebrew or the pinned v1.6.0 installer:
 

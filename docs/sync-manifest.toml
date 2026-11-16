@@ -59,3 +59,8 @@ dest = "08-oidc-troubleshooting.md"
 id = "agent"
 source = "docs/agent-runs.md"
 dest = "09-agent-runs.md"
+
+[[page]]
+id = "commands"
+source = "docs/commands.md"
+dest = "10-commands.md"

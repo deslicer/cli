@@ -2,6 +2,12 @@
 
 Status: Proposed
 
+> **Shipped note:** this proposal's `repo doctor` command was not added.
+> Readiness is `doctor` (API URL drift and local workflows; `--installation`
+> for the live GitHub App checks) and `repo bootstrap --check`. Examples
+> below that invoke `repo doctor` describe the original proposal, not the
+> installed CLI.
+
 Audience: Deslicer CLI maintainers, DAP/Observer maintainers, release engineering
 
 Target: A backward-compatible minor CLI release after v1.7.0
