@@ -1,9 +1,7 @@
 use clap::Args as ClapArgs;
 use serde_json::json;
 
-use crate::auth_resolution::{
-    legacy_dev_token_error, AuthCredential, AuthCredentialResolver, LEGACY_DEV_TOKEN,
-};
+use crate::auth_resolution::{AuthCredential, AuthCredentialResolver, LEGACY_DEV_TOKEN};
 use crate::ci::{self, CiPlatform};
 use crate::commands::auth::format::{login_human, login_unverified_human, print_output};
 use crate::commands::auth::probe::{identity_probe_forbidden, identity_probe_unavailable};
@@ -37,13 +35,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         && !args.no_wait
         && ci::detect_platform(ctx.ci_override) == CiPlatform::Local
         && !crate::observer_token::direct_auth_ready(&ctx)
+        // Preserve the retired-token diagnostic and existing device precedence
+        // when that legacy variable is explicitly present.
+        && std::env::var_os(LEGACY_DEV_TOKEN).is_none()
     {
-        let error = if std::env::var_os(LEGACY_DEV_TOKEN).is_some() {
-            legacy_dev_token_error()
-        } else {
-            local_login_error()
-        };
-        return map_cli_error(ctx.log_format, error);
+        return map_cli_error(ctx.log_format, local_login_error());
     }
 
     let credential = match AuthCredentialResolver::new(&ctx).resolve() {
@@ -54,7 +50,11 @@ pub async fn run(ctx: Ctx, args: Args) -> i32 {
         credential,
         AuthCredential::ExpiredDevice(_) | AuthCredential::None
     ) {
-        return device_login(ctx, should_poll(&args)).await;
+        return if interactive::is_non_interactive() && !args.wait && !args.no_wait {
+            map_cli_error(ctx.log_format, local_login_error())
+        } else {
+            device_login(ctx, should_poll(&args)).await
+        };
     }
 
     match authenticate(&ctx, args.environment.as_deref(), None).await {
