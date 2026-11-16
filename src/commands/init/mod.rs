@@ -115,7 +115,6 @@ async fn run_inner(ctx: Ctx, args: Args) -> Result<i32, CliError> {
         session.as_ref(),
         client.as_ref(),
         &dir,
-        origin.as_ref(),
     )
     .await?;
 
@@ -167,7 +166,6 @@ async fn maybe_write_environment(
     session: Option<&crate::commands::pipeline::AuthenticatedSession>,
     client: Option<&crate::observer_client::Client>,
     dir: &std::path::Path,
-    _origin: Option<&OriginRepo>,
 ) -> Result<Option<EnvironmentWrite>, CliError> {
     if !should_write_environment(provider, session) {
         return Ok(None);

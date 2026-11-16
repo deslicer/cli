@@ -155,28 +155,54 @@ async fn single_json_preserves_plan_and_local_ci_records() {
     let server = MockServer::start().await;
     single(&server).await;
     let config = TempDir::new().unwrap();
-    let text = stdout(command(&server, &config).args([
-        "--plan-id",
-        "87597ca8-ac36-409f-9b68-a4db995172f1",
-        "--log-format",
-        "json",
-    ]));
-    let records: Vec<Value> = serde_json::Deserializer::from_str(&text)
-        .into_iter()
-        .collect::<Result<_, _>>()
+    let output = command(&server, &config)
+        .args([
+            "--plan-id",
+            "87597ca8-ac36-409f-9b68-a4db995172f1",
+            "--log-format",
+            "json",
+        ])
+        .output()
         .unwrap();
-    // Local JSON is one document. CI keys are not a second stdout record (#264).
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0]["schema_version"], 1);
+    // A UUID plan id is accepted (exit 0, #281). Stdout is one JSON document (#264).
     assert_eq!(
-        records[0]["plan_id"],
-        "87597ca8-ac36-409f-9b68-a4db995172f1"
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    let text = String::from_utf8(output.stdout).unwrap();
+    let doc: Value = serde_json::from_str(&text).expect("stdout must be one JSON document");
+    assert_eq!(doc["schema_version"], 1);
+    assert_eq!(doc["id"], "row-id");
+    assert_eq!(doc["plan_id"], "87597ca8-ac36-409f-9b68-a4db995172f1");
     assert_eq!(
-        records[0]["next_command"],
+        doc["next_command"],
         "deslicer change status --plan-id 87597ca8-ac36-409f-9b68-a4db995172f1" // pragma: allowlist secret
     );
-    assert!(records[0].get("plan_row_id").is_none());
+    // CI key stays off the primary document. The row id is `id`.
+    assert!(doc.get("plan_row_id").is_none());
+}
+
+#[tokio::test]
+async fn non_uuid_plan_id_exits_2_with_empty_stdout() {
+    let server = MockServer::start().await;
+    let config = TempDir::new().unwrap();
+    let output = command(&server, &config)
+        .args(["--output", "json", "--plan-id", "external-id"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        output.stdout.is_empty(),
+        "usage failure must not print a plan or CI record: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    let doc: Value = serde_json::from_str(stderr.trim()).expect("stderr must be one JSON document");
+    assert_eq!(doc["schema_version"], 1);
+    assert_eq!(doc["error"]["code"], "usage.invalid");
+    assert_eq!(doc["error"]["exit_code"], 2);
 }
 
 #[tokio::test]

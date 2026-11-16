@@ -115,9 +115,7 @@ If create times out or returns an existing plan, use scoped `change show --envir
 
 For follow-ups, prefer returned external `plan_id`, not internal `id`/`plan_row_id`. Older responses may lack `plan_id`; the CLI's `external_id()` falls back to `id`. Treat that as a compatibility fallback, not a general instruction to substitute row IDs.
 
-With `--log-format json`, single-plan `show` and `plan` print a plan record and may append a second JSON record of CI values locally. Lists print an array. Other CI environments may write output files or Azure logging lines. JSON mode does not guarantee one JSON document for every lifecycle command. Current source supports human-readable `change show`; older releases may still print JSON in human mode. Use explicit JSON for inspection/parsing.
-
-Parse all JSON records, distinguish arrays from objects, and check consistent plan IDs/status values. Do not pick an arbitrary last line; conflicting records require fresh inspection. Never use `eval` or source output as shell code. Capture the CLI exit code before parsing so a parser success cannot hide a command failure. Preserve diagnostics separately from stdout.
+`change show` and `change plan` print one JSON document on stdout. The plan row id is `id` on that document. `plan_row_id` is written to the CI sink (`$GITHUB_OUTPUT`, the GitLab/Bitbucket dotenv, or Azure `##vso` lines), not as a second JSON record. Lists are one document with an `items` array. Capture the process exit code before parsing; a parse success must not hide a non-zero exit. A non-UUID `--plan-id` exits 2, leaves stdout empty, and writes one JSON error envelope on stderr when the output format is JSON. Never use `eval` or source output as shell code. Preserve diagnostics separately from stdout.
 
 | Evidence | Meaning |
 |---|---|
