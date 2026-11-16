@@ -26,7 +26,7 @@ pub fn portal_url(session: &StoredSession) -> Option<url::Url> {
 /// or `DESLICER_API_URL`.
 pub fn resolve_deslicer_api_url(ctx: &Ctx, session: &StoredSession) -> url::Url {
     resolve_deslicer_api_url_with(
-        &ctx.deslicer_api_url, // pragma: allowlist secret
+        &ctx.deslicer_api_url,          // pragma: allowlist secret
         deslicer_api_url_is_explicit(), // pragma: allowlist secret
         session,
     )
@@ -60,7 +60,7 @@ pub fn reject_incompatible_session(
 
 pub fn incompatible_api_override(ctx: &Ctx, session: &StoredSession) -> Option<String> {
     describe_origin_mismatch(
-        &ctx.deslicer_api_url, // pragma: allowlist secret
+        &ctx.deslicer_api_url,          // pragma: allowlist secret
         deslicer_api_url_is_explicit(), // pragma: allowlist secret
         ctx.observer_api_url.as_ref(),
         session,
