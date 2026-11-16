@@ -20,11 +20,11 @@ pub struct Args {
     #[arg(long, required_unless_present = "host")]
     pub group: Option<String>,
 
-    /// Optional plan name shown in Changes/Runs.
+    /// Optional name for the draft remediation plan.
     #[arg(long)]
     pub name: Option<String>,
 
-    /// Environment profile used for auth.
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 

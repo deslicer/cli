@@ -6,15 +6,19 @@ use crate::Ctx;
 
 #[derive(ClapArgs)]
 pub struct Args {
+    /// Host to analyse (hostname or host UUID).
     #[arg(long)]
     pub host: Option<String>,
 
+    /// App name to include in the analysis.
     #[arg(long)]
     pub app: Option<String>,
 
+    /// Inventory group to analyse instead of one host.
     #[arg(long)]
     pub group: Option<String>,
 
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 }

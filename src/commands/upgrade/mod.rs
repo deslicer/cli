@@ -56,7 +56,7 @@ pub struct RollingArgs {
     #[arg(long = "role-group", num_args = 1, value_parser = clap::builder::PossibleValuesParser::new(UPGRADE_ROLE_GROUPS))]
     pub role_groups: Vec<String>,
 
-    /// Environment profile used for auth.
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 

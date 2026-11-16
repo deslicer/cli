@@ -26,7 +26,7 @@ pub struct Args {
     #[arg(long)]
     pub name: Option<String>,
 
-    /// Environment profile used for auth.
+    /// Workspace environment (tenant slug) used to scope Observer auth.
     #[arg(long)]
     pub environment: Option<String>,
 
