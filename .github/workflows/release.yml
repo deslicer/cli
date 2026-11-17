@@ -229,6 +229,18 @@ jobs:
           git tag -f v1 "$(git rev-parse HEAD)"
           git push origin refs/tags/v1 --force
 
+  homebrew:
+    name: Update Homebrew tap
+    needs: publish
+    if: ${{ !contains(github.event_name == 'push' && github.ref_name || inputs.tag, '-') }}
+    uses: ./.github/workflows/homebrew.yml
+    with:
+      version: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    permissions:
+      contents: read
+
   provenance:
     name: SLSA provenance
     # Depends on hashes for the subjects and publish so the release exists
