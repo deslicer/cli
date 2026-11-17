@@ -4,6 +4,15 @@
 name: Homebrew Tap
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: Published CLI release tag.
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        required: true
   workflow_dispatch:
     inputs:
       version:
@@ -24,7 +33,7 @@ jobs:
   bump-formula:
     name: Open Homebrew tap PR
     # Manual dispatch always runs; release-triggered runs skip prereleases.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
+    if: ${{ github.event_name != 'release' || github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve release version
@@ -32,18 +41,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${{ github.event.release.tag_name }}" ]; then
-            TAG="${{ github.event.release.tag_name }}"
-          elif [ -n "${{ inputs.version }}" ]; then
-            TAG="${{ inputs.version }}"
+          if [ -n "$EVENT_TAG" ]; then
+            TAG="$EVENT_TAG"
+          elif [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
           else
             TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)
           fi
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           VERSION="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.version }}
 
       - name: Download release assets
         shell: bash
