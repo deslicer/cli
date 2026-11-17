@@ -21,6 +21,15 @@ pub(crate) fn map_observer_error_with_auth(
     auth: AuthRejectionKind,
     request_path: &str,
 ) -> CliError {
+    // Authentication responses can echo credentials. Report only the HTTP status.
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        let message = format!("HTTP {status}");
+        return match auth {
+            AuthRejectionKind::Oidc => CliError::OidcRejected(message),
+            AuthRejectionKind::ApiToken => CliError::ApiTokenRejected(message),
+        };
+    }
+
     let message = error_message_with_path(body, status, request_path);
     if let Some(error) = validation_error(body) {
         return error;
@@ -29,10 +38,6 @@ pub(crate) fn map_observer_error_with_auth(
         // A generic Observer 400 is bad input, not "unsupported CI platform"
         // (exit 8). Exit 8 stays on the OIDC/CI-platform path only (issue #263).
         400 => CliError::InvalidInput(message),
-        401 => match auth {
-            AuthRejectionKind::Oidc => CliError::OidcRejected(message),
-            AuthRejectionKind::ApiToken => CliError::ApiTokenRejected(message),
-        },
         403 => {
             if mentions_human_approval(body) {
                 CliError::HumanApprovalRequired(message)
@@ -284,7 +289,7 @@ mod tests {
 
         match err {
             CliError::Other(message) => assert_eq!(message, "identity_attestation_required"),
-            other => panic!("expected Other, got {other}"),
+            _ => panic!("expected Other"),
         }
     }
 
@@ -300,7 +305,7 @@ mod tests {
 
         match err {
             CliError::Other(message) => assert_eq!(message, "compile_failed"),
-            other => panic!("expected Other, got {other}"),
+            _ => panic!("expected Other"),
         }
     }
 
@@ -317,7 +322,7 @@ mod tests {
             CliError::Other(message) => {
                 assert!(message.to_ascii_lowercase().contains("worker plane"));
             }
-            other => panic!("expected Other, got {other}"),
+            _ => panic!("expected Other"),
         }
     }
 
@@ -335,7 +340,7 @@ mod tests {
                 assert!(message.contains("active plan already exists"));
                 assert!(!message.contains("duplicate_plan"));
             }
-            other => panic!("expected Other, got {other}"),
+            _ => panic!("expected Other"),
         }
     }
 
@@ -352,7 +357,7 @@ mod tests {
             CliError::AmbiguousBinding(message) => {
                 assert!(message.contains("multiple environments"));
             }
-            other => panic!("expected AmbiguousBinding, got {other}"),
+            _ => panic!("expected AmbiguousBinding"),
         }
     }
 
@@ -370,7 +375,7 @@ mod tests {
                 assert!(message.contains("git-backed change management"));
                 assert!(message.contains("GitHub App"));
             }
-            other => panic!("expected GitBackedChangeManagement, got {other}"),
+            _ => panic!("expected GitBackedChangeManagement"),
         }
         assert_eq!(err.exit_code(), 7);
     }
@@ -433,16 +438,16 @@ mod tests {
     fn unauthorized_defaults_to_oidc_rejection() {
         let err = map_observer_error_with_auth(
             reqwest::StatusCode::UNAUTHORIZED,
-            "",
+            r#"{"detail":"synthetic credential"}"#,
             None,
             AuthRejectionKind::Oidc,
             "",
         );
         match &err {
             CliError::OidcRejected(message) => {
-                assert!(message.contains("401"));
+                assert!(message == "HTTP 401 Unauthorized");
             }
-            other => panic!("expected OidcRejected, got {other}"),
+            _ => panic!("expected OidcRejected"),
         }
         assert_eq!(err.exit_code(), 4);
         assert!(err.to_string().contains("OIDC token rejected"));
@@ -452,16 +457,16 @@ mod tests {
     fn unauthorized_with_api_token_auth_is_not_oidc() {
         let err = map_observer_error_with_auth(
             reqwest::StatusCode::UNAUTHORIZED,
-            "",
+            "synthetic credential",
             None,
             AuthRejectionKind::ApiToken,
             "",
         );
         match &err {
             CliError::ApiTokenRejected(message) => {
-                assert!(message.contains("401"));
+                assert!(message == "HTTP 401 Unauthorized");
             }
-            other => panic!("expected ApiTokenRejected, got {other}"),
+            _ => panic!("expected ApiTokenRejected"),
         }
         assert_eq!(err.exit_code(), 4);
         let text = err.to_string();
